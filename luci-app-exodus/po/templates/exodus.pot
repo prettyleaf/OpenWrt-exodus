@@ -655,7 +655,7 @@ msgid "Low flash space mode: remove the current core before installing the new o
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:130
-msgid "MAC or IP address. Kept in sync with LAN Access Control on the Advanced page."
+msgid "MAC or IP address. An IP address of a known device is saved as its MAC, so both IPv4 and IPv6 traffic of the device is matched, an IP address of an unknown device matches only that address. Kept in sync with LAN Access Control on the Advanced page."
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:205

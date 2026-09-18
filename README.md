@@ -24,6 +24,8 @@ Transparent Proxy with Mihomo on OpenWrt. Fork of [OpenWrt-nikki](https://github
 
 ## Install & Update
 
+Prebuilt packages are published for OpenWrt 24.10, 25.12 and SNAPSHOT on these architectures: `x86_64`, `aarch64_cortex-a53`, `aarch64_generic`, `aarch64_cortex-a72`, `aarch64_cortex-a76`, `mipsel_24kc`, `arm_cortex-a7_neon-vfpv4` (see `DISTRIB_ARCH` in `/etc/openwrt_release`). For other architectures build the packages from source, see [Compilation](#compilation).
+
 Packages are downloaded directly from [GitHub Releases](https://github.com/prettyleaf/openwrt-exodus/releases) for the architecture and OpenWrt version of the router, then installed locally. Dependencies are installed from the official OpenWrt feeds. Run the same command again to update.
 
 The packages are `exodus`, `luci-app-exodus` and `luci-i18n-exodus-*`. If `nikki` / `luci-app-nikki` are installed, the installer replaces them and keeps the config, profiles and subscriptions (they are shared, the config stays at `/etc/config/nikki`).

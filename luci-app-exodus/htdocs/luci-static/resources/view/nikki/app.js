@@ -127,14 +127,19 @@ return view.extend({
         o.value('exclude', _('Exclude: proxy all devices except the selected ones'));
         o.value('include', _('Include: proxy only the selected devices'));
 
-        o = s.option(form.DynamicList, '_access_devices', _('Devices'), _('MAC or IP address. Kept in sync with LAN Access Control on the Advanced page.'));
+        o = s.option(form.DynamicList, '_access_devices', _('Devices'), _('MAC or IP address. An IP address of a known device is saved as its MAC, so both IPv4 and IPv6 traffic of the device is matched, an IP address of an unknown device matches only that address. Kept in sync with LAN Access Control on the Advanced page.'));
         o.datatype = 'or(macaddr, ip4addr, ip6addr)';
         o.forcewrite = true;
 
+        // an ip matches only one address family, the other one would still go through the core
+        const macByIp = {};
         for (const mac in hosts) {
             const host = hosts[mac];
             const hint = [host.name, host.ipaddrs?.[0]].filter(Boolean).join(', ');
             o.value(mac, hint ? '%s (%s)'.format(mac, hint) : mac);
+            for (const ip of [...(host.ipaddrs ?? []), ...(host.ip6addrs ?? [])]) {
+                macByIp[ip.toLowerCase()] = mac;
+            }
         };
 
         o.load = function () {
@@ -146,7 +151,7 @@ return view.extend({
             const modeChanged = mode !== (this.section.cfgvalue(section_id, 'access_mode') ?? 'exclude');
             const devicesChanged = devices.join(' ') !== L.toArray(this.cfgvalue(section_id)).join(' ');
             if (modeChanged || devicesChanged) {
-                nikki.writeLanAccessControl(mode, [...new Set(devices)]);
+                nikki.writeLanAccessControl(mode, [...new Set(devices.map((device) => macByIp[device.toLowerCase()] ?? device))]);
             }
         };
         o.write = function (section_id, formvalue) {

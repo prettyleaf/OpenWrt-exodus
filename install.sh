@@ -74,7 +74,7 @@ fi
 echo "download $archive_url"
 wget -q -O - "$archive_url" | tar -x -z -f - -C "$temp_dir"
 if ! ls "$temp_dir"/exodus[_-][0-9]* > /dev/null 2>&1; then
-	fail "download failed, check that a release exists for $arch-$branch and that github.com is reachable"
+	fail "download failed: no prebuilt packages for $arch-$branch or github.com is unreachable, see README for supported architectures"
 fi
 
 # update feeds for dependencies, collect packages to install and legacy nikki packages to replace

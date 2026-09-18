@@ -24,6 +24,8 @@
 
 ## 安装和更新
 
+预编译软件包支持 OpenWrt 24.10、25.12 和 SNAPSHOT，架构为：`x86_64`、`aarch64_cortex-a53`、`aarch64_generic`、`aarch64_cortex-a72`、`aarch64_cortex-a76`、`mipsel_24kc`、`arm_cortex-a7_neon-vfpv4`（见 `/etc/openwrt_release` 中的 `DISTRIB_ARCH`）。其他架构请从源码编译，见[编译](#编译)。
+
 直接从 [GitHub Releases](https://github.com/prettyleaf/openwrt-exodus/releases) 下载适合路由器架构和 OpenWrt 版本的软件包并在本地安装，依赖从 OpenWrt 官方软件源安装。再次运行同一命令即可更新。
 
 软件包为 `exodus`、`luci-app-exodus` 和 `luci-i18n-exodus-*`。如果已安装 `nikki` / `luci-app-nikki`，安装脚本会替换它们并保留配置、配置文件和订阅（两者共用，配置仍位于 `/etc/config/nikki`）。
