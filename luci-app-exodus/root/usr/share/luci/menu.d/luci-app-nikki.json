@@ -1,0 +1,64 @@
+{
+    "admin/services/nikki": {
+        "title": "Exodus",
+        "action": {
+            "type": "firstchild"
+        },
+        "depends": {
+            "acl": [
+                "luci-app-nikki"
+            ],
+            "uci": {
+                "nikki": true
+            }
+        }
+    },
+    "admin/services/nikki/config": {
+        "title": "App Config",
+        "order": 10,
+        "action": {
+            "type": "view",
+            "path": "nikki/app"
+        }
+    },
+    "admin/services/nikki/profile": {
+        "title": "Profile",
+        "order": 20,
+        "action": {
+            "type": "view",
+            "path": "nikki/profile"
+        }
+    },
+    "admin/services/nikki/advanced": {
+        "title": "Advanced",
+        "order": 30,
+        "action": {
+            "type": "view",
+            "path": "nikki/advanced"
+        }
+    },
+    "admin/services/nikki/editor": {
+        "title": "Editor",
+        "order": 40,
+        "action": {
+            "type": "view",
+            "path": "nikki/editor"
+        }
+    },
+    "admin/services/nikki/log": {
+        "title": "Log",
+        "order": 50,
+        "action": {
+            "type": "view",
+            "path": "nikki/log"
+        }
+    },
+    "admin/services/nikki/update": {
+        "title": "Update",
+        "order": 60,
+        "action": {
+            "type": "view",
+            "path": "nikki/update"
+        }
+    }
+}

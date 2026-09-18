@@ -1,10 +1,10 @@
-![GitHub License](https://img.shields.io/github/license/nikkinikki-org/OpenWrt-nikki?style=for-the-badge&logo=github) ![GitHub Tag](https://img.shields.io/github/v/release/nikkinikki-org/OpenWrt-nikki?style=for-the-badge&logo=github) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/nikkinikki-org/OpenWrt-nikki/total?style=for-the-badge&logo=github) ![GitHub Repo stars](https://img.shields.io/github/stars/nikkinikki-org/OpenWrt-nikki?style=for-the-badge&logo=github) [![Telegram](https://img.shields.io/badge/Telegram-gray?style=for-the-badge&logo=telegram)](https://t.me/nikkinikki_org)
+![GitHub License](https://img.shields.io/github/license/prettyleaf/openwrt-exodus?style=for-the-badge&logo=github) ![GitHub Tag](https://img.shields.io/github/v/release/prettyleaf/openwrt-exodus?style=for-the-badge&logo=github) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/prettyleaf/openwrt-exodus/total?style=for-the-badge&logo=github)
 
 中文 | [English](README.md)
 
-# Nikki
+# Exodus
 
-在 OpenWrt 上使用 Mihomo 进行透明代理。
+在 OpenWrt 上使用 Mihomo 进行透明代理。[OpenWrt-nikki](https://github.com/nikkinikki-org/OpenWrt-nikki) 的分支。
 
 ## 环境要求
 
@@ -14,52 +14,59 @@
 
 ## 功能
 
-- 透明代理 (Redirect/TPROXY/TUN, IPv4 和/或 IPv6)
-- 访问控制
+- 透明代理 (Redirect/TPROXY/TUN, IPv4 和/或 IPv6)，默认 TCP Redirect + UDP TPROXY
+- 官方 Mihomo 内核：`mihomo-meta` 打包 [MetaCubeX 发行版](https://github.com/MetaCubeX/mihomo/releases) 中的预编译二进制文件，并校验 sha256
+- 按设备选择代理：代理除所选设备外的所有设备，或仅代理所选设备
+- 订阅 HWID 请求头（Remnawave HWID 设备限制），默认启用
 - 配置文件混入
 - 配置文件编辑器
 - 定时重启
 
 ## 安装和更新
 
-### A. 从软件源安装（推荐）
+直接从 [GitHub Releases](https://github.com/prettyleaf/openwrt-exodus/releases) 下载适合路由器架构和 OpenWrt 版本的软件包并在本地安装，依赖从 OpenWrt 官方软件源安装。再次运行同一命令即可更新。
 
-1. 添加源
-
-```shell
-# 只需运行一次
-wget -O - https://github.com/nikkinikki-org/OpenWrt-nikki/raw/refs/heads/main/feed.sh | ash
-```
-
-2. 安装
+软件包为 `exodus`、`luci-app-exodus` 和 `luci-i18n-exodus-*`。如果已安装 `nikki` / `luci-app-nikki`，安装脚本会替换它们并保留配置、配置文件和订阅（两者共用，配置仍位于 `/etc/config/nikki`）。
 
 ```shell
-# 你可以从 shell 执行命令安装或者从 LuCI 的`软件包`菜单安装
-# for opkg
-opkg install nikki
-opkg install luci-app-nikki
-opkg install luci-i18n-nikki-zh-cn
-# for apk
-apk add nikki
-apk add luci-app-nikki
-apk add luci-i18n-nikki-zh-cn
+wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | ash
 ```
 
-### B. 从发行版安装
+安装指定版本而不是最新版本：
 
 ```shell
-wget -O - https://github.com/nikkinikki-org/OpenWrt-nikki/raw/refs/heads/main/install.sh | ash
+wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | VERSION=v1.26.1 ash
 ```
+
+如果路由器无法访问 GitHub，请在其他设备上从发行版页面下载对应的 `exodus_<arch>-<branch>.tar.gz`，复制到路由器的 `/tmp` 并从中安装：
+
+```shell
+# <arch> 为 /etc/openwrt_release 中的 DISTRIB_ARCH，<branch> 为 openwrt-24.10、openwrt-25.12 或 SNAPSHOT
+# 如果已安装 nikki，请先卸载（配置会保留）：opkg remove luci-app-nikki nikki / apk del luci-app-nikki nikki
+mkdir -p /tmp/exodus && tar -x -z -f /tmp/exodus_<arch>-<branch>.tar.gz -C /tmp/exodus
+# for opkg (OpenWrt 24.10)
+opkg update && opkg install /tmp/exodus/mihomo-meta_*.ipk /tmp/exodus/exodus_*.ipk /tmp/exodus/luci-app-exodus_*.ipk
+# for apk (OpenWrt 25.12 and SNAPSHOT)
+apk update && apk add --allow-untrusted /tmp/exodus/mihomo-meta-[0-9]*.apk /tmp/exodus/exodus-[0-9]*.apk /tmp/exodus/luci-app-exodus-[0-9]*.apk
+```
+
+已安装的软件包也可以在 LuCI 中更新：`服务 → Exodus → 更新`。闪存空间较小的路由器请在该页面启用低空间模式，它会在安装新内核之前删除当前内核。
+
+## Mihomo Alpha 内核
+
+仅提供稳定版内核（`mihomo-meta`）。如需使用 Alpha 内核，请用 [MetaCubeX 发行版](https://github.com/MetaCubeX/mihomo/releases/tag/Prerelease-Alpha) 中的官方 Alpha 构建替换内核文件，命令和 `ASSET` 对照表见 [English README](README.md#mihomo-alpha-core)。
 
 ## 卸载并重置
 
 ```shell
-wget -O - https://github.com/nikkinikki-org/OpenWrt-nikki/raw/refs/heads/main/uninstall.sh | ash
+wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/uninstall.sh | ash
 ```
 
 ## 如何使用
 
-查看 [Wiki](https://github.com/nikkinikki-org/OpenWrt-nikki/wiki)
+1. 在 LuCI 中打开 `服务 → Exodus → 配置文件` 并添加订阅。
+2. 在 `服务 → Exodus → 应用配置` 中选择订阅、启用应用，并选择哪些设备走代理。
+3. 其他设置都在 `高级` 页面中，如果不清楚其作用请不要修改。
 
 ## 如何工作
 
@@ -75,15 +82,15 @@ wget -O - https://github.com/nikkinikki-org/OpenWrt-nikki/raw/refs/heads/main/un
 
 ```shell
 # 添加源
-echo "src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main" >> "feeds.conf.default"
+echo "src-git exodus https://github.com/prettyleaf/openwrt-exodus.git;main" >> "feeds.conf.default"
 # 更新并安装源
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 # 编译
-make package/luci-app-nikki/compile
+make package/luci-app-exodus/compile
 ```
 
-编译结果可以在`bin/packages/your_architecture/nikki`内找到。
+编译结果可以在`bin/packages/your_architecture/exodus`内找到。
 
 ## 依赖
 
