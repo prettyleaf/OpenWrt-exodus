@@ -3,9 +3,16 @@
 'use strict';
 
 import { access, popen, readfile, stat, writefile } from 'fs';
+import { cursor } from 'uci';
 import { get_users, get_groups, get_cgroups, load_profile } from '/etc/nikki/ucode/include.uc';
 
 const repository = 'prettyleaf/openwrt-exodus';
+
+// alternative cores chosen in the installer, their releases publish the latest version in version.txt
+const core_releases = {
+	alpha: 'https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha',
+	prizrak: 'https://github.com/legiz-ru/Prizrak-Core/releases/latest/download'
+};
 
 function package_version(name) {
 	let version = null;
@@ -145,6 +152,29 @@ const methods = {
 			return { users: users, groups: groups, cgroups: cgroups };
 		}
 	},
+	hwid: {
+		call: function() {
+			// the headers the service sends to subscriptions with Send HWID, and the hwid used when none is set
+			const headers = {};
+			let process = popen('. /etc/nikki/scripts/include.sh && hwid_headers');
+			if (process) {
+				for (let line in split(process.read('all'), '\n')) {
+					const m = match(line, /^([a-z-]+): (.*)$/);
+					if (m) {
+						headers[m[1]] = m[2];
+					}
+				}
+				process.close();
+			}
+			let generated = null;
+			process = popen('. /etc/nikki/scripts/include.sh && generate_hwid');
+			if (process) {
+				generated = trim(process.read('all')) || null;
+				process.close();
+			}
+			return { headers: headers, generated: generated };
+		}
+	},
 	hard_update: {
 		call: function() {
 			// runs in background, restart may take longer than the rpc timeout
@@ -161,24 +191,27 @@ const methods = {
 			for (let name in ['exodus', 'luci-app-exodus', 'mihomo-meta', 'mihomo-alpha']) {
 				installed[name] = package_version(name);
 			}
+			// the installer saves the chosen core and the gh-proxy it downloads through
+			const uci = cursor();
+			const core_type = uci.get('nikki', 'update', 'core') ?? 'meta';
+			let gh_proxy = rtrim(uci.get('nikki', 'update', 'gh_proxy') ?? '', '/');
+			if (!match(gh_proxy, /^https?:\/\/[^' ]+$/)) {
+				gh_proxy = null;
+			}
+			const gh_url = (url) => gh_proxy ? `${gh_proxy}/${url}` : url;
 			let tag = null;
 			let latest = null;
 			let error = null;
 			if (branch == null) {
 				error = 'unsupported release';
 			} else {
-				let process = popen(`curl -s -I -o /dev/null -m 15 -w '%{redirect_url}' 'https://github.com/${repository}/releases/latest'`);
-				if (process) {
-					const url = trim(process.read('all'));
-					process.close();
-					if (index(url, '/releases/tag/') >= 0) {
-						tag = substr(url, rindex(url, '/') + 1);
-					}
-				}
-				process = popen(`curl -s -f -L -m 30 'https://github.com/${repository}/releases/latest/download/exodus_${arch}-${branch}.json'`);
+				const index_url = gh_url(`https://github.com/${repository}/releases/latest/download/exodus_${arch}-${branch}.json`);
+				let process = popen(`curl -s -f -L -m 30 '${index_url}'`);
 				if (process) {
 					try {
-						latest = json(process.read('all'))?.packages;
+						const release_index = json(process.read('all'));
+						latest = release_index?.packages;
+						tag = release_index?.tag;
 					} catch (e) {
 						latest = null;
 					}
@@ -187,10 +220,39 @@ const methods = {
 				if (latest == null) {
 					error = 'failed to fetch the latest release';
 				}
+				// older releases have no tag in the index, gh-proxy follows the redirect to the tag itself
+				if (tag == null && gh_proxy == null) {
+					process = popen(`curl -s -I -o /dev/null -m 15 -w '%{redirect_url}' 'https://github.com/${repository}/releases/latest'`);
+					if (process) {
+						const url = trim(process.read('all'));
+						process.close();
+						if (index(url, '/releases/tag/') >= 0) {
+							tag = substr(url, rindex(url, '/') + 1);
+						}
+					}
+				}
+			}
+			// an alternative core replaces the binary of mihomo-meta, its version is read from the binary
+			const core = { type: core_type, installed: null, latest: null };
+			let process = popen('mihomo -v 2>/dev/null | grep Mihomo | cut -d " " -f 3');
+			if (process) {
+				core.installed = trim(process.read('all')) || null;
+				process.close();
+			}
+			if (core_releases[core_type]) {
+				const version_url = gh_url(`${core_releases[core_type]}/version.txt`);
+				process = popen(`curl -s -f -L -m 15 '${version_url}'`);
+				if (process) {
+					const version = trim(split(process.read('all'), '\n')[0]);
+					process.close();
+					if (match(version, /^[A-Za-z0-9._-]+$/)) {
+						core.latest = version;
+					}
+				}
 			}
 			// free flash space and size of the current core, to decide if the core has to be removed before the update
 			let free_space = null;
-			const process = popen("df -k /usr/libexec 2>/dev/null | tail -n 1 | awk '{print $4}'");
+			process = popen("df -k /usr/libexec 2>/dev/null | tail -n 1 | awk '{print $4}'");
 			if (process) {
 				const kb = int(trim(process.read('all')));
 				process.close();
@@ -199,7 +261,9 @@ const methods = {
 				}
 			}
 			const core_size = stat('/usr/libexec/mihomo')?.size;
-			return { tag: tag, arch: arch, branch: branch, installed: installed, latest: latest, error: error, free_space: free_space, core_size: core_size };
+			// the token is a part of the gh-proxy address, only the host is returned
+			const gh_proxy_host = gh_proxy ? match(gh_proxy, /^[a-z]+:\/\/([^\/]+)/)[1] : null;
+			return { tag: tag, arch: arch, branch: branch, installed: installed, latest: latest, core: core, gh_proxy: gh_proxy_host, error: error, free_space: free_space, core_size: core_size };
 		}
 	},
 	update: {

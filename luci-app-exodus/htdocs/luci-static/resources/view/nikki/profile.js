@@ -38,9 +38,6 @@ return view.extend({
             });
         };
 
-        o = s.option(form.Value, 'hwid', _('HWID'), _('Device identifier sent to subscriptions with HWID enabled (Remnawave device limit). Generated from the router hardware when empty.'));
-        o.placeholder = _('Auto');
-
         s = m.section(form.GridSection, 'subscription', _('Subscription'));
         s.addremove = true;
         s.anonymous = true;
@@ -95,7 +92,7 @@ return view.extend({
         o.value('clash.meta');
         o.value('mihomo');
 
-        o = s.option(form.Flag, 'send_hwid', _('Send HWID'), _('Send x-hwid, x-device-os, x-ver-os and x-device-model headers, required by panels with HWID device limit such as Remnawave.'));
+        o = s.option(form.Flag, 'send_hwid', _('Send HWID'), _('Send x-hwid, x-device-os, x-ver-os and x-device-model headers, required by panels with HWID device limit.'));
         o.default = '1';
         o.modalonly = true;
         o.rmempty = false;

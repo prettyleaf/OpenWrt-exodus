@@ -624,14 +624,12 @@ update_subscription() {
 	# prepare hwid headers, positional parameters are used as extra curl arguments
 	set --
 	if [ "$subscription_send_hwid" = 1 ]; then
-		local hwid os_version device_model
-		config_get hwid "config" "hwid"
-		if [ -z "$hwid" ]; then
-			hwid=$(generate_hwid)
-		fi
-		os_version=$(. /etc/openwrt_release && echo "$DISTRIB_RELEASE")
-		device_model=$(cat /tmp/sysinfo/model 2>/dev/null)
-		set -- -H "x-hwid: $hwid" -H "x-device-os: OpenWrt" -H "x-ver-os: $os_version" -H "x-device-model: $device_model"
+		local header
+		while IFS= read -r header; do
+			set -- "$@" -H "$header"
+		done <<-EOF
+			$(hwid_headers)
+		EOF
 	fi
 	# reset subscription info
 	uci_remove "nikki" "$subscription_section" "expire" > /dev/null 2>&1

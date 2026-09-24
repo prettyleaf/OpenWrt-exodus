@@ -1,6 +1,7 @@
 ![GitHub License](https://img.shields.io/github/license/prettyleaf/openwrt-exodus?style=for-the-badge&logo=github) ![GitHub Tag](https://img.shields.io/github/v/release/prettyleaf/openwrt-exodus?style=for-the-badge&logo=github) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/prettyleaf/openwrt-exodus/total?style=for-the-badge&logo=github)
 
 English | [中文](README.zh.md)
+[Wiki](https://github.com/prettyleaf/OpenWrt-exodus/wiki)
 
 # Exodus
 
@@ -16,17 +17,15 @@ Transparent Proxy with Mihomo on OpenWrt. Fork of [OpenWrt-nikki](https://github
 
 - Transparent Proxy (Redirect/TPROXY/TUN, IPv4 and/or IPv6), TCP Redirect + UDP TPROXY by default
 - Official Mihomo core: `mihomo-meta` packages the prebuilt binary from [MetaCubeX releases](https://github.com/MetaCubeX/mihomo/releases), verified by sha256
+- Choice of the core in the installer: stable Mihomo Meta, Mihomo Alpha or [Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core)
+- Installation through your own [gh-proxy](https://github.com/prettyleaf/gh-proxy) when GitHub is blocked by the provider
 - Per-device proxy selection: proxy everyone except the selected devices, or only the selected devices
-- HWID headers for subscriptions (Remnawave HWID device limit), enabled by default
+- HWID headers for subscriptions, enabled by default
 - Profile Mixin
 - Profile Editor
 - Scheduled Restart
 
 ## Install & Update
-
-Prebuilt packages are published for OpenWrt 24.10, 25.12 and SNAPSHOT on these architectures: `x86_64`, `aarch64_cortex-a53`, `aarch64_generic`, `aarch64_cortex-a72`, `aarch64_cortex-a76`, `mipsel_24kc`, `arm_cortex-a7_neon-vfpv4` (see `DISTRIB_ARCH` in `/etc/openwrt_release`). For other architectures build the packages from source, see [Compilation](#compilation).
-
-Packages are downloaded directly from [GitHub Releases](https://github.com/prettyleaf/openwrt-exodus/releases) for the architecture and OpenWrt version of the router, then installed locally. Dependencies are installed from the official OpenWrt feeds. Run the same command again to update.
 
 The packages are `exodus`, `luci-app-exodus` and `luci-i18n-exodus-*`. If `nikki` / `luci-app-nikki` are installed, the installer replaces them and keeps the config, profiles and subscriptions (they are shared, the config stays at `/etc/config/nikki`).
 
@@ -34,65 +33,13 @@ The packages are `exodus`, `luci-app-exodus` and `luci-i18n-exodus-*`. If `nikki
 wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | ash
 ```
 
-To install a specific release instead of the latest one:
+The installer first checks that the router can download from GitHub, then asks which [core](https://github.com/prettyleaf/OpenWrt-exodus/wiki#core) to install. Settings for a run [can be](https://github.com/prettyleaf/OpenWrt-exodus/wiki#install--update) passed as environment variables before `ash`.
 
 ```shell
-wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | VERSION=v1.26.1 ash
+wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | VERSION=v1.26.1 CORE=alpha ash
 ```
 
-If the router can not reach GitHub, download `exodus_<arch>-<branch>.tar.gz` for your router from the releases page on another machine, copy it to `/tmp` on the router and install the packages from it:
-
-```shell
-# <arch> is DISTRIB_ARCH from /etc/openwrt_release, <branch> is openwrt-24.10, openwrt-25.12 or SNAPSHOT
-# if nikki is installed, remove it first (the config is kept): opkg remove luci-app-nikki nikki / apk del luci-app-nikki nikki
-mkdir -p /tmp/exodus && tar -x -z -f /tmp/exodus_<arch>-<branch>.tar.gz -C /tmp/exodus
-# for opkg (OpenWrt 24.10)
-opkg update && opkg install /tmp/exodus/mihomo-meta_*.ipk /tmp/exodus/exodus_*.ipk /tmp/exodus/luci-app-exodus_*.ipk
-# for apk (OpenWrt 25.12 and SNAPSHOT)
-apk update && apk add --allow-untrusted /tmp/exodus/mihomo-meta-[0-9]*.apk /tmp/exodus/exodus-[0-9]*.apk /tmp/exodus/luci-app-exodus-[0-9]*.apk
-```
-
-Installed packages can also be updated from LuCI: `Services → Exodus → Update`. On routers with little free flash enable the low flash space mode there, it removes the current core before installing the new one.
-
-## Mihomo Alpha Core
-
-Only the stable core (`mihomo-meta`) is shipped. To run the Alpha core, replace the core binary with the official Alpha build from [MetaCubeX releases](https://github.com/MetaCubeX/mihomo/releases/tag/Prerelease-Alpha):
-
-```shell
-# asset name for your router, see the table below
-ASSET=arm64
-# find the latest alpha build
-url=$(wget -q -O - https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha | jsonfilter -e '@.assets[*].browser_download_url' | grep "/mihomo-linux-${ASSET}-alpha-[0-9a-f]*\.gz$")
-echo "$url"
-# stop the service, the running core keeps its file allocated
-/etc/init.d/nikki stop
-# remove the current core first, so it works with little free flash space
-rm -f /usr/libexec/mihomo
-wget -q -O - "$url" | gzip -dc > /usr/libexec/mihomo && chmod +x /usr/libexec/mihomo
-mihomo -v
-/etc/init.d/nikki start
-```
-
-| `DISTRIB_ARCH` from `/etc/openwrt_release` | `ASSET` |
-| --- | --- |
-| `aarch64_*` | `arm64` |
-| `arm_*` with `vfp`/`neon` in the name, e.g. `arm_cortex-a7_neon-vfpv4` | `armv7` |
-| `arm_arm1176jzf-s_vfp` | `armv6` |
-| `arm_*` without FPU, e.g. `arm_cortex-a9`, `arm_arm926ej-s` | `armv5` |
-| `mips_24kc`, `mips_4kec`, `mips_mips32` | `mips-softfloat` |
-| `mipsel_24kc`, `mipsel_74kc`, `mipsel_mips32` | `mipsle-softfloat` |
-| `mipsel_24kc_24kf` | `mipsle-hardfloat` |
-| `mips64_octeonplus` | `mips64` |
-| `x86_64` | `amd64-v1` |
-| `i386_pentium4` | `386` |
-| `riscv64_*` | `riscv64` |
-| `loongarch64_*` | `loong64-abi2` |
-
-If the download fails, the router is left without a core: run the commands again. The Alpha core stays until a new `mihomo-meta` version is installed (from the Update page or the installer), which brings back the stable core. To return to the stable core earlier, run the same commands, but find the latest stable build instead:
-
-```shell
-url=$(wget -q -O - https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | jsonfilter -e '@.assets[*].browser_download_url' | grep "/mihomo-linux-${ASSET}-v[0-9.]*\.gz$")
-```
+Installed packages can also be updated from LuCI: `Services → Exodus → Update`. It runs the same installer with the core and the gh-proxy chosen last time. On routers with little free flash enable the low flash space mode there, it removes the current core before installing the new one.
 
 ## Uninstall & Reset
 
@@ -106,6 +53,8 @@ wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/unins
 2. On `Services → Exodus → App Config` choose the subscription, enable the app and choose which devices go through the proxy.
 3. Everything else is on the `Advanced` page. Do not change it unless you know what you are doing.
 
+When the service is running, `Open Dashboard` next to `Restart Service` on the main page opens the dashboard. The core downloads it on the first start ([Zashboard](https://github.com/Zephyruso/zashboard) by default, see `Advanced → External Control Config`).
+
 ## How does it work
 
 1. Mixin and Update profile.
@@ -115,12 +64,6 @@ wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/unins
 5. Generate nftables and apply it.
 
 Note that the steps above may change base on config.
-
-## Release
-
-Push a tag starting with `v` (for example `v1.26.1`). The `release-packages` workflow builds the packages for every supported architecture and attaches `exodus_<arch>-<branch>.tar.gz` to the GitHub release, which is what the installer downloads.
-
-The Mihomo core is not compiled: `mihomo-meta` downloads the official binary for the target architecture and checks its sha256. The `dependabot` workflow checks MetaCubeX releases daily and opens a pull request that bumps the version and the hashes in `mihomo-meta/Makefile`.
 
 ## Compilation
 
@@ -152,5 +95,6 @@ The package files will be found under `bin/packages/your_architecture/exodus`.
 ## Special Thanks
 
 - [OpenWrt-nikki](https://github.com/nikkinikki-org/OpenWrt-nikki) and its [contributors](https://github.com/nikkinikki-org/OpenWrt-nikki/graphs/contributors)
+- [Prizrak-core](https://github.com/legiz-ru/Prizrak-Core/releases) and its [contributors](https://github.com/legiz-ru/Prizrak-Core/graphs/contributors)
 - [@ApoisL](https://github.com/apoiston)
 - [@xishang0128](https://github.com/xishang0128)

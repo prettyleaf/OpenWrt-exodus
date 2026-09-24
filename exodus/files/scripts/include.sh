@@ -121,3 +121,15 @@ generate_hwid() {
 		cat /proc/sys/kernel/random/uuid | tr -d '-'
 	fi
 }
+
+hwid_headers() {
+	# headers for subscriptions with a hwid device limit (remnawave), one "name: value" per line, the advanced page shows them too
+	local hwid; hwid=$(uci -q get nikki.config.hwid)
+	if [ -z "$hwid" ]; then
+		hwid=$(generate_hwid)
+	fi
+	echo "x-hwid: $hwid"
+	echo "x-device-os: OpenWrt"
+	echo "x-ver-os: $(. /etc/openwrt_release && echo "$DISTRIB_RELEASE")"
+	echo "x-device-model: $(cat /tmp/sysinfo/model 2>/dev/null)"
+}

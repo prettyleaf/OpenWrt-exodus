@@ -6,6 +6,14 @@
 'require network';
 'require tools.nikki as nikki';
 
+// the dashboard is served by the running core
+function updateDashboardButton(running) {
+    const element = document.getElementById('open_dashboard');
+    if (element) {
+        element.style.display = running ? '' : 'none';
+    }
+}
+
 function renderStatus(running) {
     return updateStatus(E('input', { id: 'core_status', style: 'border: unset; font-style: italic; font-weight: bold;', readonly: '' }), running);
 }
@@ -32,6 +40,8 @@ return view.extend({
         const subscriptions = uci.sections('nikki', 'subscription');
         const appVersion = data[1].app ?? '';
         const coreVersion = data[1].core ?? '';
+        // the installer saves an alternative core, Prizrak-Core reports the same version as Mihomo Meta
+        const coreTitle = { alpha: 'Mihomo Alpha', prizrak: 'Prizrak-Core' }[uci.get('nikki', 'update', 'core')];
         const running = data[2];
         const profiles = data[3];
         const hosts = data[4].hosts;
@@ -53,7 +63,7 @@ return view.extend({
         o = s.option(form.Value, '_core_version', _('Core Version'));
         o.readonly = true;
         o.load = function () {
-            return coreVersion;
+            return coreTitle && coreVersion ? `${coreVersion} (${coreTitle})` : coreVersion;
         };
         o.write = function () { };
 
@@ -64,6 +74,7 @@ return view.extend({
         poll.add(function () {
             return L.resolveDefault(nikki.status()).then(function (running) {
                 updateStatus(document.getElementById('core_status'), running);
+                updateDashboardButton(running);
             });
         });
 
@@ -72,6 +83,15 @@ return view.extend({
         o.inputtitle = _('Restart Service');
         o.onclick = function () {
             return nikki.restart();
+        };
+
+        o = s.option(form.Button, 'open_dashboard');
+        o.inputtitle = _('Open Dashboard');
+        o.onclick = function () {
+            return nikki.openDashboard();
+        };
+        o.renderWidget = function () {
+            return E('div', { id: 'open_dashboard', style: running ? '' : 'display: none' }, form.Button.prototype.renderWidget.apply(this, arguments));
         };
 
         s = m.section(form.NamedSection, 'config', 'config', _('App Config'));

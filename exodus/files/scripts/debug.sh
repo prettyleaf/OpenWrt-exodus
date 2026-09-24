@@ -85,6 +85,13 @@ if (exists(result, "subscription")) {
 		}
 	}
 }
+if (exists(result, "update")) {
+	for (let x in result["update"]) {
+		if (exists(x, "gh_proxy")) {
+			x["gh_proxy"] = "*";
+		}
+	}
+}
 if (exists(result, "lan_access_control")) {
 	for (let x in result["lan_access_control"]) {
 		if (exists(x, "ip")) {

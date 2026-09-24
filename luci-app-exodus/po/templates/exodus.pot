@@ -224,12 +224,20 @@ msgstr ""
 msgid "Destination UDP Port to Proxy"
 msgstr ""
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/advanced.js:218
+msgid "Device Model"
+msgstr ""
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:195
 msgid "Device Name"
 msgstr ""
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/advanced.js:218
+msgid "Device OS"
+msgstr ""
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/profile.js:28
-msgid "Device identifier sent to subscriptions with HWID enabled (Remnawave device limit). Generated from the router hardware when empty."
+msgid "Device identifier sent to subscriptions with HWID enabled (device limit). Generated from the router hardware when empty."
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:111
@@ -313,6 +321,10 @@ msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:550
 msgid "Domain Name Wildcard"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:126
+msgid "Download"
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:169
@@ -748,6 +760,10 @@ msgstr ""
 msgid "Number of Processes Soft Limit"
 msgstr ""
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/advanced.js:218
+msgid "OS Version"
+msgstr ""
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:89
 msgid "Open Dashboard"
 msgstr ""
@@ -979,7 +995,11 @@ msgid "Send HWID"
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/profile.js:84
-msgid "Send x-hwid, x-device-os, x-ver-os and x-device-model headers, required by panels with HWID device limit such as Remnawave."
+msgid "Send x-hwid, x-device-os, x-ver-os and x-device-model headers, required by panels with HWID device limit."
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/advanced.js:219
+msgid "Sent in the %s header, read from the router."
 msgstr ""
 
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:31
@@ -1099,6 +1119,10 @@ msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:122
 msgid "Test Profile"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:119
+msgid "The core and the gh-proxy chosen in the installer are kept, run the installer again to change them."
 msgstr ""
 
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:98
@@ -1291,12 +1315,20 @@ msgstr ""
 msgid "Username"
 msgstr ""
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:126
+msgid "directly from GitHub"
+msgstr ""
+
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:69
 msgid "mihomo-alpha is installed, it will be replaced by mihomo-meta."
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:128
 msgid "procd Config"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:126
+msgid "through gh-proxy at %s"
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/profile.js:76

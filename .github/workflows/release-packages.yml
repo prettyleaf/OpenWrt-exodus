@@ -45,8 +45,8 @@ jobs:
       - name: compress
         run: |
           tar -c -z -f exodus_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz -C bin/packages/${{ matrix.arch }}/exodus .
-          # package versions, the update page reads them without downloading the archive
-          cp bin/packages/${{ matrix.arch }}/exodus/index.json exodus_${{ matrix.arch }}-${{ matrix.branch }}.json
+          # package versions and the release tag, the update page reads them without downloading the archive
+          jq --arg tag "${{ github.ref_name }}" '. + {tag: $tag}' bin/packages/${{ matrix.arch }}/exodus/index.json > exodus_${{ matrix.arch }}-${{ matrix.branch }}.json
 
       - if: github.event_name == 'push' && startsWith(github.ref_name, 'v')
         name: release

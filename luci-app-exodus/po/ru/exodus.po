@@ -231,13 +231,21 @@ msgstr "TCP-порт назначения для прокси"
 msgid "Destination UDP Port to Proxy"
 msgstr "UDP-порт назначения для прокси"
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/advanced.js:218
+msgid "Device Model"
+msgstr "Модель устройства"
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:195
 msgid "Device Name"
 msgstr "Имя устройства"
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/advanced.js:218
+msgid "Device OS"
+msgstr "ОС устройства"
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/profile.js:28
-msgid "Device identifier sent to subscriptions with HWID enabled (Remnawave device limit). Generated from the router hardware when empty."
-msgstr "Идентификатор устройства, передаваемый подпискам с включённым HWID (лимит устройств Remnawave). Если пусто, генерируется на основе оборудования роутера."
+msgid "Device identifier sent to subscriptions with HWID enabled (device limit). Generated from the router hardware when empty."
+msgstr "Идентификатор устройства, передаваемый подпискам с включённым HWID (лимит устройств). Если пусто, генерируется на основе оборудования роутера."
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:111
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:130
@@ -321,6 +329,10 @@ msgstr "Суффикс домена"
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:550
 msgid "Domain Name Wildcard"
 msgstr "Шаблон домена"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:126
+msgid "Download"
+msgstr "Загрузка"
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:169
 msgid "Edit Authentications"
@@ -755,6 +767,10 @@ msgstr ""
 msgid "Number of Processes Soft Limit"
 msgstr ""
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/advanced.js:218
+msgid "OS Version"
+msgstr "Версия ОС"
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:89
 msgid "Open Dashboard"
 msgstr "Открыть панель"
@@ -986,8 +1002,12 @@ msgid "Send HWID"
 msgstr "Передавать HWID"
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/profile.js:84
-msgid "Send x-hwid, x-device-os, x-ver-os and x-device-model headers, required by panels with HWID device limit such as Remnawave."
-msgstr "Передавать заголовки x-hwid, x-device-os, x-ver-os и x-device-model, необходимые панелям с лимитом устройств по HWID, например Remnawave."
+msgid "Send x-hwid, x-device-os, x-ver-os and x-device-model headers, required by panels with HWID device limit."
+msgstr "Передавать заголовки x-hwid, x-device-os, x-ver-os и x-device-model, необходимые панелям с лимитом устройств по HWID."
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/advanced.js:219
+msgid "Sent in the %s header, read from the router."
+msgstr "Передаётся в заголовке %s, берётся с роутера."
 
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:31
 msgid "Service"
@@ -1107,6 +1127,10 @@ msgstr "Тайм-аут TUN"
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:122
 msgid "Test Profile"
 msgstr "Проверить профиль"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:119
+msgid "The core and the gh-proxy chosen in the installer are kept, run the installer again to change them."
+msgstr "Ядро и gh-proxy, выбранные в установщике, сохраняются. Чтобы изменить их, запустите установщик снова."
 
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:98
 msgid "The current core will be removed before the new one is installed. If the update fails, the proxy will not work until the update is done again. Continue?"
@@ -1298,6 +1322,10 @@ msgstr "User-Agent"
 msgid "Username"
 msgstr "Имя пользователя"
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:126
+msgid "directly from GitHub"
+msgstr "напрямую с GitHub"
+
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:69
 msgid "mihomo-alpha is installed, it will be replaced by mihomo-meta."
 msgstr "Установлен mihomo-alpha, он будет заменён на mihomo-meta."
@@ -1305,6 +1333,10 @@ msgstr "Установлен mihomo-alpha, он будет заменён на m
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:128
 msgid "procd Config"
 msgstr "Настройки procd"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:126
+msgid "through gh-proxy at %s"
+msgstr "через gh-proxy на %s"
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/profile.js:76
 msgid "{version} is replaced with the installed app version."

@@ -58,6 +58,12 @@ const callNikkiGetIdentifiers = rpc.declare({
     expect: { '': {} }
 });
 
+const callNikkiHwid = rpc.declare({
+    object: 'luci.nikki',
+    method: 'hwid',
+    expect: { '': {} }
+});
+
 const callNikkiDebug = rpc.declare({
     object: 'luci.nikki',
     method: 'debug',
@@ -247,6 +253,10 @@ return baseclass.extend({
 
     debug: function () {
         return callNikkiDebug();
+    },
+
+    hwid: function () {
+        return callNikkiHwid();
     },
 
     hardUpdate: function () {

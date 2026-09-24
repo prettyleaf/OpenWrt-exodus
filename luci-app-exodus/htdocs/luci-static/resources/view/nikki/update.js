@@ -26,16 +26,11 @@ return view.extend({
         const info = data[0];
         const installed = info.installed ?? {};
         const latest = info.latest ?? {};
-        const packages = [
-            ['luci-app-exodus', _('App')],
-            ['exodus', _('Service')],
-            ['mihomo-meta', _('Core')],
-        ];
+        const core = info.core ?? {};
+        const coreTitles = { meta: 'Mihomo Meta', alpha: 'Mihomo Alpha', prizrak: 'Prizrak-Core' };
 
         let updateAvailable = false;
-        const rows = packages.map(function ([name, title]) {
-            const current = installed[name];
-            const next = latest[name];
+        const row = function (title, current, next) {
             let status;
             if (next == null) {
                 status = '-';
@@ -48,8 +43,18 @@ return view.extend({
             } else {
                 status = E('span', { style: 'color: green' }, _('Up to date'));
             }
-            return [`${title} (${name})`, current ?? '-', next ?? '-', status];
-        });
+            return [title, current ?? '-', next ?? '-', status];
+        };
+        const rows = [
+            row(`${_('App')} (luci-app-exodus)`, installed['luci-app-exodus'], latest['luci-app-exodus']),
+            row(`${_('Service')} (exodus)`, installed['exodus'], latest['exodus']),
+        ];
+        // an alternative core replaces the binary of mihomo-meta, the installer keeps the package only as a dependency
+        if (core.type === 'alpha' || core.type === 'prizrak') {
+            rows.push(row(`${_('Core')} (${coreTitles[core.type]})`, core.installed, core.latest));
+        } else {
+            rows.push(row(`${_('Core')} (mihomo-meta)`, installed['mihomo-meta'], latest['mihomo-meta']));
+        }
 
         const table = E('table', { class: 'table' }, [
             E('tr', { class: 'tr table-titles' }, [
@@ -109,11 +114,16 @@ return view.extend({
 
         return E([], [
             E('h2', {}, _('Update')),
-            E('div', { class: 'cbi-map-descr' }, _('Packages are downloaded from GitHub releases of Exodus for this router and installed with the package manager. Settings, profiles and subscriptions are kept.')),
+            E('div', { class: 'cbi-map-descr' }, [
+                _('Packages are downloaded from GitHub releases of Exodus for this router and installed with the package manager. Settings, profiles and subscriptions are kept.'), ' ',
+                _('The core and the gh-proxy chosen in the installer are kept, run the installer again to change them.'), ' ',
+                E('a', { href: 'https://github.com/prettyleaf/openwrt-exodus#install--update', target: '_blank' }, _('How To Use'))
+            ]),
             ...notes,
             E('div', { class: 'cbi-section' }, [
                 E('p', {}, [
                     `${_('Release')}: `, E('strong', {}, info.tag ?? '-'), ' · ',
+                    `${_('Download')}: ${info.gh_proxy ? _('through gh-proxy at %s').format(info.gh_proxy) : _('directly from GitHub')}`, ' · ',
                     `${_('Architecture')}: ${info.arch ?? '-'} (${info.branch ?? '-'})`, ' · ',
                     `${_('Free flash space')}: ${formatSize(info.free_space)}`, ' · ',
                     `${_('Core size')}: ${formatSize(info.core_size)}`

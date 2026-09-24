@@ -12,6 +12,7 @@ return view.extend({
             network.getHostHints(),
             network.getNetworks(),
             nikki.getIdentifiers(),
+            L.resolveDefault(nikki.hwid(), {}),
         ]);
     },
     render: function (data) {
@@ -20,6 +21,8 @@ return view.extend({
         const users = data[3]?.users ?? [];
         const groups = data[3]?.groups ?? [];
         const cgroups = data[3]?.cgroups ?? [];
+        const hwidHeaders = data[4]?.headers ?? {};
+        const generatedHwid = data[4]?.generated;
 
         let m, s, o, so;
 
@@ -206,6 +209,18 @@ return view.extend({
         o = s.taboption('misc', form.Value, 'tun_interval', _('TUN Interval'));
         o.datatype = 'uinteger';
         o.rmempty = false;
+
+        // hwid is an option of the app config, the other headers are read from the router
+        o = s.taboption('misc', form.Value, 'hwid', _('HWID'), _('Device identifier sent to subscriptions with HWID enabled (device limit). Generated from the router hardware when empty.'));
+        o.ucisection = 'config';
+        o.placeholder = generatedHwid ?? _('Auto');
+
+        for (const [header, title] of [['x-device-os', _('Device OS')], ['x-ver-os', _('OS Version')], ['x-device-model', _('Device Model')]]) {
+            o = s.taboption('misc', form.DummyValue, `_${header.replaceAll('-', '_')}`, title, _('Sent in the %s header, read from the router.').format(header));
+            o.cfgvalue = function () {
+                return hwidHeaders[header] || '-';
+            };
+        }
 
         s = m.section(form.NamedSection, 'mixin', 'mixin', _('Mixin Option'));
 
