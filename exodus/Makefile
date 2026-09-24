@@ -5,7 +5,7 @@ PKG_VERSION:=2026.04.08
 PKG_RELEASE:=1
 
 PKG_LICENSE:=GPL3.0+
-PKG_MAINTAINER:=Joseph Mory <morytyann@gmail.com>
+PKG_MAINTAINER:=prettyleaf <81024464+prettyleaf@users.noreply.github.com>
 
 include $(INCLUDE_DIR)/package.mk
 
