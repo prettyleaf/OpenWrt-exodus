@@ -1,0 +1,39 @@
+name: check
+
+on:
+  push:
+    branches:
+      - keenetic
+  pull_request:
+    branches:
+      - keenetic
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shellcheck
+        run: |
+          shellcheck -s sh -e SC3043,SC2154,SC1091,SC2016,SC3045,SC2034,SC2119,SC2120,SC2153 \
+            install.sh uninstall.sh \
+            keenetic/opt/share/exodus/exodus \
+            keenetic/opt/share/exodus/lib/*.sh \
+            keenetic/opt/share/exodus/www/api.cgi \
+            keenetic/opt/etc/init.d/S99exodus \
+            keenetic/opt/etc/ndm/*/*.sh
+
+      - name: Web UI syntax
+        run: |
+          node --check keenetic/opt/share/exodus/www/app.js
+          node --check keenetic/opt/share/exodus/www/i18n.js
+
+      - name: Config and mixin
+        run: |
+          jq -e 'type == "object"' keenetic/opt/etc/exodus/config.json
+          jq -e -f keenetic/opt/share/exodus/lib/mixin.jq keenetic/opt/etc/exodus/config.json > /dev/null
+
+      - name: Version
+        run: grep -q -E '^[0-9][0-9.]+$' keenetic/opt/share/exodus/VERSION

@@ -1,0 +1,570 @@
+#!/bin/sh
+
+# Exodus for Keenetic: transparent proxy with mihomo on entware
+# there is no procd on keenetic: the core is kept running by the supervise loop,
+# the watch loop restores the rules, syncs wi-fi clients and runs the scheduled tasks
+
+. "${EXODUS_OPT:-/opt}/share/exodus/lib/common.sh"
+. "$LIB_DIR/firewall.sh"
+. "$LIB_DIR/profile.sh"
+
+usage() {
+	cat <<-EOF
+		Usage: exodus <command>
+
+		  start | stop | restart | status   control the proxy
+		  update_subscription <id>          download a subscription
+		  hard_update                       remove downloaded providers, update the subscription and restart
+		  apply                             apply the rules again
+		  sync                              sync wi-fi clients and parental control with the router
+		  clear_logs                        clear logs exceeding the size limit
+		  debug                             print the debug report
+		  web start|stop|restart            control the web ui
+		  passwd                            set the password of the web ui
+	EOF
+}
+
+random_hex() {
+	head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'
+}
+
+# secrets and the hwid are generated once, like uci-defaults on openwrt
+ensure_config() {
+	local secret password hwid
+	[ -f "$CONFIG_PATH" ] || return 1
+	secret=$(cfg_get .mixin.api_secret)
+	password=$(cfg_get '.mixin.authentications[0].password')
+	hwid=$(cfg_get .config.hwid)
+	if [ -z "$secret" ] || [ -z "$password" ] || [ -z "$hwid" ]; then
+		[ -n "$secret" ] || secret=$(random_hex 8)
+		[ -n "$password" ] || password=$(random_hex 8)
+		[ -n "$hwid" ] || hwid=$(generate_hwid)
+		cfg_update '.mixin.api_secret = $secret
+			| if ((.mixin.authentications // []) | length) > 0 and ((.mixin.authentications[0].password // "") == "") then .mixin.authentications[0].password = $password else . end
+			| .config.hwid = $hwid' \
+			--arg secret "$secret" --arg password "$password" --arg hwid "$hwid"
+	fi
+}
+
+core_env() {
+	local nofile gomemlimit mem_kb
+	nofile="$c_core_nofile"
+	# entware allows 1024 files per process, the core needs more, but too many hang the router
+	if [ -z "$nofile" ]; then
+		case "$(uname -m)" in
+			aarch64*) nofile=40000 ;;
+			*) nofile=10000 ;;
+		esac
+	fi
+	ulimit -n "$nofile" 2> /dev/null || ulimit -S -n "$nofile" 2> /dev/null
+	# half of the ram by default, go does not see the limits of the router and gets killed by oom
+	gomemlimit="$c_core_gomemlimit"
+	if [ -z "$gomemlimit" ]; then
+		mem_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo 2> /dev/null)
+		[ -n "$mem_kb" ] && gomemlimit="$((mem_kb / 2048))MiB"
+	fi
+	[ "$gomemlimit" = "off" ] && gomemlimit=
+	[ -n "$gomemlimit" ] && export GOMEMLIMIT="$gomemlimit"
+	[ -n "$c_core_gomaxprocs" ] && export GOMAXPROCS="$c_core_gomaxprocs"
+	if [ -n "$c_core_safe_paths" ]; then
+		SAFE_PATHS=$(echo "$c_core_safe_paths" | tr ' ' ':')
+		export SAFE_PATHS
+	fi
+	export DISABLE_LOOPBACK_DETECTOR="$c_core_disable_loopback_detector"
+	export QUIC_GO_DISABLE_GSO="$c_core_disable_quic_go_gso"
+	export QUIC_GO_DISABLE_ECN="$c_core_disable_quic_go_ecn"
+	export SKIP_SYSTEM_IPV6_CHECK="$c_core_skip_system_ipv6_check"
+	[ -f "$EXODUS_OPT/etc/ssl/certs/ca-certificates.crt" ] && export SSL_CERT_FILE="$EXODUS_OPT/etc/ssl/certs/ca-certificates.crt"
+}
+
+is_running() {
+	pid_alive "$SUPERVISOR_PID_PATH"
+}
+
+# the ports of the rules are listened by the core
+core_listening() {
+	[ -n "$fw_redir_port" ] && [ "$fw_tcp_mode" = "redirect" ] && ! port_listening tcp "$fw_redir_port" && return 1
+	[ -n "$fw_tproxy_port" ] && [ -n "$fw_tp_protos" ] && ! port_listening tcp "$fw_tproxy_port" && return 1
+	[ -n "$fw_dns_port" ] && { [ "$fw_dns4" = 1 ] || [ "$fw_dns6" = 1 ]; } && ! port_listening udp "$fw_dns_port" && return 1
+	return 0
+}
+
+supervise() {
+	local core_pid
+	prepare_files
+	cfg_load
+	core_env
+	echo "$$" > "$SUPERVISOR_PID_PATH"
+	trap 'supervise_stop' TERM INT
+	while [ ! -f "$STOP_FLAG_PATH" ]; do
+		"$PROG" -d "$RUN_DIR" >> "$CORE_LOG_PATH" 2>&1 &
+		core_pid=$!
+		echo "$core_pid" > "$CORE_PID_PATH"
+		wait "$core_pid"
+		[ -f "$STOP_FLAG_PATH" ] && break
+		log "Core" "Exited unexpectedly, restart in 5 seconds."
+		sleep 5
+	done
+	rm -f "$SUPERVISOR_PID_PATH" "$CORE_PID_PATH"
+}
+
+supervise_stop() {
+	local pid i
+	pid=$(cat "$CORE_PID_PATH" 2> /dev/null)
+	if [ -n "$pid" ] && kill "$pid" 2> /dev/null; then
+		i=0
+		while kill -0 "$pid" 2> /dev/null && [ "$i" -lt 50 ]; do
+			msleep 100
+			i=$((i + 1))
+		done
+		kill -9 "$pid" 2> /dev/null
+	fi
+	rm -f "$SUPERVISOR_PID_PATH" "$CORE_PID_PATH"
+	exit 0
+}
+
+start() {
+	prepare_files
+	if ! lock_acquire service 1200; then
+		echo "another start or stop is running"
+		return 1
+	fi
+	start_locked
+	local ret=$?
+	lock_release service
+	return "$ret"
+}
+
+start_locked() {
+	cfg_load
+	if is_running; then
+		log "App" "Already running."
+		return 0
+	fi
+	if [ "$c_config_enabled" != 1 ]; then
+		log "App" "Disabled."
+		log "App" "Exit."
+		return 0
+	fi
+	log "App" "Enabled."
+	log "App" "Start."
+	if [ ! -x "$PROG" ] || [ ! -x "$YQ" ]; then
+		log "App" "Core or yq is not executable, run the installer again."
+		log "App" "Exit."
+		return 1
+	fi
+	ensure_config
+	cfg_load
+	rm -f "$STOP_FLAG_PATH" "$STARTED_FLAG_PATH" "$FIREWALL_ENV_PATH"
+	if ! prepare_profile; then
+		log "App" "Exit."
+		return 1
+	fi
+	if [ "$c_config_core_only" != 1 ]; then
+		if ! mixin_profile; then
+			log "Mixin" "Mixin failed, check the mixin file and the profile."
+			log "App" "Exit."
+			return 1
+		fi
+	fi
+	profile_json
+	profile_params
+	local proxy; proxy=0
+	[ "$c_config_core_only" != 1 ] && [ "$c_proxy_enabled" = 1 ] && proxy=1
+	if [ "$proxy" = 1 ] && ! check_profile; then
+		log "App" "Exit."
+		return 1
+	fi
+	if [ "$c_config_test_profile" = 1 ]; then
+		log "Profile" "Testing..."
+		if "$PROG" -d "$RUN_DIR" -t >> "$CORE_LOG_PATH" 2>&1; then
+			log "Profile" "Test passed."
+		else
+			log "Profile" "Test failed."
+			log "Profile" "Please check the core log to find out the problem."
+			log "App" "Exit."
+			return 1
+		fi
+	fi
+	log "Core" "Start."
+	daemonize "$EXODUS" supervise
+	if [ "$proxy" = 1 ]; then
+		log "Proxy" "Enabled."
+		fw_prepare
+		fw_env
+		# rules without the core would cut the internet, they wait for its ports
+		local i; i=0
+		while ! core_listening && [ "$i" -lt 60 ]; do
+			msleep 500
+			i=$((i + 1))
+		done
+		if ! core_listening; then
+			log "Proxy" "The core does not listen its ports, the rules are applied when it does."
+		elif lock_acquire firewall 100; then
+			if fw_start; then
+				log "Proxy" "Hijack successful."
+			else
+				log "Proxy" "Hijack failed, see the messages above."
+			fi
+			lock_release firewall
+		fi
+		if [ "$fw_v6" = 1 ] && [ "$fw_v6_nat" != 1 ]; then
+			log "Proxy" "ip6tables has no nat table, IPv6 DNS hijack and IPv6 TCP redirect are not available."
+		fi
+		if [ "$c_proxy_ipv6_proxy" = 1 ] && [ "$fw_v6" != 1 ]; then
+			log "Proxy" "No global IPv6 address, IPv6 rules are skipped."
+		fi
+	else
+		log "Proxy" "Disabled."
+	fi
+	touch "$STARTED_FLAG_PATH"
+	daemonize "$EXODUS" watch
+	return 0
+}
+
+stop() {
+	prepare_files
+	if ! lock_acquire service 1200; then
+		echo "another start or stop is running"
+		return 1
+	fi
+	cfg_load
+	touch "$STOP_FLAG_PATH"
+	if pid_alive "$WATCH_PID_PATH"; then
+		kill "$(cat "$WATCH_PID_PATH")" 2> /dev/null
+	fi
+	rm -f "$WATCH_PID_PATH"
+	# rules go first, traffic must not wait for a stopped core
+	lock_acquire firewall 100
+	fw_clean
+	lock_release firewall
+	local pid i
+	if pid_alive "$SUPERVISOR_PID_PATH"; then
+		pid=$(cat "$SUPERVISOR_PID_PATH")
+		kill "$pid" 2> /dev/null
+		i=0
+		while kill -0 "$pid" 2> /dev/null && [ "$i" -lt 70 ]; do
+			msleep 100
+			i=$((i + 1))
+		done
+		kill -9 "$pid" 2> /dev/null
+	fi
+	if pid_alive "$CORE_PID_PATH"; then
+		kill -9 "$(cat "$CORE_PID_PATH")" 2> /dev/null
+	fi
+	rm -f "$SUPERVISOR_PID_PATH" "$CORE_PID_PATH" "$STARTED_FLAG_PATH" "$FIREWALL_ENV_PATH"
+	if [ "$c_log_clear_at_stop" = 1 ]; then
+		: > "$APP_LOG_PATH"
+		: > "$CORE_LOG_PATH"
+		log "Log" "Logs are cleared due to clear at stop is enabled."
+	fi
+	lock_release service
+}
+
+status() {
+	if is_running; then
+		echo "running"
+		return 0
+	fi
+	echo "stopped"
+	return 1
+}
+
+# ndm calls netfilter.d with $type (iptables/ip6tables) and $table after every rebuild of a table
+hook() {
+	[ -f "$STARTED_FLAG_PATH" ] || return 0
+	fw_env || return 0
+	case "$1" in
+		netfilter)
+			local family; family=4
+			[ "$2" = "ip6tables" ] && family=6
+			case "$3" in
+				nat|mangle|filter) ;;
+				*) return 0 ;;
+			esac
+			# until the core listens the rules would cut the traffic, the watch loop applies them later
+			core_listening || return 0
+			lock_acquire firewall 100 || return 0
+			fw_sets_local
+			fw_apply "$family" "$3"
+			fw_route_apply
+			lock_release firewall
+			;;
+		schedule)
+			# parental control schedules change the list of blocked devices
+			lock_acquire firewall 100 || return 0
+			fw_sets_rci
+			lock_release firewall
+			;;
+	esac
+}
+
+watch() {
+	local last minute tick
+	prepare_files
+	echo "$$" > "$WATCH_PID_PATH"
+	trap 'rm -f "$WATCH_PID_PATH"; exit 0' TERM INT
+	cfg_load
+	# the minute of the start is skipped, a scheduled restart would repeat itself
+	last=$(date +%Y%m%d%H%M)
+	tick=0
+	while [ ! -f "$STOP_FLAG_PATH" ]; do
+		sleep 15 &
+		wait $!
+		[ -f "$STOP_FLAG_PATH" ] && break
+		tick=$((tick + 1))
+		if fw_env && lock_acquire firewall 50; then
+			# ndm may rebuild a table without calling the hook, and the rules wait for the core after start
+			if ! fw_intact && core_listening; then
+				log "Proxy" "Rules are missing, apply them."
+				fw_start
+			elif [ $((tick % 2)) = 0 ]; then
+				fw_sets_local
+				fw_sets_rci
+			fi
+			lock_release firewall
+		fi
+		minute=$(date +%Y%m%d%H%M)
+		[ "$minute" = "$last" ] && continue
+		last="$minute"
+		if [ "$c_log_scheduled_clear" = 1 ] && [ -n "$c_log_scheduled_clear_cron" ] && cron_match "$c_log_scheduled_clear_cron"; then
+			clear_logs
+		fi
+		if [ "$c_config_scheduled_restart" = 1 ] && [ -n "$c_config_scheduled_restart_cron" ] && cron_match "$c_config_scheduled_restart_cron"; then
+			log "App" "Scheduled restart."
+			daemonize "$EXODUS" restart
+			break
+		fi
+	done
+	rm -f "$WATCH_PID_PATH"
+}
+
+sync_sets() {
+	[ -f "$STARTED_FLAG_PATH" ] || return 0
+	fw_env || return 0
+	lock_acquire firewall 100 || return 1
+	fw_sets_local
+	fw_sets_rci
+	lock_release firewall
+}
+
+apply() {
+	[ -f "$STARTED_FLAG_PATH" ] || return 0
+	fw_env || return 0
+	lock_acquire firewall 100 || return 1
+	fw_start
+	local ret=$?
+	lock_release firewall
+	return "$ret"
+}
+
+clear_logs() {
+	local limit unit bytes
+	limit="${c_log_scheduled_clear_size_limit:-1}"
+	unit="${c_log_scheduled_clear_size_limit_unit:-MB}"
+	case "$unit" in
+		KB) bytes=$((limit * 1024)) ;;
+		MB) bytes=$((limit * 1024 * 1024)) ;;
+		GB) bytes=$((limit * 1024 * 1024 * 1024)) ;;
+		*) bytes=$limit ;;
+	esac
+	if [ -f "$APP_LOG_PATH" ] && [ "$(wc -c < "$APP_LOG_PATH")" -ge "$bytes" ]; then
+		: > "$APP_LOG_PATH"
+		log "Log" "App log is cleared due to scheduled clear and exceeding size limits."
+	fi
+	if [ -f "$CORE_LOG_PATH" ] && [ "$(wc -c < "$CORE_LOG_PATH")" -ge "$bytes" ]; then
+		: > "$CORE_LOG_PATH"
+		log "Log" "Core log is cleared due to scheduled clear and exceeding size limits."
+	fi
+}
+
+hard_update() {
+	# stop first, the core keeps providers in memory and stop may clear logs
+	stop
+	prepare_files
+	cfg_load
+	log "App" "Hard update."
+	remove_provider_files
+	# a subscription preferring local file is not downloaded on start
+	if [ "${c_config_profile%%:*}" = "subscription" ] && [ "$(sub_get "${c_config_profile#*:}" prefer)" = "local" ]; then
+		update_subscription "${c_config_profile#*:}"
+	fi
+	start
+}
+
+web() {
+	local port pid
+	case "$1" in
+		start)
+			pid_alive "$WEB_PID_PATH" && return 0
+			prepare_files
+			port=$(cfg_get .web.port)
+			if ! command -v lighttpd > /dev/null 2>&1; then
+				echo "lighttpd is not installed"
+				return 1
+			fi
+			sed -e "s|@PORT@|${port:-9099}|g" \
+				-e "s|@WWW@|$SHARE_DIR/www|g" \
+				-e "s|@RUN@|$RUN_TMP|g" \
+				-e "s|@LOG@|$LOG_DIR|g" \
+				-e "s|@OPT@|$EXODUS_OPT|g" \
+				"$LIGHTTPD_CONF" > "$RUN_TMP/lighttpd.conf"
+			lighttpd -f "$RUN_TMP/lighttpd.conf"
+			;;
+		stop)
+			if pid_alive "$WEB_PID_PATH"; then
+				pid=$(cat "$WEB_PID_PATH")
+				kill "$pid" 2> /dev/null
+			fi
+			rm -f "$WEB_PID_PATH"
+			;;
+		restart)
+			web stop
+			sleep 1
+			web start
+			;;
+		status)
+			pid_alive "$WEB_PID_PATH" && echo "running" || echo "stopped"
+			;;
+		*)
+			usage
+			return 1
+			;;
+	esac
+}
+
+set_password() {
+	local password confirm salt
+	if [ -t 0 ]; then
+		stty -echo 2> /dev/null
+		printf 'New password of the web ui: '
+		read -r password
+		printf '\nRepeat: '
+		read -r confirm
+		stty echo 2> /dev/null
+		echo
+		if [ "$password" != "$confirm" ]; then
+			echo "passwords do not match"
+			return 1
+		fi
+	else
+		read -r password
+	fi
+	if [ "${#password}" -lt 4 ]; then
+		echo "the password is too short"
+		return 1
+	fi
+	salt=$(random_hex 8)
+	umask 077
+	echo "$salt:$(printf '%s' "$salt$password" | sha256sum | cut -d ' ' -f 1)" > "$AUTH_PATH"
+	# sessions of the old password end
+	rm -f "$SESSIONS_DIR"/* 2> /dev/null
+	echo "password is set"
+}
+
+debug() {
+	cfg_load
+	echo "# Exodus Debug Info"
+	echo "## system"
+	echo '```'
+	keenetic_version | jq -r '"\(.model // "") \(.hw_id // "") \(.title // .release // "")"' 2> /dev/null
+	uname -a
+	echo "exodus $(app_version), core $(core_version), yq $("$YQ" --version 2> /dev/null | awk '{ print $NF }')"
+	opkg list-installed 2> /dev/null | grep -E '^(curl|jq|ipset|iptables|ip-full|lighttpd|lighttpd-mod-cgi|ca-bundle) '
+	echo '```'
+	echo "## config"
+	echo '```json'
+	jq '
+		.mixin.api_secret |= (if . then "*" else . end)
+		| .config.hwid |= (if (. // "") != "" then "*" else . end)
+		| .mixin.authentications |= map(.password = "*")
+		| .subscriptions |= map(.url = "*" | .info_url = (if (.info_url // "") != "" then "*" else "" end))
+		| .update.gh_proxy |= (if (. // "") != "" then "*" else . end)
+		| .keenetic.rci_token |= (if (. // "") != "" then "*" else . end)
+		| .proxy.access_items |= map(if test("^(mac|ip|ip6):") then sub(":.*"; ":*") else . end)
+	' "$CONFIG_PATH" 2> /dev/null
+	echo '```'
+	echo "## profile"
+	echo '```json'
+	jq '
+		def hide: map(
+			with_entries(if (.key | IN("server", "servername", "sni", "port", "ports", "port-range", "uuid", "private-key", "public-key", "token", "username", "password")) then .value = "*" else . end)
+		);
+		(if has("secret") then .secret = "*" else . end)
+		| (if has("authentication") then .authentication = [] else . end)
+		| (if has("proxies") then .proxies |= hide else . end)
+		| (if has("proxy-providers") then .["proxy-providers"] |= map_values(
+			(if has("url") then .url = "*" else . end) | (if has("payload") then .payload |= hide else . end)
+		) else . end)
+	' "$PROFILE_JSON_PATH" 2> /dev/null
+	echo '```'
+	echo "## service"
+	echo '```'
+	echo "service: $(status)"
+	echo "web ui: $(web status)"
+	grep -v -E '^fw_items_(mac|ip4|ip6)=' "$FIREWALL_ENV_PATH" 2> /dev/null
+	echo '```'
+	echo "## ip rule"
+	echo '```'
+	ip -4 rule list
+	ip -6 rule list 2> /dev/null
+	echo '```'
+	echo "## ip route"
+	echo '```'
+	ip -4 route list table "${c_routing_tproxy_route_table:-111}" 2> /dev/null
+	ip -6 route list table "${c_routing_tproxy_route_table:-111}" 2> /dev/null
+	echo '```'
+	echo "## iptables"
+	echo '```'
+	local ipt table
+	for ipt in iptables ip6tables; do
+		for table in nat mangle filter; do
+			echo "# $ipt $table"
+			"$ipt-save" -t "$table" 2> /dev/null | grep -E '^:EXODUS|EXODUS|^-A (PREROUTING|INPUT|OUTPUT) ' | sed -E 's/(([0-9a-fA-F]{2}:){5})[0-9a-fA-F]{2}/\1**/g'
+		done
+	done
+	echo '```'
+	echo "## ipset"
+	echo '```'
+	ipset list -t 2> /dev/null | awk '/^Name:/ { name = $2 } /^Type:/ { type = $2 } /^Number of entries:/ { print name, type, $4 }' | grep exodus
+	echo '```'
+	echo "## kernel modules"
+	echo '```'
+	grep -E '^(xt_|nf_tproxy|ip_set)' /proc/modules 2> /dev/null | cut -d ' ' -f 1 | tr '\n' ' '
+	echo
+	{ tr '\n' ' ' < /proc/net/ip_tables_targets; } 2> /dev/null
+	echo
+	echo '```'
+}
+
+cmd="$1"
+[ $# -gt 0 ] && shift
+case "$cmd" in
+	start) start ;;
+	stop) stop ;;
+	restart|reload) stop; start ;;
+	status) status ;;
+	boot)
+		# boot from the init script: start delay without blocking the other services
+		prepare_files
+		delay=$(cfg_get .config.start_delay)
+		if [ "$(cfg_get .config.enabled)" = "true" ] && [ "${delay:-0}" -gt 0 ] 2> /dev/null; then
+			log "App" "Start after $delay seconds."
+			sleep "$delay"
+		fi
+		start
+		;;
+	supervise) supervise ;;
+	watch) watch ;;
+	hook) hook "$@" ;;
+	sync) sync_sets ;;
+	apply) apply ;;
+	update_subscription) prepare_files; update_subscription "$1" ;;
+	hard_update) hard_update ;;
+	clear_logs) prepare_files; cfg_load; clear_logs ;;
+	debug) debug ;;
+	web) web "$@" ;;
+	passwd) set_password ;;
+	init) prepare_files; ensure_config ;;
+	*) usage; exit 1 ;;
+esac

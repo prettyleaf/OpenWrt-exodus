@@ -1,0 +1,179 @@
+{
+  "config": {
+    "enabled": false,
+    "profile": "subscription:default",
+    "start_delay": 0,
+    "scheduled_restart": false,
+    "scheduled_restart_cron": "0 3 * * *",
+    "test_profile": true,
+    "core_only": false,
+    "hwid": ""
+  },
+  "core": {
+    "redirect_listener_name": "redir-in",
+    "tproxy_listener_name": "tproxy-in",
+    "gomemlimit": "",
+    "gomaxprocs": "",
+    "nofile": "",
+    "safe_paths": [],
+    "disable_loopback_detector": false,
+    "disable_quic_go_gso": false,
+    "disable_quic_go_ecn": false,
+    "skip_system_ipv6_check": false
+  },
+  "subscriptions": [
+    {
+      "id": "default",
+      "name": "default",
+      "url": "http://example.com/default.yaml",
+      "info_url": "",
+      "user_agent": "Mihomo/Exodus v{version}",
+      "send_hwid": true,
+      "prefer": "remote"
+    }
+  ],
+  "mixin": {
+    "log_level": "warning",
+    "mode": "rule",
+    "match_process": "off",
+    "outbound_interface": null,
+    "ipv6": true,
+    "unify_delay": null,
+    "tcp_concurrent": null,
+    "disable_tcp_keep_alive": null,
+    "tcp_keep_alive_idle": null,
+    "tcp_keep_alive_interval": null,
+    "ui_path": "ui",
+    "ui_name": null,
+    "ui_url": "https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip",
+    "api_listen": "[::]:9090",
+    "api_tls_listen": null,
+    "api_tls_cert": null,
+    "api_tls_key": null,
+    "api_tls_ech_key": null,
+    "api_secret": "",
+    "selection_cache": true,
+    "allow_lan": true,
+    "http_port": 8080,
+    "socks_port": 1080,
+    "mixed_port": 7890,
+    "redir_port": 7891,
+    "tproxy_port": 7892,
+    "authentication": true,
+    "authentications": [
+      { "enabled": true, "username": "exodus", "password": "" }
+    ],
+    "dns_enabled": true,
+    "dns_cache_algorithm": null,
+    "dns_listen": "[::]:1053",
+    "dns_ipv6": true,
+    "dns_mode": "fake-ip",
+    "fake_ip_range": "198.18.0.1/16",
+    "fake_ip6_range": null,
+    "fake_ip_ttl": null,
+    "fake_ip_filter": false,
+    "fake_ip_filters": ["+.lan", "+.local"],
+    "fake_ip_filter_mode": null,
+    "fake_ip_cache": true,
+    "dns_respect_rules": null,
+    "dns_doh_prefer_http3": null,
+    "dns_system_hosts": null,
+    "dns_hosts": null,
+    "hosts": false,
+    "hosts_entries": [
+      { "enabled": false, "domain_name": "localhost", "ip": ["127.0.0.1", "::1"] }
+    ],
+    "dns_nameserver": false,
+    "nameservers": [
+      { "enabled": true, "type": "default-nameserver", "nameserver": ["77.88.8.8", "1.1.1.1"] },
+      { "enabled": false, "type": "proxy-server-nameserver", "nameserver": ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"] },
+      { "enabled": false, "type": "direct-nameserver", "nameserver": ["https://77.88.8.8/dns-query", "https://common.dot.dns.yandex.net/dns-query"] },
+      { "enabled": true, "type": "nameserver", "nameserver": ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"] }
+    ],
+    "dns_proxy_server_nameserver_policy": false,
+    "proxy_server_nameserver_policies": [],
+    "dns_direct_nameserver_follow_policy": null,
+    "dns_nameserver_policy": false,
+    "nameserver_policies": [
+      { "enabled": true, "matcher": "geosite:category-ru", "nameserver": ["https://77.88.8.8/dns-query"] }
+    ],
+    "sniffer": null,
+    "sniffer_sniff_dns_mapping": null,
+    "sniffer_sniff_pure_ip": null,
+    "sniffer_force_domain_name": false,
+    "sniffer_force_domain_names": [],
+    "sniffer_ignore_domain_name": false,
+    "sniffer_ignore_domain_names": [],
+    "sniffer_sniff": false,
+    "sniffs": [
+      { "enabled": true, "protocol": "HTTP", "port": ["80", "8080"], "overwrite_destination": true },
+      { "enabled": true, "protocol": "TLS", "port": ["443", "8443"], "overwrite_destination": true },
+      { "enabled": true, "protocol": "QUIC", "port": ["443", "8443"], "overwrite_destination": true }
+    ],
+    "rule_provider": false,
+    "rule_providers": [],
+    "rule": false,
+    "rules": [],
+    "geoip_format": null,
+    "geodata_loader": null,
+    "geosite_url": null,
+    "geoip_mmdb_url": null,
+    "geoip_dat_url": null,
+    "geoip_asn_url": null,
+    "geox_auto_update": null,
+    "geox_update_interval": null,
+    "mixin_file_content": false
+  },
+  "proxy": {
+    "enabled": true,
+    "tcp_mode": "redirect",
+    "udp_mode": "tproxy",
+    "ipv4_dns_hijack": true,
+    "ipv6_dns_hijack": true,
+    "ipv4_proxy": true,
+    "ipv6_proxy": true,
+    "fake_ip_ping_hijack": true,
+    "router_proxy": false,
+    "lan_proxy": true,
+    "lan_inbound_interface": ["br+"],
+    "access_mode": "exclude",
+    "access_items": [],
+    "respect_parental_control": true,
+    "reserved_ip": ["0.0.0.0/8", "10.0.0.0/8", "127.0.0.0/8", "100.64.0.0/10", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4", "240.0.0.0/4", "78.47.125.180/32", "198.51.100.11/32", "198.51.100.37/32"],
+    "reserved_ip6": ["::/128", "::1/128", "::ffff:0:0/96", "100::/64", "64:ff9b::/96", "2001::/32", "2001:10::/28", "2001:20::/28", "2001:2::/48", "2001:db8::/32", "2002::/16", "fc00::/7", "fe80::/10", "ff00::/8"],
+    "proxy_tcp_dport": "0-65535",
+    "proxy_udp_dport": "0-65535",
+    "dscp_force": 61,
+    "dscp_bypass": [62],
+    "dscp_proxy": [63],
+    "force_proxy": "",
+    "force_redir_port": 7893,
+    "force_tproxy_port": 7894,
+    "bypass_fwmark": []
+  },
+  "routing": {
+    "tproxy_fw_mark": "0x111",
+    "tproxy_fw_mask": "0xffffffff",
+    "tproxy_rule_pref": 100,
+    "tproxy_route_table": 111,
+    "router_proxy_mark": 255
+  },
+  "keenetic": {
+    "rci_token": "",
+    "fake_ip_filter": true
+  },
+  "web": {
+    "port": 9099
+  },
+  "update": {
+    "core": "meta",
+    "gh_proxy": ""
+  },
+  "log": {
+    "clear_at_stop": true,
+    "scheduled_clear": true,
+    "scheduled_clear_cron": "*/5 * * * *",
+    "scheduled_clear_size_limit": 1,
+    "scheduled_clear_size_limit_unit": "MB"
+  }
+}

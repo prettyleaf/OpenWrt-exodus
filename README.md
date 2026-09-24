@@ -1,100 +1,134 @@
-![GitHub License](https://img.shields.io/github/license/prettyleaf/openwrt-exodus?style=for-the-badge&logo=github) ![GitHub Tag](https://img.shields.io/github/v/release/prettyleaf/openwrt-exodus?style=for-the-badge&logo=github) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/prettyleaf/openwrt-exodus/total?style=for-the-badge&logo=github)
+![GitHub License](https://img.shields.io/github/license/prettyleaf/openwrt-exodus?style=for-the-badge&logo=github)
 
-English | [中文](README.zh.md)
-[Wiki](https://github.com/prettyleaf/OpenWrt-exodus/wiki)
+Русский | [English](README.en.md)
 
-# Exodus
+# Exodus для Keenetic
 
-Transparent Proxy with Mihomo on OpenWrt. Fork of [OpenWrt-nikki](https://github.com/nikkinikki-org/OpenWrt-nikki).
+Прозрачный прокси на [Mihomo](https://github.com/MetaCubeX/mihomo) для роутеров Keenetic / Netcraze с Entware. Это ветка `keenetic` проекта [Exodus](https://github.com/prettyleaf/openwrt-exodus) — версия для OpenWrt живёт в ветке `main`.
 
-## Prerequisites
+Идеи взяты из [XKeen](https://github.com/jameszeroX/XKeen), но устроено иначе:
 
-- OpenWrt >= 24.10
-- Linux Kernel >= 5.13
-- firewall4
+- **Без политик доступа.** Какие устройства идут через прокси, выбирается в собственном веб-интерфейсе на отдельном порту (по мотивам страницы LuCI из OpenWrt-версии): режим «все, кроме выбранных» или «только выбранные», а выбирать можно устройства, **точки доступа Wi-Fi** (2,4 / 5 ГГц, гостевые) и **сегменты сети** целиком.
+- **DNS идёт в Mihomo, а не в DNS роутера** — независимо от интернет-фильтра (AdGuard DNS, Cloudflare, NextDNS и т. п.), DNS-профилей и серверов, указанных на странице «Интернет». Запросы проксируемых устройств перехватываются раньше перенаправлений NDM. `opkg dns-override` не нужен.
+- **DSCP-метки как в XKeen**: `61` — принудительно через выбранный прокси в обход правил профиля, `62` — мимо прокси, `63` — через прокси даже с исключённых устройств и на всех портах. Работает одинаково для Wi-Fi и проводных клиентов.
+- Родительский контроль роутера учитывается: заблокированные устройства не получают интернет через ядро.
 
-## Feature
+## Требования
 
-- Transparent Proxy (Redirect/TPROXY/TUN, IPv4 and/or IPv6), TCP Redirect + UDP TPROXY by default
-- Official Mihomo core: `mihomo-meta` packages the prebuilt binary from [MetaCubeX releases](https://github.com/MetaCubeX/mihomo/releases), verified by sha256
-- Choice of the core in the installer: stable Mihomo Meta, Mihomo Alpha or [Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core)
-- Installation through your own [gh-proxy](https://github.com/prettyleaf/gh-proxy) when GitHub is blocked by the provider
-- Per-device proxy selection: proxy everyone except the selected devices, or only the selected devices
-- HWID headers for subscriptions, enabled by default
-- Profile Mixin
-- Profile Editor
-- Scheduled Restart
+- KeeneticOS 4.x или новее. Компоненты роутера: **«Поддержка открытых пакетов» (OPKG)** и **«Модули ядра подсистемы Netfilter»**, для IPv6 — «Протокол IPv6».
+- Установленный [Entware](https://help.keenetic.com/hc/ru/articles/360021214160) (USB-накопитель или встроенная память) и ~70 МБ свободного места: ядро Mihomo ~40 МБ, yq ~15 МБ.
+- Архитектуры: `aarch64` (arm64), `mipsel` и `mips` (softfloat).
+- XKeen должен быть остановлен и убран из автозапуска: оба перехватывают трафик.
 
-## Install & Update
+## Установка и обновление
 
-The packages are `exodus`, `luci-app-exodus` and `luci-i18n-exodus-*`. If `nikki` / `luci-app-nikki` are installed, the installer replaces them and keeps the config, profiles and subscriptions (they are shared, the config stays at `/etc/config/nikki`).
+В SSH-консоли Entware:
 
 ```shell
-wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | ash
+opkg update && opkg install curl
+curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/keenetic/install.sh | sh
 ```
 
-The installer first checks that the router can download from GitHub, then asks which [core](https://github.com/prettyleaf/OpenWrt-exodus/wiki#core) to install. Settings for a run [can be](https://github.com/prettyleaf/OpenWrt-exodus/wiki#install--update) passed as environment variables before `ash`.
+Установщик ставит пакеты Entware (`curl jq ipset iptables ip-full lighttpd lighttpd-mod-cgi ca-bundle`), проверяет доступ к GitHub, спрашивает [ядро](#ядро) и пароль веб-интерфейса, скачивает Mihomo и yq. В конце он печатает адрес веб-интерфейса, по умолчанию `http://192.168.1.1:9099/`.
+
+Параметры передаются переменными окружения перед `sh`:
 
 ```shell
-wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | VERSION=v1.26.1 CORE=alpha ash
+curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/keenetic/install.sh | CORE=alpha PASSWORD=secret sh
 ```
 
-Installed packages can also be updated from LuCI: `Services → Exodus → Update`. It runs the same installer with the core and the gh-proxy chosen last time. On routers with little free flash enable the low flash space mode there, it removes the current core before installing the new one.
+| Переменная | Значение |
+| --- | --- |
+| `CORE` | `meta` (стабильный Mihomo), `alpha` (Mihomo Alpha) или `prizrak` ([Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core)) |
+| `GH_PROXY` | адрес [gh-proxy](https://github.com/prettyleaf/gh-proxy) с токеном, если провайдер блокирует GitHub, например `https://example.com/ghproxy/TOKEN` |
+| `PASSWORD` | пароль веб-интерфейса при первой установке, иначе спросит или сгенерирует |
+| `LOW_SPACE=1` | удалить текущее ядро до скачивания нового, если не хватает места |
+| `REF` | ветка или тег вместо `keenetic` |
 
-## Uninstall & Reset
+Ядро и gh-proxy запоминаются. Обновлять можно тем же скриптом или на странице **«Обновление»** веб-интерфейса. Настройки, профили и подписки сохраняются.
+
+### Ядро
+
+- **Mihomo Meta** — последний стабильный релиз MetaCubeX/mihomo.
+- **Mihomo Alpha** — сборка для разработки.
+- **Prizrak-Core** — форк Mihomo от legiz-ru.
+
+## Как пользоваться
+
+1. Откройте веб-интерфейс `http://<адрес роутера>:9099/` и войдите.
+2. **Профиль** → добавьте подписку (или загрузите файл профиля). Заголовки HWID для панелей с лимитом устройств (Remnawave) отправляются по умолчанию.
+3. **Статус** → включите приложение, выберите профиль, в разделе «Устройства» выберите режим и устройства / точки Wi-Fi / сегменты → **«Сохранить и применить»**.
+4. Остальное — на странице **«Расширенные»**. Не меняйте её без необходимости.
+
+Кнопка «Открыть панель» открывает Zashboard, ядро скачивает его при первом запуске.
+
+### Точки Wi-Fi, устройства и токен RCI
+
+Имена устройств, точки доступа Wi-Fi и родительский контроль читаются из RCI роутера (`127.0.0.1:79`). В **KeeneticOS 5.2 и новее** для этого нужен токен доступа: создайте его в веб-интерфейсе роутера и укажите на странице «Расширенные» → «Keenetic». Без него в списке будут только соседи роутера по MAC/IP.
+
+- **Сегмент** (Домашняя сеть, Гостевая сеть и т. д.) — все его устройства.
+- **Точка Wi-Fi** — устройства, подключённые к ней сейчас. Список синхронизируется с роутером каждые 30 секунд.
+- **Устройство** — по MAC, вместе с IPv4 и IPv6. IP известного устройства сохраняется как его MAC.
+
+DNS следует выбору: проксируемые устройства спрашивают Mihomo, остальные — роутер.
+
+### DSCP / QoS
+
+Метки ставят сами устройства. В Windows — через политики QoS: `gpedit.msc` → «QoS на основе политики» → «Создать новую политику» с нужным значением DSCP для приложения. На Windows вне домена сначала задайте в реестре:
+
+```
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\QoS]
+"Do not use NLA"="1"
+```
+
+и перезагрузитесь. Значения меняются на странице «Расширенные» → «DSCP / QoS». Для метки 61 выберите там прокси или группу из профиля: Exodus сам добавит в профиль отдельные входящие соединения с ним, настраивать listeners вручную, как в XKeen, не нужно.
+
+Трафик, который идёт мимо прокси (метка 62, исключённые устройства), сохраняет аппаратное ускорение и QoS роутера. У проксируемого трафика ограничения скорости и приоритеты IntelliQoS для конкретного устройства не действуют: наружу его отправляет сам роутер.
+
+### Режимы
+
+По умолчанию TCP идёт через Redirect, UDP — через TPROXY. TPROXY для TCP на Keenetic требует свободного порта 443 роутера: перенесите веб-интерфейс роутера на другой порт на странице «Пользователи и доступ». TUN не поддерживается, TUN из профиля отключается.
+
+## Как это работает
+
+1. Mixin настроек в профиль, обновление подписки.
+2. Запуск Mihomo. Процесс перезапускается при падении, его лимиты задаются на странице «Расширенные» → «Настройки ядра»: по умолчанию `GOMEMLIMIT` — половина ОЗУ, лимит файлов — 40000 на arm64 и 10000 на mips.
+3. Когда ядро слушает свои порты, включаются правила iptables и ipset, маршрут для TPROXY.
+4. NDM пересобирает iptables при многих событиях. Правила восстанавливает хук `/opt/etc/ndm/netfilter.d/50-exodus.sh`, а раз в 15 секунд их проверяет сторож (`watch`), он же выполняет запланированный перезапуск и очистку журналов.
+
+## Удаление
 
 ```shell
-wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/uninstall.sh | ash
+curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/keenetic/uninstall.sh | sh
 ```
 
-## How To Use
+С `KEEP_CONFIG=1` настройки, профили и подписки в `/opt/etc/exodus` сохраняются. Пакеты Entware не удаляются, ими могут пользоваться другие приложения.
 
-1. Open `Services → Exodus → Profile` in LuCI and add your subscription.
-2. On `Services → Exodus → App Config` choose the subscription, enable the app and choose which devices go through the proxy.
-3. Everything else is on the `Advanced` page. Do not change it unless you know what you are doing.
-
-When the service is running, `Open Dashboard` next to `Restart Service` on the main page opens the dashboard. The core downloads it on the first start ([Zashboard](https://github.com/Zephyruso/zashboard) by default, see `Advanced → External Control Config`).
-
-## How does it work
-
-1. Mixin and Update profile.
-2. Run mihomo.
-3. Set scheduled restart.
-4. Set ip rule/route
-5. Generate nftables and apply it.
-
-Note that the steps above may change base on config.
-
-## Compilation
+## Командная строка
 
 ```shell
-# add feed
-echo "src-git exodus https://github.com/prettyleaf/openwrt-exodus.git;main" >> "feeds.conf.default"
-# update & install feeds
-./scripts/feeds update -a
-./scripts/feeds install -a
-# make package
-make package/luci-app-exodus/compile
+exodus start | stop | restart | status
+exodus update_subscription <id>
+exodus hard_update     # удалить скачанные провайдеры, обновить подписку и перезапустить
+exodus debug           # отчёт для issue, адреса серверов и пароли скрыты
+exodus web restart     # перезапустить веб-интерфейс
+exodus passwd          # сменить пароль веб-интерфейса
 ```
 
-The package files will be found under `bin/packages/your_architecture/exodus`.
+## Файлы
 
-## Dependencies
+| Путь | Назначение |
+| --- | --- |
+| `/opt/etc/exodus/config.json` | настройки |
+| `/opt/etc/exodus/mixin.yaml` | файл mixin |
+| `/opt/etc/exodus/profiles/`, `subscriptions/` | профили и подписки |
+| `/opt/etc/exodus/run/` | рабочий каталог ядра: профиль запуска, провайдеры, панель |
+| `/opt/share/exodus/` | скрипты и веб-интерфейс |
+| `/opt/libexec/exodus/` | `mihomo` и `yq` |
+| `/tmp/exodus/log/` | журналы приложения, ядра, обновления |
 
-- ca-bundle
-- curl
-- yq
-- firewall4
-- ip-full
-- kmod-inet-diag
-- kmod-nft-socket
-- kmod-nft-tproxy
-- kmod-tun
-- kmod-dummy
+## Благодарности
 
-## Special Thanks
-
-- [OpenWrt-nikki](https://github.com/nikkinikki-org/OpenWrt-nikki) and its [contributors](https://github.com/nikkinikki-org/OpenWrt-nikki/graphs/contributors)
-- [Prizrak-core](https://github.com/legiz-ru/Prizrak-Core/releases) and its [contributors](https://github.com/legiz-ru/Prizrak-Core/graphs/contributors)
-- [@ApoisL](https://github.com/apoiston)
-- [@xishang0128](https://github.com/xishang0128)
+- [OpenWrt-nikki](https://github.com/nikkinikki-org/OpenWrt-nikki) и его [участники](https://github.com/nikkinikki-org/OpenWrt-nikki/graphs/contributors)
+- [XKeen](https://github.com/jameszeroX/XKeen) — за исследование особенностей Keenetic
+- [Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core) и его [участники](https://github.com/legiz-ru/Prizrak-Core/graphs/contributors)

@@ -1,0 +1,28 @@
+#!/bin/sh
+
+# Exodus: transparent proxy with mihomo, started by rc.unslung of entware
+
+EXODUS=/opt/share/exodus/exodus
+
+[ -x "$EXODUS" ] || exit 0
+
+case "$1" in
+	start)
+		"$EXODUS" web start
+		# the start delay and the subscription download must not hold the other services
+		"$EXODUS" boot < /dev/null > /dev/null 2>&1 &
+		;;
+	stop)
+		"$EXODUS" stop
+		"$EXODUS" web stop
+		;;
+	restart)
+		"$EXODUS" restart
+		;;
+	status)
+		"$EXODUS" status
+		;;
+	*)
+		exec "$EXODUS" "$@"
+		;;
+esac
