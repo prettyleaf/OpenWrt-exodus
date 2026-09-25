@@ -13,7 +13,7 @@ usage() {
 		Usage: exodus <command>
 
 		  start | stop | restart | status   control the proxy
-		  update_subscription <id>          download a subscription
+		  update_subscription <id>          download a subscription, the running core gets it when it is in use
 		  hard_update                       remove downloaded providers, update the subscription and restart
 		  apply                             apply the rules again
 		  sync                              sync wi-fi clients and parental control with the router
@@ -306,6 +306,10 @@ watch() {
 		[ "$minute" = "$last" ] && continue
 		last="$minute"
 		clear_logs
+		# the subscription in use is downloaded again when its interval passes, in the background: it may take minutes
+		if [ "${c_config_profile%%:*}" = "subscription" ] && subscription_due "${c_config_profile#*:}"; then
+			daemonize "$EXODUS" auto_update
+		fi
 		if [ "$c_config_scheduled_restart" = 1 ] && [ -n "$c_config_scheduled_restart_cron" ] && cron_match "$c_config_scheduled_restart_cron"; then
 			log "App" "Scheduled restart."
 			daemonize "$EXODUS" restart
@@ -359,11 +363,21 @@ hard_update() {
 	cfg_load
 	log "App" "Hard update."
 	remove_provider_files
-	# a subscription preferring local file is not downloaded on start
-	if [ "${c_config_profile%%:*}" = "subscription" ] && [ "$(sub_get "${c_config_profile#*:}" prefer)" = "local" ]; then
+	# the start downloads a subscription only when its interval passed, a hard update downloads it anyway
+	if [ "${c_config_profile%%:*}" = "subscription" ]; then
 		update_subscription "${c_config_profile#*:}"
 	fi
 	start
+}
+
+# the subscription in use when its interval passed, started by the watch loop
+auto_update() {
+	prepare_files
+	cfg_load
+	[ -f "$STARTED_FLAG_PATH" ] || return 0
+	[ "${c_config_profile%%:*}" = "subscription" ] || return 0
+	subscription_due "${c_config_profile#*:}" || return 0
+	refresh_subscription "${c_config_profile#*:}"
 }
 
 web() {
@@ -539,7 +553,8 @@ case "$cmd" in
 	hook) hook "$@" ;;
 	sync) sync_sets ;;
 	apply) apply ;;
-	update_subscription) prepare_files; update_subscription "$1" ;;
+	update_subscription) prepare_files; cfg_load; refresh_subscription "$1" ;;
+	auto_update) auto_update ;;
 	hard_update) hard_update ;;
 	clear_logs) prepare_files; cfg_load; clear_logs ;;
 	debug) debug ;;

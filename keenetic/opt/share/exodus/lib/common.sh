@@ -223,7 +223,7 @@ keenetic_version() {
 			return
 		fi
 		mkdir -p "$RUN_TMP"
-		echo "$version" > "$KEENETIC_VERSION_PATH"
+		printf '%s\n' "$version" > "$KEENETIC_VERSION_PATH"
 	fi
 	cat "$KEENETIC_VERSION_PATH"
 }
@@ -237,6 +237,17 @@ format_filesize() {
 		while (size >= 1024 && i < 6) { size /= 1024; i++ }
 		printf "%g %s\n", size, units[i]
 	}'
+}
+
+# hash of the code in a source tree (an unpacked archive of the branch), the update check compares it with the installed one:
+# a commit that changes only the readme is not an update; install.sh has the same function
+code_hash() {
+	(cd "$1" && find keenetic install.sh -type f 2> /dev/null | LC_ALL=C sort | xargs sha256sum 2> /dev/null) | sha256sum | cut -d ' ' -f 1
+}
+
+# github writes the commit into the pax header of an archive of a branch; install.sh has the same function
+archive_commit() {
+	gzip -dc "$1" 2> /dev/null | head -c 1024 | tr -d '\000' | sed -n 's/.*comment=\([0-9a-f]\{40\}\).*/\1/p' | head -n 1
 }
 
 # random lowercase hex, $1 is the number of bytes

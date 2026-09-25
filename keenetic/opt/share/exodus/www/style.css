@@ -268,7 +268,7 @@ button, input, select, textarea {
 }
 
 main.container {
-    padding-top: 28px;
+    padding-top: 20px;
     padding-bottom: 96px;
 }
 
@@ -278,7 +278,7 @@ main.container {
     align-items: flex-end;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 }
 
 .page-header h1 {
@@ -310,10 +310,41 @@ main.container {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.grid-4 {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* a field next to a switch: both sit on the same bottom line */
+.align-end {
+    align-items: end;
+}
+
+@media (max-width: 1099px) {
+    .grid-3, .grid-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 @media (max-width: 767px) {
-    .grid-2, .grid-3 {
+    .grid-2, .grid-3, .grid-4 {
         grid-template-columns: minmax(0, 1fr);
     }
+}
+
+/* a switch in a grid takes the height of its neighbours */
+.grid-3 > .field-switch {
+    height: 100%;
+}
+
+/* the state of the service and its buttons, next to what it runs */
+.service-grid {
+    gap: 16px 32px;
+}
+
+.service-grid > .stack {
+    align-content: start;
 }
 
 .span-2 {
@@ -348,8 +379,8 @@ main.container {
 .card {
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    padding: 24px 0;
+    gap: 16px;
+    padding: 20px 0;
     border: 1px solid var(--border);
     border-radius: calc(var(--radius) + 4px);
     background: var(--card);
@@ -360,9 +391,10 @@ main.container {
 .card-header {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
+    align-items: center;
     gap: 6px 12px;
-    padding: 0 24px;
+    padding: 0 20px;
+    min-height: 24px;
 }
 
 .card-title {
@@ -370,7 +402,8 @@ main.container {
     line-height: 1.2;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
+    min-height: 24px;
 }
 
 .card-description {
@@ -378,23 +411,27 @@ main.container {
     color: var(--muted-foreground);
 }
 
+.card-header:has(.card-description) .card-action {
+    align-self: start;
+}
+
 .card-action {
     grid-column: 2;
     grid-row: 1 / span 2;
-    align-self: start;
+    align-self: center;
     display: flex;
     gap: 8px;
 }
 
 .card-content {
-    padding: 0 24px;
+    padding: 0 20px;
     display: grid;
-    gap: 20px;
+    gap: 16px;
     min-width: 0;
 }
 
 .card-footer {
-    padding: 0 24px;
+    padding: 0 20px;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -625,6 +662,11 @@ main.container {
     background-color: var(--muted);
 }
 
+.input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .select {
     appearance: none;
     -webkit-appearance: none;
@@ -718,6 +760,35 @@ main.container {
     font-weight: 500;
 }
 
+.info-text code {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--muted);
+    color: var(--foreground);
+}
+
+.info-text a {
+    color: var(--foreground);
+    text-underline-offset: 3px;
+}
+
+.rule-types {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding-left: 18px;
+}
+
+.table.rules .input {
+    min-width: 140px;
+}
+
+.table.rules .actions .badge {
+    cursor: help;
+}
+
 .label {
     font-weight: 500;
     line-height: 1.2;
@@ -745,7 +816,7 @@ main.container {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
 }
@@ -1191,6 +1262,53 @@ main.container {
 .empty svg {
     width: 20px;
     height: 20px;
+}
+
+/* ---------- provider ---------- */
+
+/* the announce of the provider: logo and title in the middle, the text under them */
+.provider .card-content {
+    justify-items: center;
+    text-align: center;
+    gap: 12px;
+}
+
+.provider-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.provider-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.provider-title {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+}
+
+.provider-announce {
+    max-width: 760px;
+    color: var(--muted-foreground);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.sub-logo {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    object-fit: cover;
+    flex-shrink: 0;
 }
 
 /* ---------- device picker ---------- */

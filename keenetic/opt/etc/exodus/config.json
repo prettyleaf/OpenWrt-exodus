@@ -15,7 +15,7 @@
       "info_url": "",
       "user_agent": "Mihomo/Exodus v{version}",
       "send_hwid": true,
-      "prefer": "remote"
+      "update_interval": null
     }
   ],
   "proxy": {
@@ -39,7 +39,7 @@
   "mixin": {
     "log_level": null,
     "outbound_interface": null,
-    "mixed_port": 7890,
+    "mixed_port": null,
     "authentication": true,
     "username": "exodus",
     "password": "",

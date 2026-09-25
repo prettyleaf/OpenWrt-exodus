@@ -4,7 +4,7 @@
 
 # Exodus для Keenetic
 
-Прозрачный прокси на [Mihomo](https://github.com/MetaCubeX/mihomo) для роутеров Keenetic / Netcraze с Entware. Это ветка `keenetic` проекта [Exodus](https://github.com/prettyleaf/openwrt-exodus), версия для OpenWrt живёт в ветке `main`.
+Прокси на [Mihomo](https://github.com/MetaCubeX/mihomo) для роутеров Keenetic / Netcraze с Entware. Это ветка `keenetic` проекта [Exodus](https://github.com/prettyleaf/openwrt-exodus), версия для OpenWrt живёт в ветке `main`.
 
 Идеи взяты из [XKeen](https://github.com/jameszeroX/XKeen).
 

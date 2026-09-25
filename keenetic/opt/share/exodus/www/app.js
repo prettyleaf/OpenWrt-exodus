@@ -69,6 +69,7 @@ const ICONS = {
     'cpu': '<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>',
     'router': '<rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6.01 18H6"/><path d="M10.01 18H10"/><path d="M15 10v4"/><path d="M17.84 7.17a4 4 0 0 0-5.66 0"/><path d="M20.66 4.34a8 8 0 0 0-11.31 0"/>',
     'github': '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>',
+    'message-circle': '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
     'arrow-up-circle': '<circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/>',
     'bug': '<path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/>'
 };
@@ -242,7 +243,8 @@ const state = {
     status: null,
     hosts: null,
     interfaces: [],
-    proxies: [],
+    groups: [],
+    nodes: [],
     hwid: {},
     dirs: {},
     files: {},
@@ -290,6 +292,17 @@ function updateDirty() {
     const dirty = isDirty();
     document.getElementById('savebar').hidden = !dirty;
     document.body.classList.toggle('dirty', dirty);
+}
+
+// subscriptions are updated in the background: their state and names are read again, a draft with changes stays
+async function reloadStates() {
+    const data = await api('load');
+    state.subscriptionStates = data.subscription_states || {};
+    state.profiles = data.profiles || [];
+    if (!isDirty()) {
+        state.config = data.config;
+        state.draft = clone(data.config);
+    }
 }
 
 async function loadAll() {
@@ -599,7 +612,7 @@ function checkbox(r) {
     return el;
 }
 
-// options: [[value, label]]; opts.optional adds an empty choice (null keeps the value of the profile)
+// options: [[value, label]] or {group, options}; opts.optional adds an empty choice (null keeps the value of the profile)
 function select(r, options, opts) {
     opts = opts || {};
     const el = E('select', { class: 'select' });
@@ -610,10 +623,20 @@ function select(r, options, opts) {
     const toValue = (v) => (v === '' ? (opts.empty !== undefined ? opts.empty : null) : (opts.number ? Number(v) : v));
     const current = fromValue(r.get());
     let found = current === '' && opts.optional;
-    for (const [value, label] of options) {
-        el.appendChild(E('option', { value: value }, label));
+    const add = (parent, value, label) => {
+        parent.appendChild(E('option', { value: value }, label));
         if (value === current) {
             found = true;
+        }
+    };
+    // an entry is [value, label] or {group, options} for an optgroup
+    for (const entry of options) {
+        if (Array.isArray(entry)) {
+            add(el, entry[0], entry[1]);
+        } else if (entry.options.length > 0) {
+            const group = E('optgroup', { label: entry.group });
+            entry.options.forEach(([value, label]) => add(group, value, label));
+            el.appendChild(group);
         }
     }
     // a value set in the file is shown even when it is not one of the choices
@@ -1101,52 +1124,82 @@ function devicePicker() {
 
 // ---------- pages ----------
 
+// a logo of the provider, it disappears when it does not load
+function providerLogo(src, cls) {
+    if (!src) {
+        return null;
+    }
+    const img = E('img', { class: cls, src: src, alt: '', referrerpolicy: 'no-referrer', loading: 'lazy' });
+    img.addEventListener('error', () => img.remove());
+    return img;
+}
+
+// the announce of the provider of the running subscription: logo and title, the text, a link to the support
+function providerCard() {
+    const profile = state.config.config.profile || '';
+    if (!profile.startsWith('subscription:')) {
+        return null;
+    }
+    const id = profile.substring('subscription:'.length);
+    const st = state.subscriptionStates[id] || {};
+    if (!st.announce) {
+        return null;
+    }
+    const sub = (state.config.subscriptions || []).find((s) => s.id === id) || {};
+    return E('section', { class: 'card provider' }, E('div', { class: 'card-content' }, [
+        E('div', { class: 'provider-head' }, [providerLogo(st.logo, 'provider-logo'), E('div', { class: 'provider-title' }, st.title || sub.name || id)]),
+        E('p', { class: 'provider-announce' }, st.announce),
+        st.support_url ? E('div', {}, E('a', { class: 'btn btn-outline btn-sm', href: st.support_url, target: '_blank', rel: 'noopener noreferrer' }, [icon('message-circle'), _('Support')])) : null
+    ]));
+}
+
 function pageStatus() {
     const d = state.draft;
     const status = () => state.status || {};
 
+    // the state of the service on the left, what it runs on the right
     const service = card({
         title: _('Service'),
         action: live(statusBadge, () => [status().running, !!state.status]),
         content: [
             state.config.config.enabled !== true ? alertBox('warning', _('The service is disabled'), _('It does not start until Enable is on. Turn it on below and choose Save & Apply.')) : null,
-            live(() => {
-                const s = status();
-                const core = s.core_version ? `${s.core_version} · ${CORE_TITLES[s.core_type] || s.core_type || 'Mihomo'}` : '—';
-                let proxy;
-                if (!state.config.proxy.enabled) {
-                    proxy = badge(_('Off'), 'outline');
-                } else if (s.running && s.hijack) {
-                    proxy = badge(_('Active'), 'success');
-                } else {
-                    proxy = badge(_('Inactive'), 'secondary');
-                }
-                return infoList([
-                    [_('Exodus'), E('span', { class: 'mono' }, s.app_version || '—')],
-                    [_('Core'), E('span', { class: 'mono' }, core)],
-                    [_('Profile'), profileTitle(state.config.config.profile) || '—'],
-                    [_('Transparent proxy'), proxy]
-                ]);
-            }, () => [status().app_version, status().core_version, status().core_type, status().running, status().hijack])
-        ],
-        footer: live(() => (status().running
-            ? [
-                btn(_('Restart'), { icon: 'rotate-cw', onClick: () => serviceOp('restart') }),
-                btn(_('Stop'), { variant: 'outline', icon: 'square', onClick: () => serviceOp('stop') }),
-                btn(_('Dashboard'), { variant: 'outline', icon: 'external-link', onClick: openDashboard })
-            ]
-            : [btn(_('Start'), { icon: 'play', disabled: state.config.config.enabled !== true, onClick: () => serviceOp('start') })]
-        ), () => [status().running])
-    });
-
-    const startup = card({
-        title: _('Startup'),
-        content: [
-            switchField(_('Enable'), _('Run the service and start it when the router boots.'), ref('config.enabled')),
-            field(_('Profile'), select(ref('config.profile'), profileChoices(), { optional: true, placeholder: _('Not selected') }), null, null, [
-                _('A subscription or an uploaded file, they are managed on the Profiles page.'),
-                _('On every start the profile is merged with the settings of Exodus and the mixin file, a subscription is downloaded again unless its update is manual.'),
-                _('Save & Apply restarts the service with the chosen profile.')
+            E('div', { class: 'grid-2 service-grid' }, [
+                E('div', { class: 'stack' }, [
+                    live(() => {
+                        const s = status();
+                        const core = s.core_version ? `${s.core_version} · ${CORE_TITLES[s.core_type] || s.core_type || 'Mihomo'}` : '—';
+                        let proxy;
+                        if (!state.config.proxy.enabled) {
+                            proxy = badge(_('Off'), 'outline');
+                        } else if (s.running && s.hijack) {
+                            proxy = badge(_('Active'), 'success');
+                        } else {
+                            proxy = badge(_('Inactive'), 'secondary');
+                        }
+                        return infoList([
+                            [_('Exodus'), E('span', { class: 'mono' }, s.app_version || '—')],
+                            [_('Core'), E('span', { class: 'mono' }, core)],
+                            [_('Profile'), profileTitle(state.config.config.profile) || '—'],
+                            [_('Proxy'), proxy]
+                        ]);
+                    }, () => [status().app_version, status().core_version, status().core_type, status().running, status().hijack]),
+                    E('div', { class: 'row' }, live(() => (status().running
+                        ? [
+                            btn(_('Restart'), { icon: 'rotate-cw', onClick: () => serviceOp('restart') }),
+                            btn(_('Stop'), { variant: 'outline', icon: 'square', onClick: () => serviceOp('stop') }),
+                            btn(_('Dashboard'), { variant: 'outline', icon: 'external-link', onClick: openDashboard })
+                        ]
+                        : [btn(_('Start'), { icon: 'play', disabled: state.config.config.enabled !== true, onClick: () => serviceOp('start') })]
+                    ), () => [status().running]))
+                ]),
+                E('div', { class: 'stack' }, [
+                    switchField(_('Enable'), _('Run the service and start it when the router boots.'), ref('config.enabled')),
+                    field(_('Profile'), select(ref('config.profile'), profileChoices(), { optional: true, placeholder: _('Not selected') }), null, null, [
+                        _('A subscription or an uploaded file, they are managed on the Profiles page.'),
+                        _('On every start the profile is merged with the settings of Exodus and the mixin file, a subscription is downloaded again unless its update is manual.'),
+                        _('Save & Apply restarts the service with the chosen profile.')
+                    ])
+                ])
             ])
         ]
     });
@@ -1155,7 +1208,7 @@ function pageStatus() {
     const devices = card({
         title: _('Devices'),
         content: [
-            d.proxy.enabled !== true ? alertBox('warning', null, _('The transparent proxy is turned off in Settings, the selection has no effect.')) : null,
+            d.proxy.enabled !== true ? alertBox('warning', null, _('The proxy is turned off in Settings, the selection has no effect.')) : null,
             field(_('Mode'), segmented(ref('proxy.access_mode'), [['exclude', _('All except selected')], ['include', _('Only selected')]]), null, null, [
                 modeInfo(_('All except selected'), _('All devices go through the proxy, the selected ones go directly.')),
                 modeInfo(_('Only selected'), _('Only the selected devices go through the proxy, the others go directly.')),
@@ -1167,7 +1220,7 @@ function pageStatus() {
 
     return [
         pageHeader(_('Status')),
-        E('div', { class: 'stack' }, [E('div', { class: 'grid-2' }, [service, startup]), devices])
+        E('div', { class: 'stack' }, [providerCard(), service, devices])
     ];
 }
 
@@ -1175,17 +1228,30 @@ function newId() {
     return `sub_${Math.random().toString(16).slice(2, 10)}`;
 }
 
+// how often a subscription is downloaded: set by hand, from the provider (profile-update-interval) or every hour
+function intervalHours(sub) {
+    const st = state.subscriptionStates[sub.id] || {};
+    return sub.update_interval != null ? sub.update_interval : (st.interval || 1);
+}
+
+function intervalText(sub) {
+    const hours = intervalHours(sub);
+    return hours === 0 ? _('by hand') : _('every %s h', hours);
+}
+
 function subscriptionDialog(subscription, onSave) {
     const draft = clone(subscription);
+    const st = state.subscriptionStates[subscription.id] || {};
     const saved = dependents;
     dependents = [];
     const content = [
-        field(_('Name'), input(objRef(draft, 'name'), { empty: '' })),
+        field(_('Name'), input(objRef(draft, 'name'), { empty: '' }), _('Replaced with the title of the provider when it sends one.')),
         field(_('URL'), input(objRef(draft, 'url'), { empty: '', placeholder: 'https://' })),
         field(_('Info URL'), input(objRef(draft, 'info_url'), { empty: '', placeholder: _('Optional') }), _('Only when traffic and expiry come from another address.')),
         field(_('User agent'), input(objRef(draft, 'user_agent'), { empty: '', values: ['Mihomo/Exodus v{version}', 'clash.meta', 'mihomo', 'clash'] }), _('<code>{version}</code> is replaced with the version of Exodus.')),
-        field(_('Update'), select(objRef(draft, 'prefer'), [['remote', _('On every start')], ['local', _('Manually')]]),
-            _('Manually: the downloaded file is used until you press Update.')),
+        field(_('Update interval, hours'), input(objRef(draft, 'update_interval'), { number: true, type: 'uinteger',
+            placeholder: st.interval ? _('Automatically: every %s h, as the provider says', st.interval) : _('Automatically: as the provider says, otherwise every hour') }),
+            _('Empty: the interval of the provider (profile-update-interval), otherwise every hour. 0: only by the Update button. The running core gets a changed subscription without a restart.')),
         switchField(_('Send HWID'), _('Needed by panels with a device limit, the headers are shown in Settings → Service.'), objRef(draft, 'send_hwid'))
     ];
     dependents = saved;
@@ -1229,12 +1295,15 @@ function pageProfiles() {
             }
             tbody.appendChild(E('tr', {}, [
                 E('td', {}, [
-                    E('div', { class: 'cell-title' }, [sub.name, active === `subscription:${sub.id}` ? badge(_('Active'), 'default') : null]),
+                    E('div', { class: 'cell-title' }, [providerLogo(st.logo, 'sub-logo'), sub.name, active === `subscription:${sub.id}` ? badge(_('Active'), 'default') : null]),
                     host ? E('div', { class: 'description mono' }, host) : null
                 ]),
                 E('td', { class: 'nowrap' }, st.used || st.total ? `${st.used || '—'} / ${st.total || '∞'}` : '—'),
                 E('td', { class: 'nowrap' }, st.expire || '—'),
-                E('td', { class: 'nowrap' }, st.success === false ? badge(_('Failed'), 'destructive') : (st.update || '—')),
+                E('td', { class: 'nowrap' }, [
+                    st.success === false ? badge(_('Failed'), 'destructive') : (st.update || '—'),
+                    E('div', { class: 'description' }, intervalText(sub))
+                ]),
                 E('td', { class: 'actions' }, E('div', { class: 'row' }, [
                     btn(null, { variant: 'ghost', size: 'sm', icon: 'refresh-cw', title: _('Update'), onClick: async () => {
                         if (JSON.stringify((state.config.subscriptions || []).find((s) => s.id === sub.id)) !== JSON.stringify(sub)) {
@@ -1242,13 +1311,23 @@ function pageProfiles() {
                             return;
                         }
                         await run(api('subscription_update', { id: sub.id }));
-                        const before = st.update || st.update_failed;
+                        const before = st.checked || 0;
                         for (let i = 0; i < 40; i++) {
                             await new Promise((resolve) => setTimeout(resolve, 3000));
                             const data = await api('load');
                             const next = (data.subscription_states || {})[sub.id] || {};
-                            if ((next.update || next.update_failed) !== before) {
+                            if ((next.checked || 0) !== before) {
                                 state.subscriptionStates = data.subscription_states || {};
+                                // the title of the provider became the name, the saved config and the draft take it alike
+                                const named = (data.config.subscriptions || []).find((s) => s.id === sub.id);
+                                if (named) {
+                                    [state.config.subscriptions, state.draft.subscriptions].forEach((list) => {
+                                        const item = (list || []).find((s) => s.id === sub.id);
+                                        if (item) {
+                                            item.name = named.name;
+                                        }
+                                    });
+                                }
                                 renderSubscriptions();
                                 toast(next.success ? _('Subscription %s is updated.', sub.name) : _('Subscription update failed, see the app log.'), next.success ? 'success' : 'error');
                                 return;
@@ -1281,7 +1360,7 @@ function pageProfiles() {
     const subscriptionsCard = card({
         title: _('Subscriptions'),
         action: btn(_('Add'), { variant: 'outline', size: 'sm', icon: 'plus', onClick: () => subscriptionDialog(
-            { id: newId(), name: '', url: '', info_url: '', user_agent: 'Mihomo/Exodus v{version}', send_hwid: true, prefer: 'remote' },
+            { id: newId(), name: '', url: '', info_url: '', user_agent: 'Mihomo/Exodus v{version}', send_hwid: true, update_interval: null },
             (created) => {
                 state.draft.subscriptions = (state.draft.subscriptions || []).concat([created]);
                 renderSubscriptions();
@@ -1355,7 +1434,7 @@ function pageProfiles() {
     });
 
     return [
-        pageHeader(_('Profiles'), _('Configs of the core: subscriptions of providers and your own files.')),
+        pageHeader(_('Profiles')),
         E('div', { class: 'stack' }, [subscriptionsCard, filesCard, hardUpdateCard])
     ];
 }
@@ -1366,21 +1445,93 @@ const DASHBOARDS = [
     ['https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip', 'YACD']
 ];
 
+// rule types of mihomo that make sense on a router: [type, description, example value]
 const RULE_TYPES = [
-    ['DOMAIN-SUFFIX', _('Domain and subdomains')], ['DOMAIN', _('Domain')], ['DOMAIN-KEYWORD', _('Domain keyword')],
-    ['GEOSITE', _('Geosite category')], ['IP-CIDR', _('Destination network')], ['GEOIP', _('Geoip country')],
-    ['SRC-IP-CIDR', _('Source network')], ['DST-PORT', _('Destination port')], ['RULE-SET', _('Rule provider')], ['MATCH', _('Everything else')]
+    ['DOMAIN', _('Domain'), 'example.com'],
+    ['DOMAIN-SUFFIX', _('Domain and subdomains'), 'example.com'],
+    ['DOMAIN-KEYWORD', _('Domain keyword'), 'google'],
+    ['DOMAIN-WILDCARD', _('Domain by a pattern with * and ?'), '*.example.com'],
+    ['DOMAIN-REGEX', _('Domain by a regular expression'), '^ads?\\.'],
+    ['GEOSITE', _('Geosite category'), 'youtube'],
+    ['IP-CIDR', _('Destination network'), '1.1.1.0/24'],
+    ['IP-CIDR6', _('Destination IPv6 network'), '2606:4700::/32'],
+    ['IP-ASN', _('Destination autonomous system'), '13335'],
+    ['GEOIP', _('Geoip country'), 'ru'],
+    ['SRC-IP-CIDR', _('Source network, a device of the local network'), '192.168.1.10/32'],
+    ['DST-PORT', _('Destination port'), '443'],
+    ['SRC-PORT', _('Source port'), '50000-60000'],
+    ['NETWORK', _('Network: tcp or udp'), 'udp'],
+    ['RULE-SET', _('Rule provider of the profile'), 'my-rules'],
+    ['MATCH', _('Everything else'), '']
 ];
+
+const BUILTIN_TARGETS = ['DIRECT', 'REJECT', 'REJECT-DROP'];
+
+function rulesInfo() {
+    return [
+        _('Rules of Exodus are checked from top to bottom before the rules of the profile, the first matching rule wins.'),
+        E('p', {}, [E('strong', {}, _('Order')), E('br'), _('Put REJECT rules first, then DIRECT, then the proxy groups: a block or a direct exception is not caught by a wider proxy rule.')]),
+        E('p', {}, [E('strong', {}, _('Target')), E('br'), _('DIRECT goes directly, REJECT blocks (REJECT-DROP silently), or a group of the profile. Hidden groups are not offered.')]),
+        E('p', {}, E('strong', {}, _('Types'))),
+        E('ul', { class: 'rule-types' }, RULE_TYPES.map(([type, title, example]) => E('li', {}, [
+            E('code', {}, type), ` — ${title}`, example ? [': ', E('code', {}, example)] : null
+        ]))),
+        _('<strong>No resolve</strong> is for rules by IP (IP-CIDR, IP-ASN, GEOIP): the domain is not resolved to check the rule, it matches only connections to an IP address.'),
+        E('p', {}, E('a', { href: 'https://wiki.metacubex.one/en/config/rules/', target: '_blank', rel: 'noopener' }, _('Rules in the Mihomo documentation')))
+    ];
+}
+
+// a rule is complete with a type, a target and a value (MATCH has no value); an incomplete one is skipped on start
+function ruleComplete(rule) {
+    return !!rule.type && !!rule.node && (rule.type === 'MATCH' || !!rule.matcher);
+}
 
 function rulesEditor() {
     const r = ref('mixin.rules');
     const container = E('div', { class: 'stack' });
     const rows = () => (Array.isArray(r.get()) ? r.get() : []);
-    const targets = ['DIRECT', 'REJECT', 'REJECT-DROP', 'GLOBAL'].concat(state.proxies || []);
+    const targets = BUILTIN_TARGETS.concat(state.groups || []);
+    const types = RULE_TYPES.map(([type, title]) => [type, title]);
     const update = (next) => {
         r.set(next);
         render();
         changed();
+    };
+    const row = (rule, index, list) => {
+        const matcher = input(objRef(rule, 'matcher'), { empty: '' });
+        const incomplete = badge(_('Incomplete'), 'warning');
+        incomplete.title = _('Skipped until the type, the value and the target are filled.');
+        // the example follows the type, a finished rule loses the warning
+        const refresh = () => {
+            const known = RULE_TYPES.find((t) => t[0] === rule.type);
+            matcher.placeholder = known ? known[2] : '';
+            matcher.disabled = rule.type === 'MATCH';
+            incomplete.hidden = ruleComplete(rule);
+        };
+        const tr = E('tr', {}, [
+            E('td', {}, switchControl({ get: () => rule.enabled !== false, set: (v) => { rule.enabled = v; } })),
+            E('td', {}, input(objRef(rule, 'type'), { empty: '', values: types, placeholder: _('Choose') })),
+            E('td', {}, matcher),
+            E('td', {}, input(objRef(rule, 'node'), { empty: '', values: targets, placeholder: _('Choose') })),
+            E('td', {}, checkbox(objRef(rule, 'no_resolve'))),
+            E('td', { class: 'actions' }, E('div', { class: 'row' }, [
+                incomplete,
+                btn(null, { variant: 'ghost', size: 'sm', icon: 'chevron-up', title: _('Up'), disabled: index === 0, onClick: () => {
+                    const next = list.slice();
+                    next.splice(index - 1, 0, next.splice(index, 1)[0]);
+                    update(next);
+                } }),
+                btn(null, { variant: 'ghost', size: 'sm', icon: 'chevron-down', title: _('Down'), disabled: index === list.length - 1, onClick: () => {
+                    const next = list.slice();
+                    next.splice(index + 1, 0, next.splice(index, 1)[0]);
+                    update(next);
+                } }),
+                btn(null, { variant: 'ghost', size: 'sm', icon: 'trash', title: _('Delete'), onClick: () => update(list.filter((_x, i) => i !== index)) })
+            ]))
+        ]);
+        tr.addEventListener('input', refresh);
+        refresh();
+        return tr;
     };
     const render = () => {
         clear(container);
@@ -1388,32 +1539,14 @@ function rulesEditor() {
         if (list.length === 0) {
             container.appendChild(empty('list', _('No rules yet.')));
         } else {
-            container.appendChild(E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
+            container.appendChild(E('div', { class: 'table-wrap' }, E('table', { class: 'table rules' }, [
                 E('thead', {}, E('tr', {}, [E('th', {}, _('On')), E('th', {}, _('Type')), E('th', {}, _('Value')), E('th', {}, _('Target')), E('th', { title: 'no-resolve' }, _('No resolve')), E('th')])),
-                E('tbody', {}, list.map((rule, index) => E('tr', {}, [
-                    E('td', {}, switchControl({ get: () => rule.enabled !== false, set: (v) => { rule.enabled = v; } })),
-                    E('td', {}, input(objRef(rule, 'type'), { empty: '', values: RULE_TYPES })),
-                    E('td', {}, input(objRef(rule, 'matcher'), { empty: '', placeholder: rule.type === 'MATCH' ? '' : 'example.com' })),
-                    E('td', {}, input(objRef(rule, 'node'), { empty: '', values: targets })),
-                    E('td', {}, checkbox(objRef(rule, 'no_resolve'))),
-                    E('td', { class: 'actions' }, E('div', { class: 'row' }, [
-                        btn(null, { variant: 'ghost', size: 'sm', icon: 'chevron-up', title: _('Up'), disabled: index === 0, onClick: () => {
-                            const next = list.slice();
-                            next.splice(index - 1, 0, next.splice(index, 1)[0]);
-                            update(next);
-                        } }),
-                        btn(null, { variant: 'ghost', size: 'sm', icon: 'chevron-down', title: _('Down'), disabled: index === list.length - 1, onClick: () => {
-                            const next = list.slice();
-                            next.splice(index + 1, 0, next.splice(index, 1)[0]);
-                            update(next);
-                        } }),
-                        btn(null, { variant: 'ghost', size: 'sm', icon: 'trash', title: _('Delete'), onClick: () => update(list.filter((_x, i) => i !== index)) })
-                    ]))
-                ])))
+                E('tbody', {}, list.map((rule, index) => row(rule, index, list)))
             ])));
         }
+        // a new rule is empty: a prefilled type or target would hide the other choices of the list
         container.appendChild(E('div', {}, btn(_('Add rule'), { variant: 'outline', size: 'sm', icon: 'plus', onClick: () => update(rows().concat([
-            { enabled: true, type: 'DOMAIN-SUFFIX', matcher: '', node: 'DIRECT', no_resolve: false }
+            { enabled: true, type: '', matcher: '', node: '', no_resolve: false }
         ])) })));
     };
     render();
@@ -1427,7 +1560,7 @@ function hwidCard() {
     const detected = (value) => (value ? E('span', { class: 'mono' }, value) : E('span', { class: 'muted' }, _('not detected')));
     return card({
         title: 'HWID',
-        description: _('Panels with a device limit tell the router from other devices by these headers.'),
+        info: [_('Panels with a device limit tell the router from other devices by these headers.')],
         content: [
             field(_('Device ID'), input(ref('config.hwid'), { empty: '', placeholder: hwid.generated || _('Automatic') }),
                 _('Made from the hardware of the router, it stays the same after a reinstall.')),
@@ -1444,12 +1577,11 @@ function pageSettings() {
     const d = () => state.draft;
     const proxyOn = () => d().proxy.enabled === true;
     const interfaces = (state.interfaces || []).map((i) => [i, i]);
-    const proxies = state.proxies || [];
+    const choices = (list) => list.map((name) => [name, name]);
 
     const proxyTab = [
         card({
-            title: _('Transparent proxy'),
-            description: _('How the traffic of the local network gets to the core.'),
+            title: _('General'),
             content: [
                 switchField(_('Enable'), _('Intercept the traffic of the devices chosen on the Status page. When off, only the core runs: its proxy port and the dashboard.'), ref('proxy.enabled')),
                 dependOn(E('div', { class: 'grid-2' }, [
@@ -1458,14 +1590,15 @@ function pageSettings() {
                     field('UDP', select(ref('proxy.udp_mode'), [['tproxy', 'TPROXY']], { optional: true, placeholder: _('Off'), empty: '' }),
                         _('For QUIC, games and calls. Needs the Netfilter kernel modules component of the router.'))
                 ]), proxyOn),
-                switchField(_('DNS through the core'), _('DNS queries of the proxied devices go to the core, whatever DNS the router uses. Required for Fake-IP and domain rules.'), ref('proxy.dns_hijack'), proxyOn),
-                switchField(_('Traffic of the router'), _('Proxy the connections of the router itself, for example of Entware applications. DNS of the router is not intercepted.'), ref('proxy.router_proxy'), proxyOn),
-                switchField(_('Respect parental control'), _('Devices blocked in the router (no internet access, schedules) are not proxied, otherwise they would get internet through the core.'), ref('proxy.respect_parental_control'), proxyOn)
+                dependOn(E('div', { class: 'grid-3' }, [
+                    switchField(_('DNS through the core'), _('DNS queries of the proxied devices go to the core, whatever DNS the router uses. Required for Fake-IP and domain rules.'), ref('proxy.dns_hijack')),
+                    switchField(_('Traffic of the router'), _('Proxy the connections of the router itself, for example of Entware applications. DNS of the router is not intercepted.'), ref('proxy.router_proxy')),
+                    switchField(_('Respect parental control'), _('Devices blocked in the router (no internet access, schedules) are not proxied, otherwise they would get internet through the core.'), ref('proxy.respect_parental_control'))
+                ]), proxyOn)
             ]
         }),
         card({
             title: _('Ports and exclusions'),
-            description: _('Traffic that goes directly, past the core.'),
             content: [
                 E('div', { class: 'grid-2' }, [
                     field(_('TCP ports to proxy'), input(ref('proxy.proxy_tcp_dport'), { type: 'portlist', empty: '0-65535', placeholder: _('All ports'), values: [
@@ -1475,10 +1608,12 @@ function pageSettings() {
                         ['0-65535', _('All ports')], ['443 8443', _('QUIC only')]
                     ] }))
                 ]),
-                field(_('Direct IPv4 networks'), tags(ref('proxy.reserved_ip'), { type: 'ip4', placeholder: '203.0.113.0/24' }),
-                    _('Destinations that never go through the proxy. Local and special networks are here by default.')),
-                field(_('Direct IPv6 networks'), tags(ref('proxy.reserved_ip6'), { type: 'ip6', placeholder: '2001:db8::/32' }),
-                    _('Used when IPv6 is on in the profile and the router has an IPv6 address.'))
+                E('div', { class: 'grid-2' }, [
+                    field(_('Direct IPv4 networks'), tags(ref('proxy.reserved_ip'), { type: 'ip4', placeholder: '203.0.113.0/24' }),
+                        _('Destinations that never go through the proxy. Local and special networks are here by default.')),
+                    field(_('Direct IPv6 networks'), tags(ref('proxy.reserved_ip6'), { type: 'ip6', placeholder: '2001:db8::/32' }),
+                        _('Used when IPv6 is on in the profile and the router has an IPv6 address.'))
+                ])
             ]
         })
     ];
@@ -1487,18 +1622,23 @@ function pageSettings() {
         card({
             title: _('DSCP marks'),
             info: [
+                _('A device can mark its traffic with DSCP to choose the route per application. The marks are the same as in XKeen.'),
                 E('p', {}, E('strong', {}, _('How to mark traffic on Windows'))),
                 _('gpedit.msc → Computer Configuration → Windows Settings → Policy-based QoS → Create new policy: choose the DSCP value and the application. Outside of a domain also set <code>HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\QoS</code> "Do not use NLA" = "1" and reboot.')
             ],
-            description: _('A device can mark its traffic with DSCP to choose the route per application. The marks are the same as in XKeen.'),
             content: [
-                field(_('Direct'), tags(ref('proxy.dscp_bypass'), { type: 'dscp', number: true, placeholder: '62' }), _('Traffic with these marks goes directly (62 in XKeen).')),
-                field(_('Proxy'), tags(ref('proxy.dscp_proxy'), { type: 'dscp', number: true, placeholder: '63' }), _('Traffic with these marks goes through the proxy even from excluded devices and on any port (63 in XKeen).')),
+                E('div', { class: 'grid-2' }, [
+                    field(_('Direct'), tags(ref('proxy.dscp_bypass'), { type: 'dscp', number: true, placeholder: '62' }), _('Traffic with these marks goes directly (62 in XKeen).')),
+                    field(_('Proxy'), tags(ref('proxy.dscp_proxy'), { type: 'dscp', number: true, placeholder: '63' }), _('Traffic with these marks goes through the proxy even from excluded devices and on any port (63 in XKeen).'))
+                ]),
                 E('div', { class: 'grid-2' }, [
                     field(_('Mark of the chosen proxy'), input(ref('proxy.dscp_force'), { number: true, type: 'dscp', placeholder: _('Off') }),
                         _('Traffic with this mark goes to one proxy, past the rules of the profile (61 in XKeen).')),
-                    field(_('Chosen proxy'), input(ref('proxy.force_proxy'), { empty: '', values: proxies, placeholder: _('Off') }),
-                        _('A proxy or a group of the running profile. Empty turns the mark off.'), () => d().proxy.dscp_force != null)
+                    field(_('Chosen proxy'), select(ref('proxy.force_proxy'), [
+                        { group: _('Groups'), options: choices(state.groups) },
+                        { group: _('Proxies'), options: choices(state.nodes) }
+                    ], { optional: true, placeholder: _('Off'), empty: '' }),
+                        _('A group or a proxy of the running profile, hidden groups are not offered. The list fills after the first start.'), () => d().proxy.dscp_force != null)
                 ])
             ]
         })
@@ -1507,25 +1647,23 @@ function pageSettings() {
     const coreTab = [
         card({
             title: 'Mihomo',
-            description: _('Options merged over the profile. Mode, DNS mode and IPv6 always come from the profile.'),
-            content: [
-                E('div', { class: 'grid-2' }, [
-                    field(_('Log level'), select(ref('mixin.log_level'), ['silent', 'error', 'warning', 'info', 'debug'].map((v) => [v, v]), { optional: true })),
-                    field(_('Outbound interface'), select(ref('mixin.outbound_interface'), interfaces, { optional: true, placeholder: _('Automatic') }),
-                        _('Linux name of the interface for the connections of the core: ppp0, eth3, nwg0 and so on.'))
-                ]),
+            info: [_('Options merged over the profile. Mode, DNS mode and IPv6 always come from the profile.')],
+            content: E('div', { class: 'grid-3' }, [
+                field(_('Log level'), select(ref('mixin.log_level'), ['silent', 'error', 'warning', 'info', 'debug'].map((v) => [v, v]), { optional: true })),
+                field(_('Outbound interface'), select(ref('mixin.outbound_interface'), interfaces, { optional: true, placeholder: _('Automatic') }),
+                    _('Linux name of the interface for the connections of the core: ppp0, eth3, nwg0 and so on.')),
                 field(_('Memory limit'), input(ref('core.gomemlimit'), { empty: '', placeholder: _('Half of RAM') }),
                     _('For example <code>128MiB</code>, <code>off</code> removes the limit. Without a limit the router may kill the core when memory runs out.'))
-            ]
+            ])
         }),
         card({
             title: _('Proxy port'),
-            description: _('HTTP and SOCKS5 on one port, for devices and applications set up by hand.'),
+            info: [_('HTTP and SOCKS5 on one port, for devices and applications set up by hand.')],
             content: [
-                E('div', { class: 'grid-2' }, [
-                    field(_('Port'), input(ref('mixin.mixed_port'), { number: true, type: 'port', placeholder: _('From profile') }))
+                E('div', { class: 'grid-2 align-end' }, [
+                    field(_('Port'), input(ref('mixin.mixed_port'), { number: true, type: 'port', placeholder: _('From profile, otherwise 7890') })),
+                    switchField(_('Authentication'), _('Ask for a username and password on the proxy port.'), ref('mixin.authentication'))
                 ]),
-                switchField(_('Authentication'), _('Ask for a username and password on the proxy port.'), ref('mixin.authentication')),
                 dependOn(E('div', { class: 'grid-2' }, [
                     field(_('Username'), input(ref('mixin.username'), { empty: '' })),
                     field(_('Password'), input(ref('mixin.password'), { password: true, empty: '' }))
@@ -1534,31 +1672,28 @@ function pageSettings() {
         }),
         card({
             title: _('Dashboard'),
-            description: _('Web panel of the core: choose proxies, watch connections and logs.'),
             action: [
                 btn(_('Open'), { variant: 'outline', size: 'sm', icon: 'external-link', onClick: openDashboard }),
                 btn(_('Update'), { variant: 'outline', size: 'sm', icon: 'download', onClick: () => run(api('update_dashboard'), _('The dashboard is updated.')) })
             ],
-            content: [
-                E('div', { class: 'grid-2' }, [
-                    field(_('Panel'), select(ref('mixin.ui_url'), DASHBOARDS, { optional: true })),
-                    field(_('API port'), input(ref('mixin.api_port'), { number: true, type: 'port', empty: 9090, placeholder: '9090' }))
-                ]),
+            content: E('div', { class: 'grid-3' }, [
+                field(_('Panel'), select(ref('mixin.ui_url'), DASHBOARDS, { optional: true })),
+                field(_('API port'), input(ref('mixin.api_port'), { number: true, type: 'port', empty: 9090, placeholder: '9090' })),
                 field(_('API secret'), input(ref('mixin.api_secret'), { password: true, empty: '' }), _('The dashboard and other applications connect to the core with it.'))
-            ]
+            ])
         })
     ];
 
     const rulesTab = [
         card({
             title: _('Rules'),
-            description: _('Added before the rules of the profile, they are checked from top to bottom. Target is DIRECT, REJECT or a proxy or group of the profile.'),
+            info: rulesInfo(),
             content: rulesEditor()
         }),
         card({
             title: _('Mixin file'),
             description: _('Anything else — DNS servers, hosts, sniffer, rule providers — goes to the mixin file. It is merged into the profile on every start.'),
-            footer: btn(_('Open in Editor'), { variant: 'outline', icon: 'file-text', onClick: () => {
+            action: btn(_('Open in Editor'), { variant: 'outline', size: 'sm', icon: 'file-text', onClick: () => {
                 state.editorFile = 'mixin';
                 location.hash = '#/editor';
             } })
@@ -1573,9 +1708,11 @@ function pageSettings() {
         card({
             title: _('Service'),
             content: [
-                field(_('Start delay, seconds'), input(ref('config.start_delay'), { number: true, type: 'uinteger', empty: 0, placeholder: '0' }),
-                    _('Wait after the router boots, for example until the USB drive or the internet is ready.')),
-                switchField(_('Scheduled restart'), _('Restart the service on a schedule, for example every night.'), ref('config.scheduled_restart')),
+                E('div', { class: 'grid-2 align-end' }, [
+                    field(_('Start delay, seconds'), input(ref('config.start_delay'), { number: true, type: 'uinteger', empty: 0, placeholder: '0' }), null, null,
+                        [_('Wait after the router boots, for example until the USB drive or the internet is ready.')]),
+                    switchField(_('Scheduled restart'), _('Restart the service on a schedule, for example every night.'), ref('config.scheduled_restart'))
+                ]),
                 field(_('Schedule'), input(ref('config.scheduled_restart_cron'), { type: 'cron', empty: '', placeholder: '0 3 * * *' }),
                     _('Cron format: minute hour day month weekday. <code>0 3 * * *</code> is every day at 3:00.'), () => d().config.scheduled_restart === true)
             ]
@@ -1583,22 +1720,17 @@ function pageSettings() {
         hwidCard(),
         card({
             title: _('Logs'),
-            content: [
-                switchField(_('Clear logs at stop'), null, ref('log.clear_at_stop')),
-                field(_('Log size limit, MB'), input(ref('log.max_size'), { number: true, type: 'uinteger', empty: 0, placeholder: _('No limit') }),
-                    _('Logs are kept in RAM, a log over the limit is cleared.'))
-            ]
+            content: E('div', { class: 'grid-2 align-end' }, [
+                field(_('Log size limit, MB'), input(ref('log.max_size'), { number: true, type: 'uinteger', empty: 0, placeholder: _('No limit') }), null, null,
+                    [_('Logs are kept in RAM, a log over the limit is cleared.')]),
+                switchField(_('Clear logs at stop'), null, ref('log.clear_at_stop'))
+            ])
         }),
         card({
             title: _('Web UI'),
-            content: [
-                field(_('Port'), input(ref('web.port'), { number: true, type: 'port', empty: 9099, placeholder: '9099' }), _('The web UI moves to the new port after saving.'))
-            ]
-        }),
-        card({
-            title: _('Password'),
-            description: _('Password of this web UI. It can also be reset with exodus passwd over SSH.'),
-            content: E('div', { class: 'grid-3' }, [
+            info: [_('The web UI moves to the new port after saving.'), _('The password can also be reset with exodus passwd over SSH.')],
+            content: E('div', { class: 'grid-4' }, [
+                field(_('Port'), input(ref('web.port'), { number: true, type: 'port', empty: 9099, placeholder: '9099' })),
                 field(_('Current password'), passwordOld),
                 field(_('New password'), passwordNew),
                 field(_('Repeat'), passwordRepeat)
@@ -1619,7 +1751,7 @@ function pageSettings() {
     ];
 
     return [
-        pageHeader(_('Settings'), _('Only what makes sense to change on Keenetic, everything else is in the profile and the mixin file.')),
+        pageHeader(_('Settings')),
         tabs('settings', [
             ['proxy', _('Proxy'), proxyTab],
             ['dscp', 'DSCP', dscpTab],
@@ -1680,7 +1812,7 @@ function pageEditor() {
     };
 
     return [
-        pageHeader(_('Editor'), _('The mixin file, profiles, subscriptions and providers as plain text.')),
+        pageHeader(_('Editor')),
         card({
             content: [field(_('File'), choose), text],
             footer: E('div', { class: 'row end', style: { width: '100%' } }, [
@@ -1731,7 +1863,7 @@ function pageLogs() {
     };
 
     return [
-        pageHeader(_('Logs'), _('Logs of Exodus and the core, kept in RAM.'), [
+        pageHeader(_('Logs'), null, [
             btn(_('Debug report'), { variant: 'outline', icon: 'bug', onClick: async () => {
                 const data = await run(api('debug'));
                 download('exodus-debug.md', data.content, 'text/markdown');
@@ -1747,7 +1879,7 @@ function pageLogs() {
 
 function pageUpdates() {
     const container = E('div', { class: 'contents' }, loader());
-    const logView = E('textarea', { class: 'textarea', rows: 14, wrap: 'off', readonly: true, spellcheck: 'false' });
+    const logView = E('textarea', { class: 'textarea', rows: 10, wrap: 'off', readonly: true, spellcheck: 'false' });
     const pollLog = async () => {
         const data = await api('log_read', { name: 'update' });
         logView.value = data.content;
@@ -1764,29 +1896,26 @@ function pageUpdates() {
         state.update = info;
         renderAboutButton();
         clear(container);
-        let available = false;
-        const status = (current, next) => {
-            if (next == null) {
+        const available = updateAvailable(info);
+        // update is true, false, or null when github did not answer
+        const status = (update, installed) => {
+            if (update == null) {
                 return badge(_('Unknown'), 'outline');
             }
-            if (!current) {
-                available = true;
+            if (!installed) {
                 return badge(_('Not installed'), 'warning');
             }
-            if (newer(current, next)) {
-                available = true;
-                return badge(_('Update available'), 'warning');
-            }
-            return badge(_('Up to date'), 'success');
+            return update ? badge(_('Update available'), 'warning') : badge(_('Up to date'), 'success');
         };
         const rows = [
-            ['Exodus', info.app, info.app_latest],
-            [`${_('Core')} · ${CORE_TITLES[info.core_type] || info.core_type}`, info.core, info.core_latest]
+            ['Exodus', appBuild(info.app, info.app_commit), appBuild(info.app_latest, info.app_latest_commit), status(info.app_update, info.app)],
+            [`${_('Core')} · ${CORE_TITLES[info.core_type] || info.core_type}`, info.core, info.core_latest,
+                status(info.core_latest == null ? null : newer(info.core, info.core_latest), info.core)]
         ];
         const table = E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
             E('thead', {}, E('tr', {}, [E('th', {}, _('Component')), E('th', {}, _('Installed')), E('th', {}, _('Latest')), E('th', {}, _('Status'))])),
-            E('tbody', {}, rows.map(([name, current, next]) => E('tr', {}, [
-                E('td', {}, E('div', { class: 'cell-title' }, name)), E('td', { class: 'mono' }, current || '—'), E('td', { class: 'mono' }, next || '—'), E('td', {}, status(current, next))
+            E('tbody', {}, rows.map(([name, current, next, badgeEl]) => E('tr', {}, [
+                E('td', {}, E('div', { class: 'cell-title' }, name)), E('td', { class: 'mono' }, current || '—'), E('td', { class: 'mono' }, next || '—'), E('td', {}, badgeEl)
             ])))
         ]));
         const lowSpace = { value: info.free_space != null && info.core_size != null && info.free_space < info.core_size * 1.2 };
@@ -1813,7 +1942,12 @@ function pageUpdates() {
         } });
         append(container, card({
             title: _('Versions'),
-            description: _('Exodus and the core are downloaded from GitHub into Entware. Settings, profiles and subscriptions are kept.'),
+            info: [
+                _('Exodus and the core are downloaded from GitHub into Entware. Settings, profiles and subscriptions are kept.'),
+                _('Exodus has no numbered releases: an update is offered when the code of its branch changes, a change of the readme does not count. The core is compared by its version.'),
+                _('The core and the gh-proxy chosen in the installer are kept, run the installer again to change them.'),
+                _('GitHub is asked at most every 6 hours, Check again asks now.')
+            ],
             action: btn(_('Check again'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: () => {
                 state.forceUpdateCheck = true;
                 render();
@@ -1825,7 +1959,6 @@ function pageUpdates() {
                     [_('Architecture'), E('span', { class: 'mono' }, info.arch || '—')],
                     [_('Free space'), `${formatSize(info.free_space)} · ${_('core')} ${formatSize(info.core_size)}`]
                 ]),
-                E('p', { class: 'description' }, _('The core and the gh-proxy chosen in the installer are kept, run the installer again to change them.')),
                 switchField(_('Low flash space mode'), _('Remove the current core before installing the new one, when the update fails for lack of space. The proxy does not work until the new core is installed.'), objRef(lowSpace, 'value'))
             ],
             footer: E('div', { class: 'row end', style: { width: '100%' } }, updateButton)
@@ -1836,7 +1969,7 @@ function pageUpdates() {
     });
 
     return [
-        pageHeader(_('Updates'), _('New versions of Exodus and the core.')),
+        pageHeader(_('Updates')),
         E('div', { class: 'stack' }, [container, card({ title: _('Update log'), content: logView })])
     ];
 }
@@ -1847,8 +1980,14 @@ function newer(current, next) {
     return next != null && (!current || (current !== next && current.replace(/^v/, '') !== next.replace(/^v/, '')));
 }
 
+// the branch has no versions: exodus is updated when its code differs from the code of the branch, the core by its version
 function updateAvailable(info) {
-    return !!info && (newer(info.app, info.app_latest) || newer(info.core, info.core_latest));
+    return !!info && (info.app_update === true || newer(info.core, info.core_latest));
+}
+
+// version and short commit of exodus, like 2026.09.25 · e39aa58
+function appBuild(version, commit) {
+    return [version, commit ? commit.substring(0, 7) : null].filter(Boolean).join(' · ');
 }
 
 // github is asked at most every few hours, the router keeps the answer
@@ -1927,7 +2066,7 @@ async function openAbout() {
     const missing = () => E('span', { class: 'muted' }, '—');
     const update = state.update;
     const versions = update ? [
-        newer(update.app, update.app_latest) ? `Exodus ${update.app || '—'} → ${update.app_latest}` : null,
+        update.app_update === true ? `Exodus ${appBuild(update.app, update.app_commit) || '—'} → ${appBuild(update.app_latest, update.app_latest_commit)}` : null,
         newer(update.core, update.core_latest) ? `${core} ${update.core || '—'} → ${update.core_latest}` : null
     ].filter(Boolean) : [];
     const logoBadge = E('span', { class: 'badge badge-default' }, [logo(), info.app || '—']);
@@ -1977,20 +2116,21 @@ async function openAbout() {
 
 const pages = [
     ['status', _('Status'), pageStatus, async () => {
-        await refreshStatus();
+        await Promise.all([reloadStates(), refreshStatus()]);
     }],
     ['profiles', _('Profiles'), pageProfiles, async () => {
-        const files = await api('files');
+        const [files] = await Promise.all([api('files'), reloadStates()]);
         state.dirs = files.dirs || {};
     }],
     ['settings', _('Settings'), pageSettings, async () => {
         const [interfaces, proxies, hwid] = await Promise.all([
             api('interfaces').catch(() => ({ interfaces: [] })),
-            api('proxies').catch(() => ({ proxies: [] })),
+            api('proxies').catch(() => ({})),
             api('hwid').catch(() => ({}))
         ]);
         state.interfaces = interfaces.interfaces || [];
-        state.proxies = proxies.proxies || [];
+        state.groups = proxies.groups || [];
+        state.nodes = proxies.proxies || [];
         state.hwid = hwid;
     }],
     ['editor', _('Editor'), pageEditor, async () => {

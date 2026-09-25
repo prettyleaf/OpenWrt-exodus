@@ -271,10 +271,15 @@ action_interfaces() {
 		| jq -R -s '{interfaces: (split("\n") | map(select(length > 0)))}' | ok
 }
 
+# groups and proxies of the running profile for the choices of the web ui, groups hidden in the profile are left out
 action_proxies() {
-	local names
-	names=$(jq -c '[(.["proxy-groups"] // [])[].name] + [(.proxies // [])[].name] | map(select(. != null))' "$PROFILE_JSON_PATH" 2> /dev/null)
-	jq -n --argjson names "${names:-[]}" '{proxies: $names}' | ok
+	local list
+	list=$(jq -c '{
+		groups: [(.["proxy-groups"] // [])[] | select(.hidden != true) | .name | select(type == "string")],
+		proxies: [(.proxies // [])[] | .name | select(type == "string")]
+	}' "$PROFILE_JSON_PATH" 2> /dev/null)
+	[ -n "$list" ] || list='{"groups": [], "proxies": []}'
+	printf '%s\n' "$list" | ok
 }
 
 action_profile_upload() {
@@ -385,50 +390,76 @@ entware_arch() {
 	opkg print-architecture 2> /dev/null | awk '$2 != "all" && $2 != "noarch" { arch = $2 } END { print arch }'
 }
 
-# latest versions are asked from github at most every 6 hours, force asks now; failed checks are not kept
+# the latest code of the installed branch: its archive is small, the hash of the code tells an update from a change of the readme
+# prints "version|commit|hash", nothing when github does not answer
+latest_code() {
+	local dir src
+	dir="$RUN_TMP/latest.$$"
+	rm -rf "$dir"
+	mkdir -p "$dir/src"
+	if curl -s -f -L --connect-timeout 15 -m 60 -o "$dir/app.tar.gz" "$(gh_url "https://github.com/$REPOSITORY/archive/$1.tar.gz")" \
+		&& tar -xzf "$dir/app.tar.gz" -C "$dir/src" 2> /dev/null; then
+		src=$(find "$dir/src" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+		if [ -n "$src" ] && [ -f "$src/keenetic/opt/share/exodus/VERSION" ]; then
+			printf '%s|%s|%s' "$(head -n 1 "$src/keenetic/opt/share/exodus/VERSION" | tr -d '\r|')" "$(archive_commit "$dir/app.tar.gz")" "$(code_hash "$src")"
+		fi
+	fi
+	rm -rf "$dir"
+}
+
+# there is no versioning of the branch: exodus is up to date when its code equals the code of the branch
+# github is asked at most every 6 hours, force asks now; failed checks are not kept
 action_check_update() {
-	local latest core_type core_latest release free core_size proxy_host cache cached now
+	local core_type release build ref cache now latest app core_latest free core_size proxy_host
 	core_type=$(cfg_get .update.core)
 	case "$core_type" in
 		alpha) release="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha" ;;
 		prizrak) release="https://github.com/legiz-ru/Prizrak-Core/releases/latest/download" ;;
 		*) core_type=meta; release="https://github.com/MetaCubeX/mihomo/releases/latest/download" ;;
 	esac
+	build=$(cat "$BUILD_PATH" 2> /dev/null)
+	printf '%s' "$build" | jq -e 'type == "object"' > /dev/null 2>&1 || build='{}'
+	ref=$(printf '%s' "$build" | jq -r '.ref // empty')
+	[ -n "$ref" ] || ref="$BRANCH"
 	cache="$RUN_TMP/update_check.json"
 	now=$(date +%s)
-	cached=
+	latest=
 	if [ "$(arg force)" != "true" ]; then
-		cached=$(jq -r --arg core "$core_type" --argjson now "$now" \
-			'select(.core_type == $core and ($now - .time) < 21600 and ($now - .time) >= 0) | "\(.app_latest)\t\(.core_latest)"' "$cache" 2> /dev/null)
+		latest=$(jq -c --arg core "$core_type" --arg ref "$ref" --argjson now "$now" \
+			'select(.core_type == $core and .ref == $ref and ($now - .time) < 21600 and ($now - .time) >= 0)' "$cache" 2> /dev/null)
 	fi
-	if [ -n "$cached" ]; then
-		latest="${cached%%	*}"
-		core_latest="${cached#*	}"
-	else
-		latest=$(curl -s -f -L -m 20 "$(gh_url "https://raw.githubusercontent.com/$REPOSITORY/$BRANCH/keenetic/opt/share/exodus/VERSION")" 2> /dev/null | head -n 1 | tr -d '\r')
-		echo "$latest" | grep -q -E '^[A-Za-z0-9._-]+$' || latest=
+	if [ -z "$latest" ]; then
+		app=$(latest_code "$ref")
 		core_latest=$(curl -s -f -L -m 20 "$(gh_url "$release/version.txt")" 2> /dev/null | head -n 1 | tr -d '\r')
 		echo "$core_latest" | grep -q -E '^[A-Za-z0-9._-]+$' || core_latest=
-		if [ -n "$latest" ] && [ -n "$core_latest" ]; then
-			jq -n --argjson time "$now" --arg core "$core_type" --arg app "$latest" --arg core_latest "$core_latest" \
-				'{time: $time, core_type: $core, app_latest: $app, core_latest: $core_latest}' > "$cache" 2> /dev/null
+		latest=$(printf '%s' "$app" | jq -R -s -c --argjson time "$now" --arg core "$core_type" --arg ref "$ref" --arg core_latest "$core_latest" '
+			split("|") as $a
+			| {time: $time, core_type: $core, ref: $ref, app_latest: ($a[0] // ""), app_latest_commit: ($a[1] // ""), app_latest_code: ($a[2] // ""), core_latest: $core_latest}')
+		if [ -n "$app" ] && [ -n "$core_latest" ]; then
+			printf '%s\n' "$latest" > "$cache"
 		fi
 	fi
 	free=$(df -k "$EXODUS_OPT" 2> /dev/null | tail -n 1 | awk '{ print $(NF - 2) }')
 	core_size=$(wc -c < "$PROG" 2> /dev/null)
 	proxy_host=$(cfg_get .update.gh_proxy | sed -n 's|^[a-z]*://\([^/]*\).*|\1|p')
 	jq -n \
+		--argjson latest "$latest" \
+		--argjson build "$build" \
 		--arg app "$(app_version)" \
-		--arg app_latest "$latest" \
 		--arg core_type "$core_type" \
 		--arg core "$(core_version)" \
-		--arg core_latest "$core_latest" \
 		--arg arch "$(entware_arch)" \
 		--arg free "$free" \
 		--arg core_size "$core_size" \
 		--arg gh_proxy "$proxy_host" \
-		'{app: $app, app_latest: (if $app_latest == "" then null else $app_latest end), core_type: $core_type, core: $core,
-		  core_latest: (if $core_latest == "" then null else $core_latest end), arch: $arch,
+		'def text: if . == null or . == "" then null else . end;
+		{app: $app, app_commit: ($build.commit | text), app_latest: ($latest.app_latest | text), app_latest_commit: ($latest.app_latest_commit | text),
+		  app_update: (
+			if ($latest.app_latest_code // "") == "" then null
+			elif ($build.code // "") != "" then $build.code != $latest.app_latest_code
+			elif ($build.commit // "") != "" and ($latest.app_latest_commit // "") != "" then $build.commit != $latest.app_latest_commit
+			else true end),
+		  core_type: $core_type, core: $core, core_latest: ($latest.core_latest | text), arch: $arch,
 		  free_space: (if $free == "" then null else ($free | tonumber * 1024) end),
 		  core_size: (if $core_size == "" then null else ($core_size | tonumber) end),
 		  gh_proxy: (if $gh_proxy == "" then null else $gh_proxy end)}' | ok
@@ -438,7 +469,7 @@ action_check_update() {
 action_about() {
 	local build
 	build=$(cat "$BUILD_PATH" 2> /dev/null)
-	echo "$build" | jq -e 'type == "object"' > /dev/null 2>&1 || build='{}'
+	printf '%s' "$build" | jq -e 'type == "object"' > /dev/null 2>&1 || build='{}'
 	jq -n \
 		--argjson build "$build" \
 		--argjson router "$(keenetic_version)" \

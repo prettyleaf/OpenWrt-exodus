@@ -47,8 +47,10 @@ def drop_nulls:
 	# the core marks its own connections, the router proxy lets them out
 	"routing-mark": (if $p.enabled == true and $p.router_proxy == true then 255 else null end),
 
+	# a rule needs a type and a target, and a value unless it is MATCH
 	"nikki-rules": (
 		[($m.rules // [])[] | select(.enabled != false)
+			| select((.type // "") != "" and (.node // "") != "" and (.type == "MATCH" or (.matcher // "") != ""))
 			| [.type, .matcher, .node, (if .no_resolve == true then "no-resolve" else null end)]
 			| map(select(. != null and . != "") | tostring)
 			| select(length >= 2)

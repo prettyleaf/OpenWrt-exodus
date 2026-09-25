@@ -61,6 +61,17 @@ check_github() {
 	return "$ret"
 }
 
+# hash of the code in a source tree, the update page compares it with the latest one: a change of the readme is not an update
+# the same as code_hash in lib/common.sh
+code_hash() {
+	(cd "$1" && find keenetic install.sh -type f 2> /dev/null | LC_ALL=C sort | xargs sha256sum 2> /dev/null) | sha256sum | cut -d ' ' -f 1
+}
+
+# github writes the commit into the pax header of an archive of a branch, the same as archive_commit in lib/common.sh
+archive_commit() {
+	gzip -dc "$1" 2> /dev/null | head -c 1024 | tr -d '\000' | sed -n 's/.*comment=\([0-9a-f]\{40\}\).*/\1/p' | head -n 1
+}
+
 # version of the core binary, e.g. v1.19.31 or alpha-3c947c7, empty if there is no working core
 core_binary_version() {
 	"$1" -v 2> /dev/null | head -n 1 | cut -d ' ' -f 3
@@ -289,17 +300,23 @@ fi
 echo "download exodus ($ref)"
 mkdir -p "$temp_dir/app"
 download "https://github.com/$repository/archive/$ref.tar.gz" "$temp_dir/app.tar.gz" 300 && tar -xzf "$temp_dir/app.tar.gz" -C "$temp_dir/app" 2> /dev/null
-# github writes the commit into the pax header of the archive, the web ui shows it
-commit=$(gzip -dc "$temp_dir/app.tar.gz" 2> /dev/null | head -c 1024 | tr -d '\000' | sed -n 's/.*comment=\([0-9a-f]\{40\}\).*/\1/p' | head -n 1)
+commit=$(archive_commit "$temp_dir/app.tar.gz")
 rm -f "$temp_dir/app.tar.gz"
 src=$(find "$temp_dir/app" -mindepth 1 -maxdepth 1 -type d | head -n 1)
 if [ -z "$src" ] || [ ! -f "$src/keenetic/opt/share/exodus/exodus" ]; then
 	fail "download failed, if the provider slows down GitHub, install through gh-proxy, see README"
 fi
-echo "exodus $(cat "$src/keenetic/opt/share/exodus/VERSION")"
+echo "exodus $(cat "$src/keenetic/opt/share/exodus/VERSION")${commit:+ ($(echo "$commit" | cut -c 1-7))}"
+code=$(code_hash "$src")
 
 was_running=0
 [ -x "$share_dir/exodus" ] && "$share_dir/exodus" status > /dev/null 2>&1 && was_running=1
+
+# installs before the build info forced the proxy port and the log level by default, now the profile decides; reset once
+legacy=0
+if [ -f "$config" ] && ! jq -e '.code // empty' "$share_dir/BUILD" > /dev/null 2>&1; then
+	legacy=1
+fi
 
 # code is replaced, settings and profiles are kept
 echo "install exodus"
@@ -308,8 +325,8 @@ mkdir -p "$share_dir.new" || fail "can not create $share_dir"
 cp -R "$src/keenetic/opt/share/exodus/." "$share_dir.new/" || fail "install failed, not enough free space?"
 # the installer from the repository root, used by the update page
 cp -f "$src/install.sh" "$share_dir.new/install.sh"
-jq -n --arg ref "$ref" --arg commit "$commit" --arg installed "$(date '+%Y-%m-%d %H:%M:%S')" \
-	'{ref: $ref, commit: $commit, installed: $installed}' > "$share_dir.new/BUILD"
+jq -n --arg ref "$ref" --arg commit "$commit" --arg code "$code" --arg installed "$(date '+%Y-%m-%d %H:%M:%S')" \
+	'{ref: $ref, commit: $commit, code: $code, installed: $installed}' > "$share_dir.new/BUILD"
 rm -rf "$share_dir.old"
 [ -d "$share_dir" ] && mv "$share_dir" "$share_dir.old"
 mv "$share_dir.new" "$share_dir" || fail "install failed"
@@ -338,10 +355,18 @@ config_merge='
 	| moved(["mixin", "authentications", 0, "password"]; ["mixin", "password"])
 	| if .mixin.api_port == null and (.mixin.api_listen | type) == "string" then .mixin.api_port = (.mixin.api_listen | split(":") | last | tonumber? // null) else . end
 	| if .mixin.rule == false then .mixin.rules = ((.mixin.rules // []) | map(.enabled = false)) else . end
+	# subscriptions were downloaded on every start or by hand, now by an interval: null follows the provider, 0 is by hand
+	| if (.subscriptions | type) == "array" then
+		.subscriptions |= map(if has("update_interval") then . else .update_interval = (if .prefer == "local" then 0 else null end) end | del(.prefer))
+	  else . end
+	| if $legacy == 1 and (.mixin | type) == "object" then
+		.mixin.log_level |= (if . == "warning" then null else . end)
+		| .mixin.mixed_port |= (if . == 7890 then null else . end)
+	  else . end
 	| . as $user
 	| $defaults | known($user)'
 if [ -f "$config" ]; then
-	if jq -s "$config_merge" "$src/keenetic/opt/etc/exodus/config.json" "$config" > "$config.new" 2> /dev/null && [ -s "$config.new" ]; then
+	if jq -s --argjson legacy "$legacy" "$config_merge" "$src/keenetic/opt/etc/exodus/config.json" "$config" > "$config.new" 2> /dev/null && [ -s "$config.new" ]; then
 		mv -f "$config.new" "$config"
 	else
 		rm -f "$config.new"

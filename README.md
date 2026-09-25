@@ -9,6 +9,7 @@ Transparent proxy with [Mihomo](https://github.com/MetaCubeX/mihomo) for Keeneti
 It borrows ideas from [XKeen](https://github.com/jameszeroX/XKeen)
 
 ## Requirements
+
 - KeeneticOS 4.x or newer with the **OPKG** and **Netfilter subsystem kernel modules** components, and the IPv6 component for IPv6.
 - [Entware](https://help.keenetic.com/hc/en-us/articles/360021214160) installed (USB drive or internal storage) and about 70 MB free: the Mihomo core is about 40 MB, yq about 15 MB.
 - Architectures: `aarch64` (arm64), `mipsel` and `mips` (softfloat).

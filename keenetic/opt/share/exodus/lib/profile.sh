@@ -13,8 +13,57 @@ sub_state_path() {
 	echo "$SUBSCRIPTIONS_DIR/$1.json"
 }
 
+# value of a header in a curl -D dump, the last response wins after redirects, $2 is the name in lower case
+header_value() {
+	[ -f "$1" ] || return 0
+	awk -v name="$2" '
+		{ line = $0; sub(/\r$/, "", line) }
+		line ~ /^HTTP\// { value = ""; next }
+		{
+			i = index(line, ":")
+			if (i > 0 && tolower(substr(line, 1, i - 1)) == name) {
+				value = substr(line, i + 1)
+				sub(/^[ \t]+/, "", value)
+			}
+		}
+		END { print value }' "$1"
+}
+
+# what the provider tells about the profile in the headers ($1 the subscription, $2 the info address) as json:
+# title, announce, support link, logo and the update interval in hours; base64: values are decoded, links are http(s) or tg
+provider_meta() {
+	local first second
+	first="$1"
+	second="$2"
+	jq -n -c \
+		--arg title "$(header_value "$first" profile-title)" \
+		--arg title2 "$(header_value "$second" profile-title)" \
+		--arg announce "$(header_value "$first" announce)" \
+		--arg announce2 "$(header_value "$second" announce)" \
+		--arg support "$(header_value "$first" support-url)" \
+		--arg support2 "$(header_value "$second" support-url)" \
+		--arg logo "$(header_value "$first" profile-logo)" \
+		--arg logo2 "$(header_value "$second" profile-logo)" \
+		--arg interval "$(header_value "$first" profile-update-interval)" \
+		--arg interval2 "$(header_value "$second" profile-update-interval)" '
+		def pick($a; $b): if $a != "" then $a else $b end;
+		def decode: if startswith("base64:") then ((.[7:] | @base64d)? // "") else . end;
+		def text($newlines): explode | map(select(. >= 32 or ($newlines and . == 10))) | implode;
+		def safe_url($schemes): . as $v | if any($schemes[]; . as $s | $v | startswith($s)) then $v else "" end;
+		def digits: length > 0 and (explode | all(. >= 48 and . <= 57));
+		pick($interval; $interval2) as $hours
+		| {
+			title: (pick($title; $title2) | decode | text(false) | .[0:128]),
+			announce: (pick($announce; $announce2) | decode | text(true) | .[0:2000]),
+			support_url: (pick($support; $support2) | decode | text(false) | safe_url(["https://", "http://", "tg://"])),
+			logo: (pick($logo; $logo2) | decode | text(false) | safe_url(["https://", "http://", "data:image/"])),
+			interval: (if ($hours | digits) and ($hours | tonumber) > 0 then ($hours | tonumber) else null end)
+		}
+		| with_entries(select(.value != "" and .value != null))'
+}
+
 update_subscription() {
-	local id name info_url url user_agent send_hwid header state
+	local id name info_url url user_agent send_hwid header state now meta title
 	id="$1"
 	case "$id" in
 		""|*/*|.*) return 1 ;;
@@ -75,6 +124,7 @@ update_subscription() {
 		success=0
 	fi
 	state=$(sub_state_path "$id")
+	now=$(date +%s)
 	if [ "$success" = 1 ]; then
 		log "Profile" "Subscription update successful."
 		local userinfo expire upload download total used available
@@ -95,7 +145,12 @@ update_subscription() {
 			used=$((upload + download))
 			[ -n "$total" ] && available=$((total - used))
 		fi
+		# the info address may carry the headers instead of the subscription
+		meta=$(provider_meta "$header_tmp" "$info_header_tmp")
+		[ -n "$meta" ] || meta='{}'
 		jq -n \
+			--argjson meta "$meta" \
+			--argjson now "$now" \
 			--arg expire "$([ -n "$expire" ] && date "+%Y-%m-%d %H:%M:%S" -d "@$expire" 2> /dev/null)" \
 			--arg upload "$(format_filesize "$upload")" \
 			--arg download "$(format_filesize "$download")" \
@@ -103,21 +158,115 @@ update_subscription() {
 			--arg used "$(format_filesize "$used")" \
 			--arg available "$(format_filesize "$available")" \
 			--arg update "$(date "+%Y-%m-%d %H:%M:%S")" \
-			'{expire: $expire, upload: $upload, download: $download, total: $total, used: $used, available: $available, update: $update, success: true}
-			| with_entries(select(.value != ""))' > "$state"
+			'{expire: $expire, upload: $upload, download: $download, total: $total, used: $used, available: $available, update: $update}
+			| with_entries(select(.value != ""))
+			| . + $meta + {update_ts: $now, checked: $now, success: true}' > "$state"
 		rm -f "$info_header_tmp" "$header_tmp"
 		mv -f "$file_tmp" "$file"
+		# the title of the provider becomes the name of the subscription
+		title=$(printf '%s' "$meta" | jq -r '.title // empty')
+		if [ -n "$title" ] && [ "$title" != "$name" ]; then
+			cfg_update '(.subscriptions[] | select(.id == $id) | .name) = $title' --arg id "$id" --arg title "$title" \
+				&& log "Profile" "Subscription name from the provider: $title."
+		fi
 	else
 		log "Profile" "Subscription update failed."
-		jq -n --arg update "$(date "+%Y-%m-%d %H:%M:%S")" '{update_failed: $update, success: false}' > "$state"
+		# the last good state stays: the announce and the traffic are still shown
+		{ jq -c 'select(type == "object")' "$state" 2> /dev/null || echo '{}'; } | head -n 1 \
+			| jq -c --argjson now "$now" --arg update "$(date "+%Y-%m-%d %H:%M:%S")" \
+				'. + {update_failed: $update, failed_ts: $now, checked: $now, success: false}' > "$state.tmp" \
+			&& mv -f "$state.tmp" "$state"
 		rm -f "$info_header_tmp" "$header_tmp" "$file_tmp"
 		return 1
 	fi
 }
 
+# a subscription is due for a download: its interval passed since the last one, a failed download is tried again after 15 minutes
+# the interval is set by hand (hours, 0 is only by hand), or comes from the provider (profile-update-interval), or is an hour
+subscription_due() {
+	local id interval state
+	id="$1"
+	[ -f "$SUBSCRIPTIONS_DIR/$id.yaml" ] || return 0
+	interval=$(sub_get "$id" update_interval)
+	state=$(sub_state_path "$id")
+	[ -n "$interval" ] || interval=$(jq -r '.interval // empty' "$state" 2> /dev/null)
+	case "$interval" in
+		""|*[!0-9]*) interval=1 ;;
+	esac
+	[ "$interval" = 0 ] && return 1
+	[ -f "$state" ] || return 0
+	jq -e --argjson now "$(date +%s)" --argjson interval "$interval" \
+		'($now - (.update_ts // 0)) >= $interval * 3600 and ($now - (.failed_ts // 0)) >= 900' "$state" > /dev/null 2>&1
+}
+
+# ports, dns and ipv6 of the profile for startup: the rules are built from them, a change needs a restart
+profile_signature() {
+	jq -c '{redir: .["redir-port"], tproxy: .["tproxy-port"], dns: .dns.listen, dns_enable: .dns.enable, mode: .dns["enhanced-mode"],
+		fake: .dns["fake-ip-range"], fake6: .dns["fake-ip-range6"], ipv6: .ipv6,
+		listeners: [(.listeners // [])[] | select((.name // "") | startswith("exodus-")) | {name, port}]}' "$PROFILE_JSON_PATH" 2> /dev/null
+}
+
+# the running core loads the profile for startup through its api, connections and chosen proxies are kept
+core_reload() {
+	local listen secret
+	listen=$(jq -r '.["external-controller"] // empty' "$PROFILE_JSON_PATH" 2> /dev/null)
+	secret=$(jq -r '.secret // empty' "$PROFILE_JSON_PATH" 2> /dev/null)
+	[ -n "$listen" ] || return 1
+	printf 'header = "Authorization: Bearer %s"\n' "$secret" | curl -s -f -m 60 -o /dev/null -X PUT -K - \
+		-H 'Content-Type: application/json' -d "$(jq -n -c --arg path "$RUN_PROFILE_PATH" '{path: $path, payload: ""}')" \
+		"http://127.0.0.1:${listen##*:}/configs?force=true"
+}
+
+# a new subscription goes to the running core; it is checked first, a failed check keeps the running profile
+reload_profile() {
+	local before
+	if ! lock_acquire service 50; then
+		log "Profile" "The service is busy, the new subscription applies on the next start."
+		return 1
+	fi
+	log "Profile" "Apply the new subscription."
+	before=$(profile_signature)
+	cp -f "$RUN_PROFILE_PATH" "$RUN_PROFILE_PATH.bak"
+	if prepare_profile && mixin_profile && "$PROG" -d "$RUN_DIR" -t >> "$CORE_LOG_PATH" 2>&1; then
+		profile_json
+		if [ "$(profile_signature)" != "$before" ]; then
+			log "Profile" "Ports, DNS or IPv6 of the profile changed, restart."
+			lock_release service
+			daemonize "$EXODUS" restart
+			return 0
+		fi
+		if core_reload; then
+			log "Profile" "The core reloaded the profile."
+		else
+			log "Profile" "The core did not reload the profile, restart."
+			lock_release service
+			daemonize "$EXODUS" restart
+			return 0
+		fi
+	else
+		mv -f "$RUN_PROFILE_PATH.bak" "$RUN_PROFILE_PATH"
+		log "Profile" "The new subscription failed the check, the core keeps the running profile."
+	fi
+	lock_release service
+}
+
+# download a subscription; when it is the running profile and it changed, the core gets it
+refresh_subscription() {
+	local id file before
+	id="$1"
+	file="$SUBSCRIPTIONS_DIR/$id.yaml"
+	lock_acquire subscription 1 || return 0
+	before=$(sha256sum < "$file" 2> /dev/null)
+	if update_subscription "$id" && [ -f "$STARTED_FLAG_PATH" ] && [ "$c_config_profile" = "subscription:$id" ] \
+		&& [ "$(sha256sum < "$file")" != "$before" ]; then
+		reload_profile
+	fi
+	lock_release subscription
+}
+
 # copy the chosen profile or subscription to the profile for startup
 prepare_profile() {
-	local profile_type profile_id file prefer name
+	local profile_type profile_id file name
 	profile_type="${c_config_profile%%:*}"
 	profile_id="${c_config_profile#*:}"
 	case "$profile_id" in
@@ -135,10 +284,10 @@ prepare_profile() {
 		fi
 	elif [ "$profile_type" = "subscription" ]; then
 		name=$(sub_get "$profile_id" name)
-		prefer=$(sub_get "$profile_id" prefer)
 		file="$SUBSCRIPTIONS_DIR/$profile_id.yaml"
 		log "Profile" "Use subscription: $name."
-		if [ "$prefer" != "local" ] || [ ! -f "$file" ]; then
+		# the saved file is used until its interval passes, the start does not wait for the provider
+		if subscription_due "$profile_id"; then
 			update_subscription "$profile_id"
 		fi
 		if [ ! -f "$file" ]; then
@@ -159,10 +308,11 @@ mixin_profile() {
 	mixin_gen="$RUN_TMP/mixin.gen.yaml"
 	jq -f "$MIXIN_JQ" "$CONFIG_PATH" | "$YQ" -M -p json -o yaml > "$mixin_gen" || return 1
 	# the mixin file is all comments until it is edited, then it applies
+	# the proxy port of the profile is kept, a profile without one gets 7890
 	set -- "$RUN_PROFILE_PATH"
 	[ -f "$MIXIN_FILE_PATH" ] && set -- "$@" "$MIXIN_FILE_PATH"
 	set -- "$@" "$mixin_gen"
-	"$YQ" -M -i eval-all '... comments="" | . as $item ireduce ({}; . * $item ) | .proxies = .nikki-proxies + .proxies | del(.nikki-proxies) | .proxy-groups = .nikki-proxy-groups + .proxy-groups | del(.nikki-proxy-groups) | .rules = .nikki-rules + .rules | del(.nikki-rules) | explode(.)' "$@" || return 1
+	"$YQ" -M -i eval-all '... comments="" | . as $item ireduce ({}; . * $item ) | .proxies = .nikki-proxies + .proxies | del(.nikki-proxies) | .proxy-groups = .nikki-proxy-groups + .proxy-groups | del(.nikki-proxy-groups) | .rules = .nikki-rules + .rules | del(.nikki-rules) | explode(.) | .mixed-port = (.mixed-port // 7890)' "$@" || return 1
 	rm -f "$mixin_gen"
 
 	[ "$c_proxy_enabled" = 1 ] || return 0
