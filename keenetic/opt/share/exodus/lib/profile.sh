@@ -154,66 +154,33 @@ prepare_profile() {
 
 # merge the settings into the profile for startup
 mixin_profile() {
-	local expr mixin_gen force_proxy
+	local mixin_gen expr
 	log "Mixin" "Mixin config."
-	# options with overwrite enabled replace the lists of the profile instead of merging with them
-	expr="."
-	[ "$c_mixin_authentication" = 1 ] && expr="$expr | del(.authentication)"
-	[ "$c_mixin_fake_ip_filter" = 1 ] && expr="$expr | del(.dns.fake-ip-filter)"
-	[ "$c_mixin_hosts" = 1 ] && expr="$expr | del(.hosts)"
-	[ "$c_mixin_dns_nameserver" = 1 ] && expr="$expr | del(.dns.default-nameserver) | del(.dns.proxy-server-nameserver) | del(.dns.direct-nameserver) | del(.dns.nameserver) | del(.dns.fallback)"
-	[ "$c_mixin_dns_proxy_server_nameserver_policy" = 1 ] && expr="$expr | del(.dns.proxy-server-nameserver-policy)"
-	[ "$c_mixin_dns_nameserver_policy" = 1 ] && expr="$expr | del(.dns.nameserver-policy)"
-	[ "$c_mixin_sniffer_force_domain_name" = 1 ] && expr="$expr | del(.sniffer.force-domain)"
-	[ "$c_mixin_sniffer_ignore_domain_name" = 1 ] && expr="$expr | del(.sniffer.skip-domain)"
-	[ "$c_mixin_sniffer_sniff" = 1 ] && expr="$expr | del(.sniffer.sniff)"
-	if [ "$expr" != "." ]; then
-		"$YQ" -M -i "$expr" "$RUN_PROFILE_PATH" || return 1
-	fi
 	mixin_gen="$RUN_TMP/mixin.gen.yaml"
 	jq -f "$MIXIN_JQ" "$CONFIG_PATH" | "$YQ" -M -p json -o yaml > "$mixin_gen" || return 1
+	# the mixin file is all comments until it is edited, then it applies
 	set -- "$RUN_PROFILE_PATH"
-	[ "$c_mixin_mixin_file_content" = 1 ] && set -- "$@" "$MIXIN_FILE_PATH"
+	[ -f "$MIXIN_FILE_PATH" ] && set -- "$@" "$MIXIN_FILE_PATH"
 	set -- "$@" "$mixin_gen"
 	"$YQ" -M -i eval-all '... comments="" | . as $item ireduce ({}; . * $item ) | .proxies = .nikki-proxies + .proxies | del(.nikki-proxies) | .proxy-groups = .nikki-proxy-groups + .proxy-groups | del(.nikki-proxy-groups) | .rules = .nikki-rules + .rules | del(.nikki-rules) | explode(.)' "$@" || return 1
 	rm -f "$mixin_gen"
 
-	# numbers go into the expression, anything else falls back to the defaults
-	local force_redir_port force_tproxy_port router_mark
-	force_redir_port="${c_proxy_force_redir_port:-7893}"
-	force_tproxy_port="${c_proxy_force_tproxy_port:-7894}"
-	router_mark="${c_routing_router_proxy_mark:-255}"
-	case "$force_redir_port" in *[!0-9]*) force_redir_port=7893 ;; esac
-	case "$force_tproxy_port" in *[!0-9]*) force_tproxy_port=7894 ;; esac
-	case "$router_mark" in *[!0-9]*) router_mark=255 ;; esac
-
+	[ "$c_proxy_enabled" = 1 ] || return 0
 	# keenetic has no tun in the transparent proxy, a tun of the profile would change the routes of the router
-	expr="."
-	if [ "$c_proxy_enabled" = 1 ]; then
-		expr="$expr | .tun.enable = false | .listeners = ((.listeners // []) | map(select(.type != \"tun\")))"
-		# dscp 61 of xkeen: separate listeners that send everything to one proxy, without rules
-		force_proxy="$c_proxy_force_proxy"
-		if [ -n "$c_proxy_dscp_force" ] && [ -n "$force_proxy" ]; then
-			expr="$expr | .listeners = (.listeners | map(select(.name != \"exodus-force-redir\" and .name != \"exodus-force-tproxy\")))"
-			if [ "$c_proxy_tcp_mode" = "redirect" ]; then
-				expr="$expr | .listeners += [{\"name\": \"exodus-force-redir\", \"type\": \"redir\", \"listen\": \"::\", \"port\": $force_redir_port, \"proxy\": strenv(EXODUS_FORCE_PROXY)}]"
-			fi
-			if [ "$c_proxy_udp_mode" = "tproxy" ] || [ "$c_proxy_tcp_mode" = "tproxy" ]; then
-				expr="$expr | .listeners += [{\"name\": \"exodus-force-tproxy\", \"type\": \"tproxy\", \"listen\": \"::\", \"port\": $force_tproxy_port, \"udp\": true, \"proxy\": strenv(EXODUS_FORCE_PROXY)}]"
-			fi
+	expr='.tun.enable = false | .listeners = ((.listeners // []) | map(select(.type != "tun")))'
+	# dscp 61 of xkeen: separate listeners that send everything to one proxy, without rules
+	expr="$expr | .listeners = (.listeners | map(select(.name != \"exodus-force-redir\" and .name != \"exodus-force-tproxy\")))"
+	if [ -n "$c_proxy_dscp_force" ] && [ -n "$c_proxy_force_proxy" ]; then
+		if [ "$c_proxy_tcp_mode" = "redirect" ]; then
+			expr="$expr | .listeners += [{\"name\": \"exodus-force-redir\", \"type\": \"redir\", \"listen\": \"::\", \"port\": $FORCE_REDIR_PORT, \"proxy\": strenv(EXODUS_FORCE_PROXY)}]"
 		fi
-		# the core marks its own connections, the router proxy lets them out
-		if [ "$c_proxy_router_proxy" = 1 ]; then
-			expr="$expr | .routing-mark = $router_mark"
-		fi
-		# my.keenetic.net and keendns names must resolve to real addresses, the router answers them itself
-		if [ "$c_keenetic_fake_ip_filter" = 1 ]; then
-			expr="$expr | with(select((.dns.fake-ip-filter-mode // \"blacklist\") == \"blacklist\"); .dns.fake-ip-filter = ((.dns.fake-ip-filter // []) + [\"my.keenetic.net\", \"+.keenetic.pro\", \"+.keenetic.link\", \"+.keenetic.name\", \"+.keenetic.io\", \"my.netcraze.net\", \"+.netcraze.pro\", \"+.netcraze.link\", \"+.netcraze.io\"] | unique))"
+		if [ "$c_proxy_udp_mode" = "tproxy" ] || [ "$c_proxy_tcp_mode" = "tproxy" ]; then
+			expr="$expr | .listeners += [{\"name\": \"exodus-force-tproxy\", \"type\": \"tproxy\", \"listen\": \"::\", \"port\": $FORCE_TPROXY_PORT, \"udp\": true, \"proxy\": strenv(EXODUS_FORCE_PROXY)}]"
 		fi
 	fi
-	if [ "$expr" != "." ]; then
-		EXODUS_FORCE_PROXY="$force_proxy" "$YQ" -M -i "$expr" "$RUN_PROFILE_PATH" || return 1
-	fi
+	# my.keenetic.net and keendns names must resolve to real addresses, the router answers them itself
+	expr="$expr | with(select((.dns.fake-ip-filter-mode // \"blacklist\") == \"blacklist\"); .dns.fake-ip-filter = ((.dns.fake-ip-filter // []) + [\"my.keenetic.net\", \"+.keenetic.pro\", \"+.keenetic.link\", \"+.keenetic.name\", \"+.keenetic.io\", \"my.netcraze.net\", \"+.netcraze.pro\", \"+.netcraze.link\", \"+.netcraze.io\"] | unique))"
+	EXODUS_FORCE_PROXY="$c_proxy_force_proxy" "$YQ" -M -i "$expr" "$RUN_PROFILE_PATH"
 }
 
 # the profile for startup as json, read by the rules and the web ui
@@ -226,12 +193,13 @@ profile_json() {
 
 # ports and dns of the profile for startup as p_* variables
 profile_params() {
-	eval "$(jq -r --arg rl "$c_core_redirect_listener_name" --arg tl "$c_core_tproxy_listener_name" '
+	eval "$(jq -r '
 		def listener(n; t): [(.listeners // [])[] | select(.name == n and .type == t)][0] // {};
-		def port_of(listen): (listen // "" | tostring) as $l | if ($l | test(":[0-9]+$")) then ($l | sub("^.*:"; "")) else "" end;
+		def digits: length > 0 and (explode | all(. >= 48 and . <= 57));
+		def port_of(listen): (listen // "" | tostring | split(":") | last // "") | if digits then . else "" end;
 		{
-			redir_port: (.["redir-port"] // listener($rl; "redir").port // ""),
-			tproxy_port: (.["tproxy-port"] // listener($tl; "tproxy").port // ""),
+			redir_port: (.["redir-port"] // ""),
+			tproxy_port: (.["tproxy-port"] // ""),
 			dns_port: (if .dns.enable == true then port_of(.dns.listen) else "" end),
 			dns_mode: (.dns["enhanced-mode"] // ""),
 			fake_ip_range: (.dns["fake-ip-range"] // ""),
@@ -246,19 +214,19 @@ profile_params() {
 # checks of the profile before start, the same as on openwrt
 check_profile() {
 	log "Profile" "Checking..."
-	if { [ "$c_proxy_ipv4_dns_hijack" = 1 ] || [ "$c_proxy_ipv6_dns_hijack" = 1 ]; } && [ -z "$p_dns_port" ]; then
+	if [ "$c_proxy_dns_hijack" = 1 ] && [ -z "$p_dns_port" ]; then
 		log "Profile" "Check failed."
 		log "Profile" "DNS should be enabled and listen should be defined."
 		return 1
 	fi
 	if [ "$c_proxy_tcp_mode" = "redirect" ] && [ -z "$p_redir_port" ]; then
 		log "Profile" "Check failed."
-		log "Profile" "Redirect Port/Listener should be defined."
+		log "Profile" "Redirect port should be defined."
 		return 1
 	fi
 	if { [ "$c_proxy_tcp_mode" = "tproxy" ] || [ "$c_proxy_udp_mode" = "tproxy" ]; } && [ -z "$p_tproxy_port" ]; then
 		log "Profile" "Check failed."
-		log "Profile" "TPROXY Port/Listener should be defined."
+		log "Profile" "TPROXY port should be defined."
 		return 1
 	fi
 	log "Profile" "Check passed."

@@ -59,8 +59,18 @@ API_JSON_PATH="$RUN_TMP/api.json"
 SESSIONS_DIR="$RUN_TMP/sessions"
 KEENETIC_VERSION_PATH="$RUN_TMP/keenetic_version.json"
 
-# keenetic rci on localhost, keeneticos 5.2+ asks for an access token
+# keenetic rci on localhost, it answers without authorization on keeneticos 4 and 5
 RCI_URL="${EXODUS_RCI_URL:-http://127.0.0.1:79/rci}"
+
+# listeners of dscp 61, the mark and the route table of tproxy like in xkeen
+# the core marks its own connections with 255 (routing-mark in mixin.jq), the router proxy lets them out
+FORCE_REDIR_PORT=7893
+FORCE_TPROXY_PORT=7894
+TPROXY_MARK=0x111
+TPROXY_MASK=0xffffffff
+TPROXY_RULE_PREF=100
+TPROXY_TABLE=111
+CORE_MARK=255
 
 prepare_files() {
 	mkdir -p "$LOG_DIR" "$RUN_TMP" "$SESSIONS_DIR" "$PROFILES_DIR" "$SUBSCRIPTIONS_DIR" "$RULE_PROVIDERS_DIR" "$PROXY_PROVIDERS_DIR"
@@ -119,6 +129,7 @@ pid_alive() {
 
 # config is a json file, every section.option is loaded as c_<section>_<option>
 # booleans become 1/0, lists of scalars are joined with spaces, null is empty
+# jq of entware has no regex (test, sub, capture), names are checked by their characters
 cfg_load() {
 	eval "$(jq -r '
 		def sh:
@@ -126,9 +137,10 @@ cfg_load() {
 			elif type == "array" then map(select(type != "object" and type != "array") | tostring) | join(" ")
 			elif . == null then ""
 			else tostring end;
+		def word: explode | all(. == 95 or (. >= 48 and . <= 57) or (. >= 65 and . <= 90) or (. >= 97 and . <= 122));
 		paths(type != "object") as $p
 		| select(($p | length) == 2 and ($p[0] | type) == "string" and ($p[1] | type) == "string")
-		| select(($p[0] + $p[1]) | test("^[A-Za-z0-9_]+$"))
+		| select(($p[0] + $p[1]) | word)
 		| "c_\($p[0])_\($p[1])=\(getpath($p) | sh | @sh)"
 	' "$CONFIG_PATH" 2> /dev/null)"
 }
@@ -173,29 +185,43 @@ core_version() {
 	echo "$version"
 }
 
-# keenetic rci, keeneticos 5.2+ needs an access token created in the web ui of the router
-# the token is passed in a curl config on stdin, so it is not visible in the process list
+# keenetic rci, the path follows the cli: show/ip/hotspot is "show ip hotspot"
 rci_get() {
-	local token; token=$(jq -r '.keenetic.rci_token // ""' "$CONFIG_PATH" 2> /dev/null)
-	if [ -n "$token" ]; then
-		printf 'header = "X-Ndma-Tkn: %s"\n' "$token" | curl -s -f -m 5 --connect-timeout 2 -K - "$RCI_URL/$1" 2> /dev/null
-	else
-		curl -s -f -m 5 --connect-timeout 2 "$RCI_URL/$1" 2> /dev/null
-	fi
+	curl -s -f -m 5 --connect-timeout 2 "$RCI_URL/$1" 2> /dev/null
+}
+
+# "show version" through ndmc, it talks to ndm over a unix socket and works when the rci does not
+# the text answer has "key: value" lines, the fields of the header are taken
+ndmc_version() {
+	command -v ndmc > /dev/null 2>&1 || return 1
+	ndmc -c "show version" 2> /dev/null | awk '
+		{
+			line = $0
+			sub(/^[ \t]+/, "", line)
+			i = index(line, ": ")
+			if (i < 2) next
+			key = substr(line, 1, i - 1)
+			value = substr(line, i + 2)
+			sub(/[ \t\r]+$/, "", value)
+			if (key ~ /^(title|release|model|device|hw_id)$/ && !(key in seen) && value != "") {
+				seen[key] = 1
+				print key "\t" value
+			}
+		}' | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]}) | add // empty'
 }
 
 # firmware version and model, cached for the uptime
 keenetic_version() {
+	local version
 	if [ ! -s "$KEENETIC_VERSION_PATH" ]; then
-		mkdir -p "$RUN_TMP"
-		rci_get "show/version" | jq -c 'select(type == "object")' > "$KEENETIC_VERSION_PATH.tmp" 2> /dev/null
-		if [ -s "$KEENETIC_VERSION_PATH.tmp" ]; then
-			mv -f "$KEENETIC_VERSION_PATH.tmp" "$KEENETIC_VERSION_PATH"
-		else
-			rm -f "$KEENETIC_VERSION_PATH.tmp"
+		version=$(rci_get "show/version" | jq -c 'select(type == "object" and (.title // .release // .model) != null)' 2> /dev/null)
+		[ -n "$version" ] || version=$(ndmc_version)
+		if [ -z "$version" ]; then
 			echo '{}'
 			return
 		fi
+		mkdir -p "$RUN_TMP"
+		echo "$version" > "$KEENETIC_VERSION_PATH"
 	fi
 	cat "$KEENETIC_VERSION_PATH"
 }
@@ -243,16 +269,15 @@ generate_hwid() {
 	fi
 }
 
+# headers for subscriptions with a hwid device limit (remnawave), one "name: value" per line, the web ui shows them too
+# a field the router did not give is not sent at all
 hwid_headers() {
-	# headers for subscriptions with a hwid device limit (remnawave), one "name: value" per line, the web ui shows them too
-	local hwid version
+	local hwid
 	hwid=$(cfg_get .config.hwid)
 	[ -n "$hwid" ] || hwid=$(generate_hwid)
-	version=$(keenetic_version)
-	echo "x-hwid: $hwid"
-	echo "x-device-os: KeeneticOS"
-	echo "x-ver-os: $(echo "$version" | jq -r '.title // .release // empty' 2> /dev/null)"
-	echo "x-device-model: $(echo "$version" | jq -r '.model // .device // "Keenetic"' 2> /dev/null)"
+	keenetic_version | jq -r --arg hwid "$hwid" '
+		["x-hwid", $hwid], ["x-device-os", "KeeneticOS"], ["x-ver-os", (.title // .release // "")], ["x-device-model", (.model // .device // "")]
+		| select(.[1] != "") | "\(.[0]): \(.[1])"' 2> /dev/null
 }
 
 # check a 5 field cron expression against the current minute

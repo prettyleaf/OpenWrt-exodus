@@ -5,30 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <title>Exodus</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230069d6'/%3E%3Cpath d='M4 4h8v2H6v1h5v2H6v1h6v2H4z' fill='white'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="style.css">
+<script>try { var t = localStorage.getItem('exodus.theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
 </head>
 <body>
-<header id="header">
+<header class="site-header">
 	<div class="container header-inner">
-		<a class="brand" href="#/status">Exodus</a>
-		<span id="indicator" class="indicator" hidden></span>
-		<nav id="menu"></nav>
-		<div class="header-right">
-			<span id="dirty" class="badge" hidden></span>
-			<button id="lang" class="btn btn-small" type="button"></button>
-			<button id="logout" class="btn btn-small" type="button" hidden></button>
+		<a class="brand" href="#/status">
+			<span class="logo-tile" data-logo></span>
+			<span>Exodus</span>
+		</a>
+		<span id="indicator" hidden></span>
+		<nav id="menu" class="nav" hidden></nav>
+		<div class="header-actions">
+			<button id="lang" class="btn btn-ghost btn-sm" type="button"></button>
+			<button id="theme" class="btn btn-ghost btn-icon btn-sm" type="button"></button>
+			<button id="logout" class="btn btn-ghost btn-icon btn-sm" type="button" hidden></button>
 		</div>
 	</div>
 </header>
-<div id="notifications" class="container"></div>
-<main id="content" class="container">
-	<div class="spinning"></div>
-</main>
+<main id="content" class="container"></main>
 <footer class="container footer">
 	<a href="https://github.com/prettyleaf/openwrt-exodus/tree/keenetic" target="_blank" rel="noopener">Exodus</a> · Mihomo · Keenetic
 </footer>
-<div id="modal" class="modal-overlay" hidden><div class="modal" id="modal-body"></div></div>
+<div id="savebar" class="savebar" hidden></div>
+<div id="toaster" class="toaster" aria-live="polite"></div>
+<div id="dialog" class="dialog-overlay" hidden></div>
 <script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>

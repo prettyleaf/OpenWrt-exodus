@@ -1,6 +1,6 @@
 # Mixin File
 # You can set any mihomo profile's config at here, it will mixin to the profile.
-# Mixin file have lower priority than the mixin options of the web ui.
+# It is merged on every start, the settings of the web ui have higher priority.
 #
 # Mihomo's Wiki: https://wiki.metacubex.one
 #

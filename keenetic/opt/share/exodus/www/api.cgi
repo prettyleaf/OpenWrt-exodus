@@ -191,6 +191,7 @@ action_subscription_update() {
 
 # segments, wi-fi points and devices for the device selection
 # rci gives names, wi-fi points and parental control; without it only the neighbours of the router are shown
+# no regex in jq: jq of entware is built without oniguruma, test() and sub() fail there
 action_hosts() {
 	local dir file iface
 	dir="$RUN_TMP/hosts.$$"
@@ -216,12 +217,15 @@ action_hosts() {
 		--slurpfile segments "$dir/segments.json" '
 		def list: if type == "array" then . elif type == "object" then [.] else [] end;
 		def pick(k): if type == "object" and has(k) then .[k] else . end;
+		def digits: length > 0 and (explode | all(. >= 48 and . <= 57));
+		def bridge: startswith("Bridge") and (ltrimstr("Bridge") | digits);
+		def access_point: startswith("WifiMaster") and (index("/AccessPoint") != null);
 		($interface[0] // {}) as $if
 		| (if ($if | type) == "object" then [$if | to_entries[] | select(.value | type == "object") | .value + {id: (.value.id // .key)}]
 		   elif ($if | type) == "array" then $if else [] end) as $ifaces
 		| ($hotspot[0] | pick("host") | list) as $hosts
 		| ($associations[0] | pick("station") | list) as $stations
-		| ([$ifaces[] | select((.id // "") | test("^Bridge[0-9]+$"))]) as $bridges
+		| ([$ifaces[] | select((.id // "") | bridge)]) as $bridges
 		| ($segments[0] + [$bridges[] | ("br" + (.id | ltrimstr("Bridge"))) as $ifname
 			| select($segments[0] | map(.ifname) | index($ifname) | not) | {ifname: $ifname, address: (.address // "")}]
 		  | map(
@@ -230,7 +234,7 @@ action_hosts() {
 			| ([$ifaces[] | select(.id == ("Bridge" + $n))][0] // {}) as $b
 			| $s + {name: ($b.description // $b["interface-name"] // ""), id: ($b.id // "")}
 		  ) | sort_by(.ifname)) as $segs
-		| ([$ifaces[] | select((.id // "") | test("^WifiMaster[0-9]+/AccessPoint[0-9]+$"))
+		| ([$ifaces[] | select((.id // "") | access_point)
 			| {id, ssid: (.ssid // ""), description: (.description // ""), state: (.state // .link // ""),
 			   segment: (.group // ((.usedby // []) | if type == "array" then .[0] else . end) // "")}]) as $points
 		| ([$hosts[] | select((.ap // "") != "") | {id: .ap, ssid: (.ssid // ""), description: "", state: "", segment: ""}]
@@ -239,7 +243,7 @@ action_hosts() {
 			rci: (($hotspot[0] != null) or ($interface[0] != null)),
 			segments: $segs,
 			aps: (($points + $extra) | map(. + {
-				band: (if (.id | test("^WifiMaster1/")) then "5 GHz" elif (.id | test("^WifiMaster2/")) then "6 GHz" else "2.4 GHz" end),
+				band: (if (.id | startswith("WifiMaster1/")) then "5 GHz" elif (.id | startswith("WifiMaster2/")) then "6 GHz" else "2.4 GHz" end),
 				clients: ((.id) as $id | [$stations[] | select(.ap == $id)] | length)
 			}) | sort_by(.id)),
 			hosts: (
@@ -360,9 +364,10 @@ action_debug() {
 	jq -n --rawfile content "$DEBUG_LOG_PATH" '{content: $content}' | ok
 }
 
+# the hwid and the headers sent with it, the web ui shows what the subscriptions get
 action_hwid() {
 	hwid_headers | jq -R -s --arg generated "$(generate_hwid)" '
-		{headers: (split("\n") | map(select(test("^[a-z-]+: ")) | capture("^(?<k>[a-z-]+): (?<v>.*)$") | {(.k): .v}) | add // {}), generated: $generated}' | ok
+		{headers: (split("\n") | map(select(index(": ") != null) | index(": ") as $i | {(.[:$i]): .[$i + 2:]}) | add // {}), generated: $generated}' | ok
 }
 
 gh_url() {

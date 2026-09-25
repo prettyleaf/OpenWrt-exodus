@@ -15,6 +15,7 @@
 # nat/mangle OUTPUT -> router proxy, off by default
 #
 # dscp like xkeen: 61 forces a separate listener with a chosen proxy, 62 bypasses, 63 proxies the device anyway
+# no regex in jq here: jq of entware is built without oniguruma
 
 SET_MAC="exodus_mac"
 SET_SRC4="exodus_src4"
@@ -38,7 +39,7 @@ fw_port_chunks() {
 	# shellcheck disable=SC2020
 	echo "$1" | tr ', ' '\n\n' | awk '
 		/^[0-9]+([-:][0-9]+)?$/ {
-			gsub("-", ":")
+			gsub(/-/, ":")
 			w = index($0, ":") ? 2 : 1
 			if (n + w > 15) { print chunk; chunk = ""; n = 0 }
 			chunk = chunk (chunk == "" ? "" : ",") $0
@@ -78,7 +79,6 @@ fw_words() {
 
 FW_IFACE='[A-Za-z0-9_.+-]{1,15}'
 FW_NUMBER='[0-9]{1,5}'
-FW_MARK='(0x[0-9A-Fa-f]{1,8}|[0-9]{1,10})(/(0x[0-9A-Fa-f]{1,8}|[0-9]{1,10}))?'
 
 # a line of the env file, the value is quoted for the shell
 fw_var() {
@@ -93,7 +93,7 @@ fw_prepare() {
 	v6=0
 	v6_nat=0
 	command -v iptables > /dev/null 2>&1 && v4=1
-	if { [ "$c_proxy_ipv6_proxy" = 1 ] || [ "$c_proxy_ipv6_dns_hijack" = 1 ]; } && command -v ip6tables > /dev/null 2>&1 && fw_ipv6_active; then
+	if [ "$c_proxy_ipv6" = 1 ] && command -v ip6tables > /dev/null 2>&1 && fw_ipv6_active; then
 		v6=1
 		ip6tables -w -t nat -S > /dev/null 2>&1 && v6_nat=1
 	fi
@@ -152,14 +152,14 @@ fw_prepare() {
 		fw_var fw_v4 "$v4"
 		fw_var fw_v6 "$v6"
 		fw_var fw_v6_nat "$v6_nat"
-		fw_var fw_proxy4 "$c_proxy_ipv4_proxy"
-		fw_var fw_proxy6 "$c_proxy_ipv6_proxy"
-		fw_var fw_dns4 "$c_proxy_ipv4_dns_hijack"
-		fw_var fw_dns6 "$c_proxy_ipv6_dns_hijack"
-		fw_var fw_ping "$c_proxy_fake_ip_ping_hijack"
+		fw_var fw_proxy4 1
+		fw_var fw_proxy6 "$c_proxy_ipv6"
+		fw_var fw_dns4 "$c_proxy_dns_hijack"
+		fw_var fw_dns6 "$c_proxy_dns_hijack"
+		fw_var fw_ping 1
 		fw_var fw_router "$c_proxy_router_proxy"
-		fw_var fw_lan "$c_proxy_lan_proxy"
-		fw_var fw_inbound "$(fw_words "$FW_IFACE" "$c_proxy_lan_inbound_interface")"
+		fw_var fw_lan 1
+		fw_var fw_inbound "br+"
 		fw_var fw_mode "$mode"
 		fw_var fw_items_mac "$items_mac"
 		fw_var fw_items_ip4 "$items_ip4"
@@ -176,14 +176,13 @@ fw_prepare() {
 		fw_var fw_dscp_force "$(fw_words '[0-9]|[1-5][0-9]|6[0-3]' "$c_proxy_dscp_force")"
 		fw_var fw_dscp_bypass "$(fw_words '[0-9]|[1-5][0-9]|6[0-3]' "$c_proxy_dscp_bypass")"
 		fw_var fw_dscp_proxy "$(fw_words '[0-9]|[1-5][0-9]|6[0-3]' "$c_proxy_dscp_proxy")"
-		fw_var fw_fwmark_bypass "$(fw_words "$FW_MARK" "$c_proxy_bypass_fwmark")"
 		fw_var fw_reserved4 "$c_proxy_reserved_ip"
 		fw_var fw_reserved6 "$c_proxy_reserved_ip6"
-		fw_var fw_mark "$(fw_words "$FW_MARK" "${c_routing_tproxy_fw_mark:-0x111}")"
-		fw_var fw_mask "$(fw_words "$FW_MARK" "${c_routing_tproxy_fw_mask:-0xffffffff}")"
-		fw_var fw_pref "$(fw_words "$FW_NUMBER" "${c_routing_tproxy_rule_pref:-100}")"
-		fw_var fw_table "$(fw_words "$FW_NUMBER" "${c_routing_tproxy_route_table:-111}")"
-		fw_var fw_core_mark "$(fw_words "$FW_MARK" "${c_routing_router_proxy_mark:-255}")"
+		fw_var fw_mark "$TPROXY_MARK"
+		fw_var fw_mask "$TPROXY_MASK"
+		fw_var fw_pref "$TPROXY_RULE_PREF"
+		fw_var fw_table "$TPROXY_TABLE"
+		fw_var fw_core_mark "$CORE_MARK"
 		fw_var fw_redir_port "$(fw_words "$FW_NUMBER" "$p_redir_port")"
 		fw_var fw_tproxy_port "$(fw_words "$FW_NUMBER" "$p_tproxy_port")"
 		fw_var fw_dns_port "$(fw_words "$FW_NUMBER" "$p_dns_port")"
@@ -329,14 +328,11 @@ fw_reserved() {
 	echo "-A $1 -m set --match-set exodus_rsv$2 dst $3 -j RETURN"
 }
 
-# traffic marked to bypass the proxy with dscp or fwmark
+# traffic marked by the devices to bypass the proxy
 fw_bypass() {
-	local dscp mark
+	local dscp
 	for dscp in $fw_dscp_bypass; do
 		echo "-A $1 -m dscp --dscp $dscp $2 -j RETURN"
-	done
-	for mark in $fw_fwmark_bypass; do
-		echo "-A $1 -m mark --mark $mark -j RETURN"
 	done
 }
 
@@ -620,8 +616,7 @@ fw_clean() {
 			done
 		done
 	done
-	table_id=$(cfg_get .routing.tproxy_route_table)
-	table_id="${table_id:-111}"
+	table_id="$TPROXY_TABLE"
 	for family in 4 6; do
 		while ip -"$family" rule del table "$table_id" > /dev/null 2>&1; do :; done
 		ip -"$family" route flush table "$table_id" > /dev/null 2>&1

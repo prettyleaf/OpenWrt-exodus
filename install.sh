@@ -318,9 +318,26 @@ cp -f "$src/keenetic/opt/etc/ndm/schedule.d/50-exodus.sh" /opt/etc/ndm/schedule.
 chmod 755 /opt/etc/init.d/S99exodus /opt/etc/ndm/netfilter.d/50-exodus.sh /opt/etc/ndm/schedule.d/50-exodus.sh
 ln -sf "$share_dir/exodus" /opt/bin/exodus
 [ -f "$home_dir/mixin.yaml" ] || cp -f "$src/keenetic/opt/etc/exodus/mixin.yaml" "$home_dir/mixin.yaml"
-# new options get their defaults, the values of the user win
+# new options get their defaults, the values of the user win, options removed from exodus are dropped
+# renamed options keep their values; no regex in jq, the jq of entware has none
+config_merge='
+	def moved($from; $to): if getpath($to) == null and getpath($from) != null then setpath($to; getpath($from)) else . end;
+	def known($user):
+		if type == "object" then
+			if ($user | type) == "object" then with_entries(.key as $k | if ($user | has($k)) then .value |= known($user[$k]) else . end) else . end
+		else $user end;
+	.[0] as $defaults
+	| .[1]
+	| moved(["proxy", "ipv4_dns_hijack"]; ["proxy", "dns_hijack"])
+	| moved(["proxy", "ipv6_proxy"]; ["proxy", "ipv6"])
+	| moved(["mixin", "authentications", 0, "username"]; ["mixin", "username"])
+	| moved(["mixin", "authentications", 0, "password"]; ["mixin", "password"])
+	| if .mixin.api_port == null and (.mixin.api_listen | type) == "string" then .mixin.api_port = (.mixin.api_listen | split(":") | last | tonumber? // null) else . end
+	| if .mixin.rule == false then .mixin.rules = ((.mixin.rules // []) | map(.enabled = false)) else . end
+	| . as $user
+	| $defaults | known($user)'
 if [ -f "$config" ]; then
-	if jq -s '.[0] * .[1]' "$src/keenetic/opt/etc/exodus/config.json" "$config" > "$config.new" 2> /dev/null && [ -s "$config.new" ]; then
+	if jq -s "$config_merge" "$src/keenetic/opt/etc/exodus/config.json" "$config" > "$config.new" 2> /dev/null && [ -s "$config.new" ]; then
 		mv -f "$config.new" "$config"
 	else
 		rm -f "$config.new"

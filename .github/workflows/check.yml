@@ -30,6 +30,12 @@ jobs:
           node --check keenetic/opt/share/exodus/www/app.js
           node --check keenetic/opt/share/exodus/www/i18n.js
 
+      - name: No regex in jq
+        # jq of entware is built without oniguruma: test, match, capture, sub, gsub, splits and split/2 fail there
+        run: |
+          ! grep -n -E '\b(test|match|capture|scan|splits|sub|gsub)\("|split\("[^"]*";' \
+            install.sh keenetic/opt/share/exodus/exodus keenetic/opt/share/exodus/lib/* keenetic/opt/share/exodus/www/api.cgi
+
       - name: Config and mixin
         run: |
           jq -e 'type == "object"' keenetic/opt/etc/exodus/config.json

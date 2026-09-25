@@ -1,11 +1,11 @@
 'use strict';
 
-// web ui of exodus for keenetic, a small imitation of luci-app-exodus
-// the config is edited as a draft copy and saved as a whole, like form.Map in luci
+// web ui of exodus for keenetic, built after shadcn/ui without any framework
+// the config is edited as a draft copy and saved as a whole
 
 (function () {
 
-// ---------- i18n ----------
+// ---------- storage and i18n ----------
 
 function storageGet(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -24,6 +24,66 @@ function _(text) {
         result = result.replace('%s', arguments[i]);
     }
     return result;
+}
+
+// ---------- icons ----------
+
+// lucide icons (ISC license), only the ones the pages use
+const ICONS = {
+    'play': '<polygon points="6 3 20 12 6 21 6 3"/>',
+    'square': '<rect width="14" height="14" x="5" y="5" rx="2"/>',
+    'rotate-cw': '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+    'refresh-cw': '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    'external-link': '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+    'log-out': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
+    'sun': '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+    'moon': '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+    'trash': '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+    'pencil': '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+    'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+    'upload': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
+    'plus': '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    'x': '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    'chevron-up': '<path d="m18 15-6-6-6 6"/>',
+    'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+    'eye': '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+    'circle-check': '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    'circle-alert': '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',
+    'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    'info': '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+    'wifi': '<path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/>',
+    'network': '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
+    'device': '<path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"/><path d="M10 19v-3.96 3.15"/><path d="M7 19h5"/><rect width="6" height="10" x="16" y="12" rx="2"/>',
+    'search': '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    'loader': '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+    'arrow-down': '<path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/>',
+    'link': '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    'list': '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
+    'inbox': '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+    'dashboard': '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+    'bug': '<path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/>'
+};
+
+// the EX mark of exodus, drawn with the current text color
+const LOGO = '<path d="M493 317.721L484.279 309H94.7214L86 317.721V387.493L173.214 474.707L164.493 483.429H94.7214L86 492.15V605.529L94.7214 614.25H167.4L184.843 631.693V707.279L193.564 716H484.279L493 707.279V622.971L484.279 614.25H202.286L184.843 596.807V503.779L193.564 495.057L260.429 561.921H484.279L493 553.2V468.893L484.279 460.171H306.943L266.243 419.471L274.964 410.75H484.279L493 402.029V317.721Z"/><path d="M616.307 309H540.721L532 317.721V393.307L682.698 544.479L673.977 553.2H624.555L532 646.229V707.279L540.721 716H604.205L688.512 631.693V564.829H703.048L848.879 716H930.279L939 707.279V631.693L788.302 480.521L797.023 471.8H846.445L939 378.771V317.721L930.279 309H866.795L782.488 393.307V460.171H767.952L616.307 309Z"/>';
+
+function svg(markup) {
+    const holder = document.createElement('span');
+    holder.innerHTML = markup;
+    return holder.firstChild;
+}
+
+function icon(name, cls) {
+    const el = svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`);
+    if (cls) {
+        el.setAttribute('class', cls);
+    }
+    return el;
+}
+
+function logo() {
+    return svg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="86 309 853 407" fill="currentColor" aria-hidden="true">${LOGO}</svg>`);
 }
 
 // ---------- dom ----------
@@ -57,7 +117,7 @@ function E(tag, attrs, children) {
 
 function append(el, children) {
     if (children == null || children === false) {
-        return;
+        return el;
     }
     if (Array.isArray(children)) {
         children.forEach((child) => append(el, child));
@@ -66,6 +126,7 @@ function append(el, children) {
     } else {
         el.appendChild(document.createTextNode(String(children)));
     }
+    return el;
 }
 
 function clear(el) {
@@ -75,9 +136,15 @@ function clear(el) {
     return el;
 }
 
+let uid = 0;
+
+function nextId() {
+    return `x${uid++}`;
+}
+
 function formatSize(bytes) {
     if (bytes == null) {
-        return '-';
+        return '—';
     }
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let i = 0;
@@ -88,18 +155,6 @@ function formatSize(bytes) {
     return `${Math.round(bytes * 10) / 10} ${units[i]}`;
 }
 
-function notify(message, type) {
-    const el = E('div', { class: `alert-message ${type || ''}` }, [
-        E('button', { class: 'close', type: 'button', onclick: () => el.remove() }, '×'),
-        message
-    ]);
-    document.getElementById('notifications').appendChild(el);
-    if (type !== 'error' && type !== 'warning') {
-        setTimeout(() => el.remove(), 6000);
-    }
-    return el;
-}
-
 function download(name, content, type) {
     const url = URL.createObjectURL(new Blob([content], { type: type || 'text/plain' }));
     const link = E('a', { href: url, download: name });
@@ -107,6 +162,22 @@ function download(name, content, type) {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ---------- toasts ----------
+
+const TOAST_ICONS = { success: 'circle-check', error: 'circle-alert', warning: 'triangle-alert', info: 'info' };
+
+function toast(message, type) {
+    type = type || 'success';
+    const el = E('div', { class: `toast toast-${type}`, role: type === 'error' ? 'alert' : 'status' }, [
+        icon(TOAST_ICONS[type] || 'info'),
+        E('div', {}, message),
+        E('button', { class: 'btn btn-ghost btn-icon', type: 'button', title: _('Close'), onclick: () => el.remove() }, icon('x'))
+    ]);
+    document.getElementById('toaster').appendChild(el);
+    setTimeout(() => el.remove(), type === 'error' ? 10000 : 5000);
+    return el;
 }
 
 // ---------- api ----------
@@ -127,7 +198,7 @@ async function api(action, params) {
     try {
         data = await response.json();
     } catch (e) {
-        data = { error: response.statusText };
+        data = { error: _('Invalid answer of the router (%s)', `${response.status} ${response.statusText}`) };
     }
     if (response.status === 401 && action !== 'login') {
         showLogin();
@@ -142,12 +213,12 @@ async function api(action, params) {
 function run(promise, success) {
     return Promise.resolve(promise).then((result) => {
         if (success) {
-            notify(success);
+            toast(success);
         }
         return result;
     }).catch((e) => {
         if (e.message !== _('Login required')) {
-            notify(e.message, 'error');
+            toast(e.message, 'error');
         }
         throw e;
     });
@@ -162,12 +233,16 @@ const state = {
     profiles: [],
     status: null,
     hosts: null,
-    interfaces: null,
-    proxies: null,
+    interfaces: [],
+    proxies: [],
+    hwid: {},
+    dirs: {},
+    files: {},
     invalid: new Set(),
     timers: [],
     statusTimer: null,
-    loginShown: false
+    loginShown: false,
+    editorFile: null
 };
 
 function clone(value) {
@@ -204,9 +279,9 @@ function isDirty() {
 }
 
 function updateDirty() {
-    const badge = document.getElementById('dirty');
-    badge.hidden = !isDirty();
-    badge.textContent = _('Unsaved changes');
+    const dirty = isDirty();
+    document.getElementById('savebar').hidden = !dirty;
+    document.body.classList.toggle('dirty', dirty);
 }
 
 async function loadAll() {
@@ -219,6 +294,33 @@ async function loadAll() {
     updateDirty();
 }
 
+// parts of a page that follow the status, redrawn when their key changes
+let liveViews = [];
+
+function live(renderFn, keyFn) {
+    const el = E('div', { class: 'contents' });
+    let last = null;
+    const update = () => {
+        const key = keyFn ? JSON.stringify(keyFn()) : null;
+        if (keyFn && key === last) {
+            return;
+        }
+        last = key;
+        append(clear(el), renderFn());
+    };
+    update();
+    liveViews.push(update);
+    return el;
+}
+
+function statusBadge() {
+    const status = state.status;
+    if (!status) {
+        return badge(_('Unknown'), 'outline');
+    }
+    return status.running ? badge(_('Running'), 'success', true) : badge(_('Stopped'), 'secondary', true);
+}
+
 async function refreshStatus() {
     try {
         state.status = await api('status');
@@ -227,14 +329,146 @@ async function refreshStatus() {
     }
     const indicator = document.getElementById('indicator');
     indicator.hidden = false;
-    indicator.classList.toggle('running', !!state.status.running);
-    indicator.title = state.status.running ? _('Running') : _('Not Running');
-    document.querySelectorAll('[data-status]').forEach((el) => {
-        el.textContent = state.status.running ? _('Running') : _('Not Running');
-        el.className = state.status.running ? 'status-running' : 'status-stopped';
-    });
-    document.querySelectorAll('[data-running-only]').forEach((el) => {
-        el.hidden = !state.status.running;
+    append(clear(indicator), statusBadge());
+    liveViews.forEach((update) => update());
+}
+
+// ---------- components ----------
+
+// variant: default, secondary, outline, ghost, destructive, destructive-outline; size: sm
+function btn(label, opts) {
+    opts = opts || {};
+    const classes = ['btn', `btn-${opts.variant || 'default'}`];
+    if (opts.size) {
+        classes.push(`btn-${opts.size}`);
+    }
+    if (!label) {
+        classes.push('btn-icon');
+    }
+    const el = E('button', { type: opts.submit ? 'submit' : 'button', class: classes.join(' '), title: opts.title || null, disabled: opts.disabled || null, 'aria-label': label ? null : opts.title }, [
+        opts.icon ? icon(opts.icon) : null,
+        label ? E('span', {}, label) : null
+    ]);
+    if (opts.onClick) {
+        el.addEventListener('click', async (ev) => {
+            el.disabled = true;
+            const spinner = icon('loader', 'spin');
+            // a spinner only for actions that take a while
+            const timer = setTimeout(() => {
+                el.classList.add('loading');
+                el.prepend(spinner);
+            }, 150);
+            try {
+                await opts.onClick(ev);
+            } catch (e) {
+                // errors of api calls are already shown by run()
+                console.error(e);
+            } finally {
+                clearTimeout(timer);
+                spinner.remove();
+                el.classList.remove('loading');
+                el.disabled = false;
+            }
+        });
+    }
+    return el;
+}
+
+function badge(text, variant, dot) {
+    return E('span', { class: `badge badge-${variant || 'secondary'}` }, [dot ? E('span', { class: 'dot' }) : null, text]);
+}
+
+function alertBox(variant, title, body) {
+    const icons = { destructive: 'circle-alert', warning: 'triangle-alert' };
+    return E('div', { class: `alert alert-${variant || 'default'}`, role: 'alert' }, [
+        icon(icons[variant] || 'info'),
+        title ? E('div', { class: 'alert-title' }, title) : null,
+        body ? E('div', { class: title ? 'alert-body' : 'alert-title' }, body) : null
+    ]);
+}
+
+function card(opts) {
+    const header = opts.title || opts.description || opts.action ? E('div', { class: 'card-header' }, [
+        opts.title ? E('div', { class: 'card-title' }, opts.title) : null,
+        opts.description ? E('div', { class: 'card-description' }, opts.description) : null,
+        opts.action ? E('div', { class: 'card-action' }, opts.action) : null
+    ]) : null;
+    return E('section', { class: `card ${opts.class || ''}` }, [
+        header,
+        opts.content != null ? E('div', { class: 'card-content' }, opts.content) : null,
+        opts.footer ? E('div', { class: 'card-footer' }, opts.footer) : null
+    ]);
+}
+
+function pageHeader(title, description, actions) {
+    return E('div', { class: 'page-header' }, [
+        E('div', {}, [E('h1', {}, title), description ? E('p', {}, description) : null]),
+        actions ? E('div', { class: 'row' }, actions) : null
+    ]);
+}
+
+function loader() {
+    return E('div', { class: 'loader' }, icon('loader', 'spin'));
+}
+
+function empty(iconName, text) {
+    return E('div', { class: 'empty' }, [icon(iconName), E('div', {}, text)]);
+}
+
+function infoList(rows) {
+    return E('dl', { class: 'info-list' }, rows.filter(Boolean).map(([title, value]) => [E('dt', {}, title), E('dd', {}, value)]));
+}
+
+// ---------- dialog ----------
+
+let dialogClose = null;
+
+function openDialog(opts) {
+    const overlay = document.getElementById('dialog');
+    const box = E('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true' }, [
+        E('div', { class: 'dialog-header' }, [
+            E('h2', { class: 'dialog-title' }, opts.title),
+            opts.description ? E('p', { class: 'dialog-description' }, opts.description) : null
+        ]),
+        opts.content ? E('div', { class: 'stack' }, opts.content) : null,
+        opts.footer ? E('div', { class: 'dialog-footer' }, opts.footer) : null,
+        E('button', { type: 'button', class: 'btn btn-ghost btn-icon btn-sm dialog-close', title: _('Close'), onclick: () => closeDialog() }, icon('x'))
+    ]);
+    append(clear(overlay), box);
+    overlay.hidden = false;
+    dialogClose = opts.onClose || null;
+    const focus = box.querySelector('.stack input, .stack select') || box.querySelector('.dialog-footer .btn:last-child');
+    if (focus) {
+        focus.focus();
+    }
+}
+
+function closeDialog(result) {
+    const overlay = document.getElementById('dialog');
+    if (overlay.hidden) {
+        return;
+    }
+    overlay.hidden = true;
+    clear(overlay);
+    const callback = dialogClose;
+    dialogClose = null;
+    if (callback) {
+        callback(result);
+    }
+}
+
+function confirmDialog(title, description, opts) {
+    opts = opts || {};
+    return new Promise((resolve) => {
+        openDialog({
+            title: title,
+            description: description,
+            footer: [
+                btn(_('Cancel'), { variant: 'outline', onClick: () => closeDialog(false) }),
+                btn(opts.confirm || _('Continue'), { variant: opts.destructive ? 'destructive' : 'default', onClick: () => closeDialog(true) })
+            ],
+            onClose: (result) => resolve(result === true)
+        });
     });
 }
 
@@ -242,9 +476,17 @@ async function refreshStatus() {
 
 let dependents = [];
 
+function dependOn(el, depends) {
+    if (depends) {
+        dependents.push({ el: el, depends: depends });
+        el.hidden = !depends();
+    }
+    return el;
+}
+
 function changed() {
     for (const dependent of dependents) {
-        dependent.el.style.display = dependent.depends() ? '' : 'none';
+        dependent.el.hidden = !dependent.depends();
     }
     updateDirty();
 }
@@ -258,8 +500,6 @@ function markInvalid(el, id, invalid) {
     }
 }
 
-let widgetId = 0;
-
 const validators = {
     port: (v) => /^\d+$/.test(v) && +v >= 1 && +v <= 65535,
     uinteger: (v) => /^\d+$/.test(v),
@@ -267,8 +507,6 @@ const validators = {
     mac: (v) => /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(v),
     ip4: (v) => /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test(v) && v.split('/')[0].split('.').every((x) => +x <= 255),
     ip6: (v) => /^[0-9a-f:.]*:[0-9a-f:.]*(\/\d{1,3})?$/i.test(v),
-    hostport: (v) => /^(\[[0-9a-f:.]*\]|[0-9a-z.-]*):\d{1,5}$/i.test(v),
-    fwmark: (v) => /^(0x[0-9a-f]+|\d+)(\/(0x[0-9a-f]+|\d+))?$/i.test(v),
     cron: (v) => v.trim().split(/\s+/).length === 5,
     portlist: (v) => /^\d+(-\d+)?([ ,]+\d+(-\d+)?)*$/.test(v.trim())
 };
@@ -279,41 +517,79 @@ function validate(el, type, value) {
     }
     const valid = value === '' || value == null || validators[type](String(value));
     if (el.dataset.wid == null) {
-        el.dataset.wid = String(widgetId++);
+        el.dataset.wid = nextId();
     }
     markInvalid(el, el.dataset.wid, !valid);
     return valid;
 }
 
-function flag(r) {
-    const input = E('input', { type: 'checkbox' });
-    input.checked = r.get() === true;
-    input.addEventListener('change', () => {
-        r.set(input.checked);
+// the control a label points to
+function labelTarget(control) {
+    const target = control.matches('input, select, textarea, button') ? control : control.querySelector('input, select, textarea');
+    if (!target) {
+        return null;
+    }
+    if (!target.id) {
+        target.id = nextId();
+    }
+    return target.id;
+}
+
+// label, control and a muted description under it; descriptions are static strings and may hold <code>
+function field(label, control, description, depends) {
+    return dependOn(E('div', { class: 'field' }, [
+        label ? E('label', { class: 'label', for: labelTarget(control) }, label) : null,
+        control,
+        description ? E('p', { class: 'description', html: description }) : null
+    ]), depends);
+}
+
+function switchControl(r) {
+    const el = E('button', { type: 'button', role: 'switch', class: 'switch' }, E('span', { class: 'switch-thumb' }));
+    const sync = () => el.setAttribute('aria-checked', r.get() === true ? 'true' : 'false');
+    sync();
+    el.addEventListener('click', () => {
+        r.set(r.get() !== true);
+        sync();
         changed();
     });
-    return input;
+    return el;
 }
 
-// null (profile value is kept), false or true
-function tri(r) {
-    return select(r, [['0', _('Disable')], ['1', _('Enable')]], {
-        optional: true,
-        toValue: (v) => (v === '' ? null : v === '1'),
-        fromValue: (v) => (v == null ? '' : (v ? '1' : '0'))
+// an option that is on or off: text on the left, switch on the right
+function switchField(label, description, r, depends) {
+    const control = switchControl(r);
+    control.id = nextId();
+    return dependOn(E('div', { class: 'field-switch' }, [
+        E('div', {}, [
+            E('label', { class: 'label', for: control.id }, label),
+            description ? E('p', { class: 'description', html: description }) : null
+        ]),
+        control
+    ]), depends);
+}
+
+function checkbox(r) {
+    const el = E('input', { type: 'checkbox', class: 'checkbox' });
+    el.checked = r.get() === true;
+    el.addEventListener('change', () => {
+        r.set(el.checked);
+        changed();
     });
+    return el;
 }
 
+// options: [[value, label]]; opts.optional adds an empty choice (null keeps the value of the profile)
 function select(r, options, opts) {
     opts = opts || {};
-    const el = E('select');
+    const el = E('select', { class: 'select' });
     if (opts.optional) {
-        el.appendChild(E('option', { value: '' }, opts.placeholder || _('Unmodified')));
+        el.appendChild(E('option', { value: '' }, opts.placeholder || _('From profile')));
     }
-    const fromValue = opts.fromValue || ((v) => (v == null ? '' : String(v)));
-    const toValue = opts.toValue || ((v) => (v === '' ? (opts.empty !== undefined ? opts.empty : null) : (opts.number ? Number(v) : v)));
+    const fromValue = (v) => (v == null ? '' : String(v));
+    const toValue = (v) => (v === '' ? (opts.empty !== undefined ? opts.empty : null) : (opts.number ? Number(v) : v));
     const current = fromValue(r.get());
-    let found = current === '';
+    let found = current === '' && opts.optional;
     for (const [value, label] of options) {
         el.appendChild(E('option', { value: value }, label));
         if (value === current) {
@@ -321,7 +597,7 @@ function select(r, options, opts) {
         }
     }
     // a value set in the file is shown even when it is not one of the choices
-    if (!found) {
+    if (!found && current !== '') {
         el.appendChild(E('option', { value: current }, current));
     }
     el.value = current;
@@ -332,32 +608,34 @@ function select(r, options, opts) {
     return el;
 }
 
-let datalistId = 0;
-
 function datalist(values) {
-    const id = `dl${datalistId++}`;
+    const id = nextId();
     return {
         id: id,
         el: E('datalist', { id: id }, values.map((v) => (Array.isArray(v) ? E('option', { value: v[0] }, v[1]) : E('option', { value: v }))))
     };
 }
 
-// text or number, empty is null unless opts.empty is set
+// text or number, empty is null unless opts.empty is set; a value equal to opts.empty is shown as the placeholder
 function input(r, opts) {
     opts = opts || {};
-    const attrs = { type: opts.password ? 'password' : 'text', placeholder: opts.placeholder || null, autocomplete: 'off', spellcheck: 'false' };
+    const attrs = {
+        class: 'input',
+        type: opts.password ? 'password' : 'text',
+        placeholder: opts.placeholder != null ? String(opts.placeholder) : null,
+        autocomplete: opts.password ? 'new-password' : 'off',
+        spellcheck: 'false',
+        inputmode: opts.number ? 'numeric' : null,
+        readonly: opts.readonly || null
+    };
     let list = null;
     if (opts.values) {
         list = datalist(opts.values);
         attrs.list = list.id;
     }
-    if (opts.readonly) {
-        attrs.readonly = true;
-    }
     const el = E('input', attrs);
     const value = r.get();
-    // the default value is shown as the placeholder, like an empty option of luci
-    el.value = value == null || (opts.placeholder && opts.empty !== undefined && value === opts.empty) ? '' : String(value);
+    el.value = value == null || (opts.placeholder != null && opts.empty !== undefined && value === opts.empty) ? '' : String(value);
     validate(el, opts.type, el.value);
     el.addEventListener('input', () => {
         const text = el.value.trim();
@@ -375,247 +653,188 @@ function input(r, opts) {
         changed();
     });
     if (opts.password) {
-        const toggle = E('button', { class: 'btn btn-small', type: 'button', title: _('Reveal/hide password'), onclick: () => { el.type = el.type === 'password' ? 'text' : 'password'; } },
-            E('span', { html: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>' }));
-        return E('div', { class: 'inline-actions' }, [el, toggle, list && list.el]);
+        const reveal = E('button', { class: 'btn btn-ghost btn-icon', type: 'button', title: _('Show or hide'), onclick: () => { el.type = el.type === 'password' ? 'text' : 'password'; } }, icon('eye'));
+        return E('div', { class: 'input-group' }, [el, reveal]);
     }
     return list ? E('div', {}, [el, list.el]) : el;
 }
 
-// list of strings like DynamicList of luci
-function dynlist(r, opts) {
+// a list of short values as removable tags, Enter, space or comma adds what is typed
+function tags(r, opts) {
     opts = opts || {};
-    const container = E('div', { class: 'dynlist' });
-    let list = null;
-    if (opts.values) {
-        list = datalist(opts.values);
-    }
+    const box = E('div', { class: 'tags' });
+    const list = opts.values ? datalist(opts.values) : null;
+    const entry = E('input', { type: 'text', placeholder: opts.placeholder || _('Add'), spellcheck: 'false', autocomplete: 'off', list: list ? list.id : null });
+    const wid = nextId();
     const values = () => (Array.isArray(r.get()) ? r.get() : []);
     const render = () => {
-        clear(container);
+        box.querySelectorAll('.tag').forEach((tag) => tag.remove());
+        entry.placeholder = values().length > 0 ? '' : (opts.placeholder || _('Add'));
         values().forEach((value, index) => {
-            const el = E('input', { type: 'text', value: String(value), spellcheck: 'false' });
-            validate(el, opts.type, String(value));
-            el.addEventListener('input', () => {
-                const text = el.value.trim();
-                if (!validate(el, opts.type, text)) {
-                    updateDirty();
-                    return;
-                }
-                const next = values().slice();
-                next[index] = opts.number ? Number(text) : text;
-                r.set(next);
-                changed();
-            });
-            container.appendChild(E('div', { class: 'item' }, [
-                el,
-                E('button', { class: 'btn btn-small', type: 'button', title: _('Delete'), onclick: () => {
-                    if (el.dataset.wid != null) {
-                        state.invalid.delete(el.dataset.wid);
-                    }
+            box.insertBefore(E('span', { class: 'tag' }, [
+                E('span', { title: String(value) }, String(value)),
+                E('button', { type: 'button', title: _('Delete'), onclick: (ev) => {
+                    ev.stopPropagation();
                     const next = values().slice();
                     next.splice(index, 1);
                     r.set(next);
                     render();
                     changed();
-                } }, '✕')
-            ]));
+                } }, icon('x'))
+            ]), entry);
         });
-        const add = E('input', { type: 'text', placeholder: opts.placeholder || _('Add'), list: list ? list.id : null, spellcheck: 'false' });
-        const addValue = () => {
-            const text = add.value.trim();
-            if (text === '') {
-                return;
+    };
+    const add = () => {
+        const parts = entry.value.split(/[\s,]+/).filter(Boolean);
+        if (parts.length === 0) {
+            markInvalid(box, wid, false);
+            return;
+        }
+        if (opts.type && parts.some((v) => !validators[opts.type](v))) {
+            markInvalid(box, wid, true);
+            updateDirty();
+            return;
+        }
+        const next = values().slice();
+        for (const part of parts) {
+            const value = opts.number ? Number(part) : part;
+            if (!next.includes(value)) {
+                next.push(value);
             }
-            if (opts.type && !validators[opts.type](text)) {
-                add.classList.add('invalid');
-                return;
-            }
-            r.set(values().concat([opts.number ? Number(text) : text]));
+        }
+        r.set(next);
+        entry.value = '';
+        markInvalid(box, wid, false);
+        render();
+        changed();
+    };
+    entry.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ',' || ev.key === ' ') {
+            ev.preventDefault();
+            add();
+        } else if (ev.key === 'Backspace' && entry.value === '' && values().length > 0) {
+            r.set(values().slice(0, -1));
             render();
             changed();
-            container.querySelector('.add input').focus();
-        };
-        add.addEventListener('keydown', (ev) => {
-            add.classList.remove('invalid');
-            if (ev.key === 'Enter') {
-                ev.preventDefault();
-                addValue();
-            }
-        });
-        add.addEventListener('change', () => {
-            // a choice from the datalist is added at once
-            if (opts.values && opts.values.some((v) => (Array.isArray(v) ? v[0] : v) === add.value)) {
-                addValue();
-            }
-        });
-        container.appendChild(E('div', { class: 'add' }, [add, E('button', { class: 'btn btn-small', type: 'button', onclick: addValue }, '+'), list && list.el]));
+        }
+    });
+    entry.addEventListener('input', () => {
+        if (entry.value === '') {
+            markInvalid(box, wid, false);
+        }
+        // a choice from the datalist is added at once
+        if (opts.values && opts.values.some((v) => (Array.isArray(v) ? v[0] : v) === entry.value)) {
+            add();
+        }
+    });
+    entry.addEventListener('blur', add);
+    box.addEventListener('click', () => entry.focus());
+    append(box, [entry, list && list.el]);
+    render();
+    return box;
+}
+
+// two or three choices like a toggle group
+function segmented(r, options) {
+    const el = E('div', { class: 'segmented', role: 'radiogroup' });
+    const render = () => {
+        clear(el);
+        for (const [value, label] of options) {
+            const active = r.get() === value;
+            el.appendChild(E('button', { type: 'button', role: 'radio', 'aria-checked': active ? 'true' : 'false', class: `tabs-trigger${active ? ' active' : ''}`, onclick: () => {
+                r.set(value);
+                render();
+                changed();
+            } }, label));
+        }
     };
     render();
-    return container;
-}
-
-// a row of a section: title, widget, description; depends hides it like depends() of luci
-function row(title, widget, description, depends) {
-    const el = E('div', { class: 'cbi-value' }, [
-        E('label', { class: 'cbi-value-title' }, title || ''),
-        E('div', { class: 'cbi-value-field' }, [widget, description ? E('div', { class: 'cbi-value-description', html: description }) : null])
-    ]);
-    if (depends) {
-        dependents.push({ el: el, depends: depends });
-        el.style.display = depends() ? '' : 'none';
-    }
     return el;
-}
-
-function section(title, children, description) {
-    return E('div', { class: 'cbi-section' }, [
-        title ? E('h3', {}, title) : null,
-        description ? E('div', { class: 'cbi-section-descr', html: description }) : null,
-        children
-    ]);
 }
 
 // tabs keep their choice while the page is open
 const tabChoice = {};
 
 function tabs(id, list) {
-    const menu = E('ul', { class: 'cbi-tabmenu' });
-    const panes = E('div');
     const selected = tabChoice[id] && list.some((t) => t[0] === tabChoice[id]) ? tabChoice[id] : list[0][0];
+    const triggers = E('div', { class: 'tabs-list', role: 'tablist' });
+    const container = E('div', { class: 'tabs' }, triggers);
+    const panes = [];
     for (const [key, title, content] of list) {
-        const pane = E('div', { style: { display: key === selected ? '' : 'none' } }, content);
-        const link = E('a', { class: key === selected ? 'active' : null }, title);
-        link.addEventListener('click', () => {
+        const pane = E('div', { class: 'stack', role: 'tabpanel', hidden: key !== selected }, content);
+        const trigger = E('button', { type: 'button', role: 'tab', class: `tabs-trigger${key === selected ? ' active' : ''}`, 'aria-selected': key === selected ? 'true' : 'false' }, title);
+        trigger.addEventListener('click', () => {
             tabChoice[id] = key;
-            menu.querySelectorAll('a').forEach((a) => a.classList.remove('active'));
-            link.classList.add('active');
-            Array.from(panes.children).forEach((p) => { p.style.display = 'none'; });
-            pane.style.display = '';
+            triggers.querySelectorAll('.tabs-trigger').forEach((t) => {
+                t.classList.remove('active');
+                t.setAttribute('aria-selected', 'false');
+            });
+            trigger.classList.add('active');
+            trigger.setAttribute('aria-selected', 'true');
+            panes.forEach((p) => { p.hidden = true; });
+            pane.hidden = false;
         });
-        menu.appendChild(E('li', {}, link));
-        panes.appendChild(pane);
+        triggers.appendChild(trigger);
+        panes.push(pane);
+        container.appendChild(pane);
     }
-    return E('div', {}, [menu, panes]);
-}
-
-// table of objects like TableSection of luci, columns: [key, title, widget(ref, row)]
-function table(r, columns, opts) {
-    opts = opts || {};
-    const container = E('div');
-    const rows = () => (Array.isArray(r.get()) ? r.get() : []);
-    const move = (index, delta) => {
-        const next = rows().slice();
-        const [item] = next.splice(index, 1);
-        next.splice(index + delta, 0, item);
-        r.set(next);
-        render();
-        changed();
-    };
-    const actions = (index, length) => E('span', { class: 'inline-actions' }, [
-        opts.sortable !== false ? E('button', { class: 'btn btn-small', type: 'button', disabled: index === 0, onclick: () => move(index, -1) }, '↑') : null,
-        opts.sortable !== false ? E('button', { class: 'btn btn-small', type: 'button', disabled: index === length - 1, onclick: () => move(index, 1) }, '↓') : null,
-        opts.addremove !== false ? E('button', { class: 'btn btn-small cbi-button-negative', type: 'button', onclick: () => {
-            const next = rows().slice();
-            next.splice(index, 1);
-            r.set(next);
-            render();
-            changed();
-        } }, _('Delete')) : null
-    ]);
-    const render = () => {
-        clear(container);
-        const list = rows();
-        if (opts.cards) {
-            const cards = E('div', { class: 'cards' });
-            list.forEach((item, index) => {
-                const saved = dependents;
-                dependents = [];
-                const fields = columns.map(([key, title, widget, description, depends]) =>
-                    row(title, widget(objRef(item, key), item), description, depends ? () => depends(item) : null));
-                const local = dependents;
-                dependents = saved;
-                const refresh = () => local.forEach((d) => { d.el.style.display = d.depends() ? '' : 'none'; });
-                const card = E('div', { class: 'card' }, [E('div', { class: 'card-head' }, actions(index, list.length)), fields]);
-                card.addEventListener('change', refresh);
-                card.addEventListener('input', refresh);
-                cards.appendChild(card);
-            });
-            container.appendChild(cards);
-        } else {
-            const tbl = E('table', { class: 'table' }, [
-                E('tr', {}, columns.map((c) => E('th', {}, c[1])).concat([E('th')]))
-            ]);
-            list.forEach((item, index) => {
-                tbl.appendChild(E('tr', {}, columns.map(([key, , widget]) => E('td', {}, widget(objRef(item, key), item)))
-                    .concat([E('td', { class: 'row-actions' }, actions(index, list.length))])));
-            });
-            if (list.length === 0) {
-                tbl.appendChild(E('tr', {}, E('td', { colspan: columns.length + 1, class: 'muted' }, _('This section contains no values yet'))));
-            }
-            container.appendChild(E('div', { class: 'table-wrap' }, tbl));
-        }
-        if (opts.addremove !== false) {
-            container.appendChild(E('div', { style: { marginTop: '8px' } }, E('button', { class: 'btn cbi-button-positive', type: 'button', onclick: () => {
-                r.set(rows().concat([opts.create ? opts.create() : { enabled: true }]));
-                render();
-                changed();
-            } }, _('Add'))));
-        }
-    };
-    render();
     return container;
 }
 
-function button(title, onclick, style) {
-    const el = E('button', { class: `btn ${style || ''}`, type: 'button' }, title);
-    el.addEventListener('click', async () => {
-        el.disabled = true;
-        try {
-            await onclick();
-        } catch (e) {
-            // errors of api calls are already shown by run()
-            console.error(e);
-        } finally {
-            el.disabled = false;
-        }
-    });
-    return el;
+// ---------- saving ----------
+
+function renderSavebar() {
+    append(clear(document.getElementById('savebar')), [
+        E('div', { class: 'savebar-text' }, [E('span', { class: 'dot' }), _('Unsaved changes')]),
+        E('div', { class: 'row' }, [
+            btn(_('Reset'), { variant: 'ghost', size: 'sm', onClick: resetDraft }),
+            btn(_('Save'), { variant: 'outline', size: 'sm', onClick: () => save('none') }),
+            btn(_('Save & Apply'), { size: 'sm', onClick: () => save('restart') })
+        ])
+    ]);
 }
 
-// Save & Apply, Save, Reset at the bottom like luci
-function pageActions() {
-    return E('div', { class: 'cbi-page-actions' }, [
-        button(_('Save & Apply'), () => save('restart'), 'cbi-button-apply'),
-        button(_('Save'), () => save('none'), 'cbi-button-save'),
-        button(_('Reset'), () => {
-            state.draft = clone(state.config);
-            state.invalid.clear();
-            render();
-        })
-    ]);
+function resetDraft() {
+    state.draft = clone(state.config);
+    state.invalid.clear();
+    render();
 }
 
 async function save(apply) {
     if (state.invalid.size > 0) {
-        notify(_('Some fields are invalid, cannot save values!'), 'error');
-        throw new Error('invalid');
+        toast(_('Some fields are invalid, fix them before saving.'), 'error');
+        return;
     }
+    const oldPort = state.config.web && state.config.web.port;
+    const newPort = state.draft.web && state.draft.web.port;
     await run(api('config_set', { config: state.draft, apply: apply }), apply === 'restart' ? _('Settings are saved, the service is restarting.') : _('Settings are saved.'));
     state.config = clone(state.draft);
     updateDirty();
     if (apply === 'restart') {
         setTimeout(refreshStatus, 3000);
     }
+    // the web ui moves to the new port
+    if (newPort && oldPort !== newPort) {
+        toast(_('The web UI moves to port %s.', newPort), 'info');
+        setTimeout(() => {
+            location.href = `${location.protocol}//${location.hostname}:${newPort}/`;
+        }, 2500);
+    }
 }
 
-// ---------- dashboard ----------
+// ---------- service ----------
+
+async function serviceOp(op) {
+    const messages = { start: _('The service is starting.'), stop: _('The service is stopping.'), restart: _('The service is restarting.') };
+    await run(api('service', { op: op }), messages[op]);
+    [1500, 4000, 8000].forEach((delay) => setTimeout(refreshStatus, delay));
+}
 
 function openDashboard() {
     const info = (state.status && state.status.api) || {};
     const listen = info.tls_listen || info.listen;
     if (!listen) {
-        notify(_('API has not been configured'), 'error');
+        toast(_('The dashboard is available when the service is running.'), 'warning');
         return;
     }
     const protocol = info.tls_listen ? 'https' : 'http';
@@ -625,6 +844,32 @@ function openDashboard() {
     const path = info.ui_name ? `/ui/${info.ui_name}/` : '/ui/';
     const url = `${protocol}://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${port}${path}?${query}`;
     window.open(url, '_blank', 'noopener');
+}
+
+const CORE_TITLES = { meta: 'Mihomo Meta', alpha: 'Mihomo Alpha', prizrak: 'Prizrak-Core' };
+
+function profileTitle(profile) {
+    if (!profile) {
+        return null;
+    }
+    const type = profile.substring(0, profile.indexOf(':'));
+    const id = profile.substring(profile.indexOf(':') + 1);
+    if (type === 'subscription') {
+        const sub = (state.draft.subscriptions || []).find((s) => s.id === id);
+        return sub ? sub.name : id;
+    }
+    return id;
+}
+
+function profileChoices() {
+    const choices = [];
+    for (const s of state.draft.subscriptions || []) {
+        choices.push([`subscription:${s.id}`, `${_('Subscription')}: ${s.name}`]);
+    }
+    for (const p of state.profiles) {
+        choices.push([`file:${p.name}`, `${_('File')}: ${p.name}`]);
+    }
+    return choices;
 }
 
 // ---------- device selection ----------
@@ -643,15 +888,15 @@ function describeItem(item) {
     const value = itemValue(item);
     if (type === 'iface') {
         const segment = hosts.segments.find((s) => s.ifname === value);
-        return `${_('Segment')}: ${segment && segment.name ? `${segment.name} (${value})` : value}`;
+        return `${_('Segment')}: ${segment && segment.name ? segment.name : value}`;
     }
     if (type === 'ap') {
         const ap = hosts.aps.find((a) => a.id === value);
-        return `${_('Wi-Fi')}: ${ap ? `${ap.ssid || ap.description || value} (${ap.band})` : value}`;
+        return `Wi-Fi: ${ap ? `${ap.ssid || ap.description || value} (${ap.band})` : value}`;
     }
     if (type === 'mac') {
         const host = hosts.hosts.find((h) => h.mac === value.toUpperCase());
-        return host && host.name ? `${host.name} (${value})` : value;
+        return host && (host.name || host.hostname) ? host.name || host.hostname : value;
     }
     return value;
 }
@@ -675,6 +920,14 @@ function parseItem(text) {
     return null;
 }
 
+async function loadHosts() {
+    try {
+        state.hosts = await api('hosts');
+    } catch (e) {
+        state.hosts = { rci: false, segments: [], aps: [], hosts: [], error: e.message };
+    }
+}
+
 function devicePicker() {
     const container = E('div', { class: 'picker' });
     const items = () => {
@@ -694,80 +947,95 @@ function devicePicker() {
     };
     let filter = '';
 
-    const option = (item, title, meta, extra) => {
-        const checkbox = E('input', { type: 'checkbox' });
-        checkbox.checked = items().includes(item);
-        checkbox.addEventListener('change', () => toggle(item, checkbox.checked));
-        return E('label', { class: `picker-item ${extra && extra.inactive ? 'inactive' : ''}` }, [
-            checkbox,
-            E('div', {}, [E('div', { class: 'title' }, [title, extra && extra.tags]), meta ? E('div', { class: 'meta' }, meta) : null])
+    const option = (item, iconName, title, meta, extra) => {
+        const checked = items().includes(item);
+        const box = E('input', { type: 'checkbox', class: 'checkbox' });
+        box.checked = checked;
+        box.addEventListener('change', () => toggle(item, box.checked));
+        return E('label', { class: `picker-item${checked ? ' selected' : ''}${extra && extra.inactive ? ' inactive' : ''}` }, [
+            box,
+            icon(iconName),
+            E('div', { class: 'picker-text' }, [
+                E('div', { class: 'picker-title' }, [E('span', {}, title), extra && extra.tags]),
+                meta ? E('div', { class: 'picker-meta' }, meta) : null
+            ])
         ]);
     };
+
+    const group = (title, count, content, action) => E('div', { class: 'picker-group' }, [
+        E('div', { class: 'picker-head' }, [E('div', { class: 'label' }, [title, count != null ? badge(String(count), 'secondary') : null]), action]),
+        content
+    ]);
 
     const render = () => {
         clear(container);
         const hosts = state.hosts;
         const selected = items();
 
-        container.appendChild(E('div', { class: 'chips' }, selected.length === 0
-            ? E('span', { class: 'muted' }, _('Nothing is selected'))
-            : selected.map((item) => E('span', { class: 'chip' }, [describeItem(item), E('button', { type: 'button', title: _('Delete'), onclick: () => toggle(item, false) }, '×')]))));
+        container.appendChild(group(_('Selected'), selected.length,
+            selected.length === 0
+                ? E('p', { class: 'description' }, _('Nothing is selected.'))
+                : E('div', { class: 'chips' }, selected.map((item) => E('span', { class: 'tag plain' }, [
+                    E('span', { title: itemValue(item) }, describeItem(item)),
+                    E('button', { type: 'button', title: _('Delete'), onclick: () => toggle(item, false) }, icon('x'))
+                ]))),
+            btn(_('Refresh'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: async () => {
+                state.hosts = null;
+                render();
+                await loadHosts();
+                render();
+            } })));
 
         if (!hosts) {
-            container.appendChild(E('div', { class: 'spinning' }));
+            container.appendChild(loader());
             return;
         }
         if (!hosts.rci) {
-            container.appendChild(E('div', { class: 'alert-message warning' }, _('The router did not answer to RCI requests, names of devices and Wi-Fi points are not available. On KeeneticOS 5.2 and newer create an RCI access token in the web interface of the router and enter it on the Advanced page.')));
+            container.appendChild(alertBox('warning', _('The router did not give the list of devices'),
+                hosts.error ? `${_('Error')}: ${hosts.error}` : _('Names of devices, Wi-Fi points and parental control are not available: only devices from the ARP table of the router are listed.')));
         }
 
         if (hosts.segments.length > 0) {
-            container.appendChild(E('div', { class: 'picker-group' }, [
-                E('h4', {}, _('Network segments')),
-                E('div', { class: 'picker-list' }, hosts.segments.map((s) =>
-                    option(`iface:${s.ifname}`, s.name || s.ifname, [s.ifname, s.address].filter(Boolean).join(' · '))))
-            ]));
+            container.appendChild(group(_('Network segments'), null, E('div', { class: 'picker-list' }, hosts.segments.map((s) =>
+                option(`iface:${s.ifname}`, 'network', s.name || s.ifname, [s.ifname, s.address].filter(Boolean).join(' · '))))));
         }
 
         if (hosts.aps.length > 0) {
-            container.appendChild(E('div', { class: 'picker-group' }, [
-                E('h4', {}, _('Wi-Fi points')),
-                E('div', { class: 'picker-list' }, hosts.aps.map((ap) =>
-                    option(`ap:${ap.id}`, ap.ssid || ap.description || ap.id,
-                        [ap.band, ap.id, _('%s clients', ap.clients)].join(' · '),
-                        { inactive: ap.state === 'down', tags: ap.state === 'down' ? E('span', { class: 'tag' }, _('off')) : null })))
-            ]));
+            container.appendChild(group(_('Wi-Fi points'), null, E('div', { class: 'picker-list' }, hosts.aps.map((ap) =>
+                option(`ap:${ap.id}`, 'wifi', ap.ssid || ap.description || ap.id,
+                    [ap.band, ap.id, _('clients: %s', ap.clients)].join(' · '),
+                    { inactive: ap.state === 'down', tags: ap.state === 'down' ? badge(_('off'), 'outline') : null })))));
         }
 
-        const search = E('input', { type: 'search', placeholder: _('Search by name, MAC or IP'), value: filter });
-        const list = E('div', { class: 'picker-list' });
+        const search = E('input', { class: 'input', type: 'search', placeholder: _('Search by name, MAC or IP'), value: filter });
+        const list = E('div', { class: 'picker-list scroll' });
+        const segmentNames = {};
+        for (const s of hosts.segments) {
+            if (s.id) {
+                segmentNames[s.id] = s.name || s.ifname;
+            }
+            segmentNames[s.ifname] = s.name || s.ifname;
+        }
         const renderHosts = () => {
             clear(list);
             const needle = filter.toLowerCase();
             const shown = hosts.hosts
                 .filter((h) => !needle || [h.name, h.hostname, h.mac, h.ip, h.ssid].some((v) => (v || '').toLowerCase().includes(needle)))
-                .sort((a, b) => (b.active - a.active) || (a.name || a.mac).localeCompare(b.name || b.mac));
+                .sort((a, b) => (b.active - a.active) || (a.name || a.hostname || a.mac).localeCompare(b.name || b.hostname || b.mac));
             if (shown.length === 0) {
-                list.appendChild(E('div', { class: 'picker-item muted' }, _('No devices')));
-            }
-            const segmentNames = {};
-            for (const s of hosts.segments) {
-                if (s.id) {
-                    segmentNames[s.id] = s.name || s.ifname;
-                }
-                segmentNames[s.ifname] = s.name || s.ifname;
+                list.appendChild(E('div', { class: 'picker-empty' }, needle ? _('Nothing found') : _('No devices')));
             }
             for (const h of shown) {
-                const tags = [];
+                const tagList = [];
                 if (!h.active) {
-                    tags.push(E('span', { class: 'tag' }, _('offline')));
+                    tagList.push(badge(_('offline'), 'outline'));
                 }
                 if (h.access === 'deny') {
-                    tags.push(E('span', { class: 'tag red' }, _('blocked')));
+                    tagList.push(badge(_('blocked'), 'destructive'));
                 }
-                list.appendChild(option(`mac:${h.mac}`, h.name || h.hostname || h.mac,
-                    [h.mac, h.ip, h.ssid ? `${_('Wi-Fi')}: ${h.ssid}` : (segmentNames[h.segment] || h.segment || null)].filter(Boolean).join(' · '),
-                    { inactive: !h.active, tags: tags }));
+                list.appendChild(option(`mac:${h.mac}`, h.ssid ? 'wifi' : 'device', h.name || h.hostname || h.mac,
+                    [h.mac, h.ip, h.ssid ? `Wi-Fi ${h.ssid}` : (segmentNames[h.segment] || h.segment || null)].filter(Boolean).join(' · '),
+                    { inactive: !h.active, tags: tagList }));
             }
         };
         search.addEventListener('input', () => {
@@ -775,9 +1043,9 @@ function devicePicker() {
             renderHosts();
         });
         renderHosts();
-        container.appendChild(E('div', { class: 'picker-group' }, [E('h4', {}, _('Devices')), E('div', { style: { marginBottom: '6px' } }, search), list]));
+        container.appendChild(group(_('Devices'), hosts.hosts.length, [E('div', { class: 'search' }, [icon('search'), search]), list]));
 
-        const manual = E('input', { type: 'text', placeholder: _('MAC, IPv4 or IPv6 address or network'), spellcheck: 'false' });
+        const manual = E('input', { class: 'input', type: 'text', placeholder: _('MAC, IPv4 or IPv6 address or network'), spellcheck: 'false' });
         const addManual = () => {
             const item = parseItem(manual.value);
             if (!item) {
@@ -793,16 +1061,8 @@ function devicePicker() {
                 addManual();
             }
         });
-        container.appendChild(E('div', { class: 'inline-actions' }, [
-            manual,
-            E('button', { class: 'btn', type: 'button', onclick: addManual }, _('Add')),
-            button(_('Refresh'), async () => {
-                state.hosts = null;
-                render();
-                await loadHosts();
-                render();
-            })
-        ]));
+        container.appendChild(field(_('Add by address'), E('div', { class: 'row', style: { flexWrap: 'nowrap' } }, [manual, btn(_('Add'), { variant: 'outline', icon: 'plus', onClick: addManual })]),
+            _('For a device the router does not list, or a whole network like <code>192.168.1.0/24</code>.')));
     };
 
     render();
@@ -812,148 +1072,230 @@ function devicePicker() {
     return container;
 }
 
-async function loadHosts() {
-    try {
-        state.hosts = await api('hosts');
-    } catch (e) {
-        state.hosts = { rci: false, segments: [], aps: [], hosts: [] };
-    }
-}
-
 // ---------- pages ----------
 
 function pageStatus() {
-    const status = state.status || {};
-    const coreTitles = { alpha: 'Mihomo Alpha', prizrak: 'Prizrak-Core' };
-    const coreTitle = coreTitles[status.core_type];
-    const subscriptions = state.draft.subscriptions || [];
+    const d = state.draft;
+    const status = () => state.status || {};
 
-    const statusSection = section(_('Status'), [
-        row(_('App Version'), E('span', { class: 'mono' }, status.app_version || '-')),
-        row(_('Core Version'), E('span', { class: 'mono' }, status.core_version ? (coreTitle ? `${status.core_version} (${coreTitle})` : status.core_version) : '-')),
-        row(_('Core Status'), E('span', { 'data-status': true, class: status.running ? 'status-running' : 'status-stopped' }, status.running ? _('Running') : _('Not Running'))),
-        row('', E('div', { class: 'inline-actions' }, [
-            button(_('Restart Service'), async () => {
-                await run(api('service', { op: 'restart' }), _('The service is restarting.'));
-                setTimeout(refreshStatus, 3000);
-            }, 'cbi-button-negative'),
-            button(_('Stop Service'), async () => {
-                await run(api('service', { op: 'stop' }), _('The service is stopping.'));
-                setTimeout(refreshStatus, 2000);
-            }),
-            E('span', { 'data-running-only': true, hidden: !status.running }, E('button', { class: 'btn', type: 'button', onclick: openDashboard }, _('Open Dashboard')))
-        ]))
-    ]);
+    const service = card({
+        title: _('Service'),
+        description: _('Mihomo core and the rules of the transparent proxy.'),
+        action: live(statusBadge, () => [status().running, !!state.status]),
+        content: [
+            state.config.config.enabled !== true ? alertBox('warning', _('The service is disabled'), _('It does not start until Enable is on. Turn it on below and choose Save & Apply.')) : null,
+            live(() => {
+                const s = status();
+                const core = s.core_version ? `${s.core_version} · ${CORE_TITLES[s.core_type] || s.core_type || 'Mihomo'}` : '—';
+                let proxy;
+                if (!state.config.proxy.enabled) {
+                    proxy = badge(_('Off'), 'outline');
+                } else if (s.running && s.hijack) {
+                    proxy = badge(_('Active'), 'success');
+                } else {
+                    proxy = badge(_('Inactive'), 'secondary');
+                }
+                return infoList([
+                    [_('Exodus'), E('span', { class: 'mono' }, s.app_version || '—')],
+                    [_('Core'), E('span', { class: 'mono' }, core)],
+                    [_('Profile'), profileTitle(state.config.config.profile) || '—'],
+                    [_('Transparent proxy'), proxy]
+                ]);
+            }, () => [status().app_version, status().core_version, status().core_type, status().running, status().hijack])
+        ],
+        footer: live(() => (status().running
+            ? [
+                btn(_('Restart'), { icon: 'rotate-cw', onClick: () => serviceOp('restart') }),
+                btn(_('Stop'), { variant: 'outline', icon: 'square', onClick: () => serviceOp('stop') }),
+                btn(_('Dashboard'), { variant: 'outline', icon: 'external-link', onClick: openDashboard })
+            ]
+            : [btn(_('Start'), { icon: 'play', disabled: state.config.config.enabled !== true, onClick: () => serviceOp('start') })]
+        ), () => [status().running])
+    });
 
-    const profile = [];
-    for (const p of state.profiles) {
-        profile.push([`file:${p.name}`, `${_('File:')}${p.name}`]);
-    }
-    for (const s of subscriptions) {
-        profile.push([`subscription:${s.id}`, `${_('Subscription:')}${s.name}`]);
-    }
+    const startup = card({
+        title: _('Startup'),
+        description: _('What the service runs.'),
+        content: [
+            switchField(_('Enable'), _('Run the service and start it when the router boots.'), ref('config.enabled')),
+            field(_('Profile'), select(ref('config.profile'), profileChoices(), { optional: true, placeholder: _('Not selected') }),
+                _('A subscription or an uploaded file, they are managed on the Profiles page.'))
+        ]
+    });
 
-    const appSection = section(_('App Config'), [
-        row(_('Enable'), flag(ref('config.enabled'))),
-        row(_('Choose Profile'), select(ref('config.profile'), profile, { optional: true, placeholder: '-' })),
-        row(_('Start Delay'), input(ref('config.start_delay'), { number: true, type: 'uinteger', placeholder: _('Start Immidiately'), empty: 0 })),
-        row(_('Scheduled Restart'), flag(ref('config.scheduled_restart'))),
-        row(_('Scheduled Restart Cron'), input(ref('config.scheduled_restart_cron'), { type: 'cron', empty: '' }), null, () => state.draft.config.scheduled_restart === true),
-        row(_('Test Profile'), flag(ref('config.test_profile'))),
-        row(_('Core Only'), flag(ref('config.core_only')), _('Start only the core, without the transparent proxy and the mixin.'))
-    ]);
+    const devices = card({
+        title: _('Devices'),
+        description: _('Which devices of the local network go through the proxy.'),
+        content: [
+            d.proxy.enabled !== true ? alertBox('warning', null, _('The transparent proxy is turned off in Settings, the selection has no effect.')) : null,
+            field(_('Mode'), E('div', { class: 'stack', style: { gap: '8px' } }, [
+                segmented(ref('proxy.access_mode'), [['exclude', _('All except selected')], ['include', _('Only selected')]]),
+                dependOn(E('p', { class: 'description' }, _('All devices go through the proxy, the selected ones go directly.')), () => state.draft.proxy.access_mode !== 'include'),
+                dependOn(E('p', { class: 'description' }, _('Only the selected devices go through the proxy, the others go directly.')), () => state.draft.proxy.access_mode === 'include')
+            ])),
+            devicePicker(),
+            E('p', { class: 'description' }, _('A segment matches all its devices, a Wi-Fi point matches the devices connected to it (synced every 30 seconds), a device is matched by its MAC with IPv4 and IPv6. DNS follows the choice: proxied devices ask the core, the others ask the router.'))
+        ]
+    });
 
-    const notes = [];
-    if (state.draft.proxy.enabled !== true || state.draft.proxy.lan_proxy !== true) {
-        notes.push(E('div', { class: 'alert-message warning' }, _('LAN Proxy is disabled on the Advanced page, device selection has no effect.')));
-    }
-    const devicesSection = section(_('Devices'), [
-        notes,
-        row(_('Mode'), select(ref('proxy.access_mode'), [
-            ['exclude', _('Exclude: proxy all devices except the selected ones')],
-            ['include', _('Include: proxy only the selected devices')]
-        ])),
-        row(_('Devices'), devicePicker(), _('A segment matches all its devices, a Wi-Fi point matches the devices connected to it at the moment (synced with the router every 30 seconds), a device is matched by its MAC with IPv4 and IPv6. DNS of the selected devices follows the choice: proxied devices ask the core, the others ask the router.'))
-    ]);
-
-    return [statusSection, appSection, devicesSection, pageActions()];
+    return [
+        pageHeader(_('Status'), _('Transparent proxy with the Mihomo core for Keenetic.')),
+        E('div', { class: 'stack' }, [E('div', { class: 'grid-2' }, [service, startup]), devices])
+    ];
 }
 
 function newId() {
     return `sub_${Math.random().toString(16).slice(2, 10)}`;
 }
 
-function subscriptionModal(subscription, onSave) {
+function subscriptionDialog(subscription, onSave) {
     const draft = clone(subscription);
     const saved = dependents;
     dependents = [];
-    const body = [
-        E('h3', {}, _('Edit Subscription')),
-        row(_('Subscription Name'), input(objRef(draft, 'name'), { empty: '' })),
-        row(_('Subscription Info Url'), input(objRef(draft, 'info_url'), { empty: '' })),
-        row(_('Subscription Url'), input(objRef(draft, 'url'), { empty: '' })),
-        row(_('User Agent'), input(objRef(draft, 'user_agent'), { empty: '', values: ['Mihomo/Exodus v{version}', 'clash', 'clash.meta', 'mihomo'] }), _('{version} is replaced with the installed app version.')),
-        row(_('Send HWID'), flag(objRef(draft, 'send_hwid')), _('Send x-hwid, x-device-os, x-ver-os and x-device-model headers, required by panels with HWID device limit.')),
-        row(_('Prefer'), select(objRef(draft, 'prefer'), [['remote', _('Remote')], ['local', _('Local')]])),
-        E('div', { class: 'inline-actions', style: { justifyContent: 'flex-end', marginTop: '12px' } }, [
-            E('button', { class: 'btn', type: 'button', onclick: closeModal }, _('Dismiss')),
-            E('button', { class: 'btn cbi-button-save', type: 'button', onclick: () => {
-                if (!draft.name || !draft.url) {
-                    notify(_('Name and URL are required.'), 'error');
-                    return;
-                }
-                closeModal();
-                onSave(draft);
-            } }, _('Save'))
-        ])
+    const content = [
+        field(_('Name'), input(objRef(draft, 'name'), { empty: '' })),
+        field(_('URL'), input(objRef(draft, 'url'), { empty: '', placeholder: 'https://' })),
+        field(_('Info URL'), input(objRef(draft, 'info_url'), { empty: '', placeholder: _('Optional') }), _('Only when traffic and expiry come from another address.')),
+        field(_('User agent'), input(objRef(draft, 'user_agent'), { empty: '', values: ['Mihomo/Exodus v{version}', 'clash.meta', 'mihomo', 'clash'] }), _('<code>{version}</code> is replaced with the version of Exodus.')),
+        field(_('Update'), select(objRef(draft, 'prefer'), [['remote', _('On every start')], ['local', _('Manually')]]),
+            _('Manually: the downloaded file is used until you press Update.')),
+        switchField(_('Send HWID'), _('Needed by panels with a device limit, the headers are shown on this page.'), objRef(draft, 'send_hwid'))
     ];
     dependents = saved;
-    openModal(body);
+    openDialog({
+        title: subscription.name ? _('Edit subscription') : _('New subscription'),
+        content: content,
+        footer: [
+            btn(_('Cancel'), { variant: 'outline', onClick: () => closeDialog() }),
+            btn(_('Done'), { onClick: () => {
+                if (!draft.name || !draft.url) {
+                    toast(_('Name and URL are required.'), 'error');
+                    return;
+                }
+                closeDialog();
+                onSave(draft);
+            } })
+        ]
+    });
 }
 
-function openModal(content) {
-    const overlay = document.getElementById('modal');
-    append(clear(document.getElementById('modal-body')), content);
-    overlay.hidden = false;
-}
+function pageProfiles() {
+    const active = state.draft.config.profile;
 
-function closeModal() {
-    document.getElementById('modal').hidden = true;
-}
+    // subscriptions are a part of the config, they are saved with the save bar
+    const subsContainer = E('div', { class: 'contents' });
+    const renderSubscriptions = () => {
+        clear(subsContainer);
+        const subscriptions = state.draft.subscriptions || [];
+        if (subscriptions.length === 0) {
+            subsContainer.appendChild(empty('link', _('No subscriptions yet.')));
+            return;
+        }
+        const tbody = E('tbody');
+        subscriptions.forEach((sub, index) => {
+            const st = state.subscriptionStates[sub.id] || {};
+            let host = '';
+            try {
+                host = new URL(sub.url).host;
+            } catch (e) {
+                host = '';
+            }
+            tbody.appendChild(E('tr', {}, [
+                E('td', {}, [
+                    E('div', { class: 'cell-title' }, [sub.name, active === `subscription:${sub.id}` ? badge(_('Active'), 'default') : null]),
+                    host ? E('div', { class: 'description mono' }, host) : null
+                ]),
+                E('td', { class: 'nowrap' }, st.used || st.total ? `${st.used || '—'} / ${st.total || '∞'}` : '—'),
+                E('td', { class: 'nowrap' }, st.expire || '—'),
+                E('td', { class: 'nowrap' }, st.success === false ? badge(_('Failed'), 'destructive') : (st.update || '—')),
+                E('td', { class: 'actions' }, E('div', { class: 'row' }, [
+                    btn(null, { variant: 'ghost', size: 'sm', icon: 'refresh-cw', title: _('Update'), onClick: async () => {
+                        if (JSON.stringify((state.config.subscriptions || []).find((s) => s.id === sub.id)) !== JSON.stringify(sub)) {
+                            toast(_('Save the subscription first.'), 'warning');
+                            return;
+                        }
+                        await run(api('subscription_update', { id: sub.id }));
+                        const before = st.update || st.update_failed;
+                        for (let i = 0; i < 40; i++) {
+                            await new Promise((resolve) => setTimeout(resolve, 3000));
+                            const data = await api('load');
+                            const next = (data.subscription_states || {})[sub.id] || {};
+                            if ((next.update || next.update_failed) !== before) {
+                                state.subscriptionStates = data.subscription_states || {};
+                                renderSubscriptions();
+                                toast(next.success ? _('Subscription %s is updated.', sub.name) : _('Subscription update failed, see the app log.'), next.success ? 'success' : 'error');
+                                return;
+                            }
+                        }
+                    } }),
+                    btn(null, { variant: 'ghost', size: 'sm', icon: 'pencil', title: _('Edit'), onClick: () => subscriptionDialog(sub, (edited) => {
+                        subscriptions[index] = edited;
+                        renderSubscriptions();
+                        changed();
+                    }) }),
+                    btn(null, { variant: 'ghost', size: 'sm', icon: 'trash', title: _('Delete'), onClick: async () => {
+                        if (!await confirmDialog(_('Delete %s?', sub.name), _('The subscription is removed after saving.'), { confirm: _('Delete'), destructive: true })) {
+                            return;
+                        }
+                        subscriptions.splice(index, 1);
+                        renderSubscriptions();
+                        changed();
+                    } })
+                ]))
+            ]));
+        });
+        subsContainer.appendChild(E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
+            E('thead', {}, E('tr', {}, [E('th', {}, _('Name')), E('th', {}, _('Traffic')), E('th', {}, _('Expires')), E('th', {}, _('Updated')), E('th')])),
+            tbody
+        ])));
+    };
+    renderSubscriptions();
 
-function pageProfile() {
-    const filesList = E('div');
+    const subscriptionsCard = card({
+        title: _('Subscriptions'),
+        description: _('Downloaded from the provider, with traffic and expiry when the provider gives them.'),
+        action: btn(_('Add'), { variant: 'outline', size: 'sm', icon: 'plus', onClick: () => subscriptionDialog(
+            { id: newId(), name: '', url: '', info_url: '', user_agent: 'Mihomo/Exodus v{version}', send_hwid: true, prefer: 'remote' },
+            (created) => {
+                state.draft.subscriptions = (state.draft.subscriptions || []).concat([created]);
+                renderSubscriptions();
+                changed();
+            }) }),
+        content: subsContainer
+    });
+
+    const filesContainer = E('div', { class: 'contents' });
     const renderFiles = () => {
-        clear(filesList);
-        const tbl = E('table', { class: 'table' }, E('tr', {}, [E('th', {}, _('Name')), E('th', {}, _('Size')), E('th')]));
-        for (const p of state.profiles) {
-            tbl.appendChild(E('tr', {}, [
-                E('td', { class: 'mono' }, p.name),
-                E('td', {}, formatSize(p.size)),
-                E('td', { class: 'row-actions' }, E('span', { class: 'inline-actions' }, [
-                    button(_('Download'), async () => {
+        clear(filesContainer);
+        if (state.profiles.length === 0) {
+            filesContainer.appendChild(empty('file-text', _('No files uploaded.')));
+            return;
+        }
+        filesContainer.appendChild(E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
+            E('thead', {}, E('tr', {}, [E('th', {}, _('Name')), E('th', {}, _('Size')), E('th')])),
+            E('tbody', {}, state.profiles.map((p) => E('tr', {}, [
+                E('td', {}, E('div', { class: 'cell-title' }, [E('span', { class: 'mono' }, p.name), active === `file:${p.name}` ? badge(_('Active'), 'default') : null])),
+                E('td', { class: 'nowrap' }, formatSize(p.size)),
+                E('td', { class: 'actions' }, E('div', { class: 'row' }, [
+                    btn(null, { variant: 'ghost', size: 'sm', icon: 'download', title: _('Download'), onClick: async () => {
                         const data = await run(api('file_read', { path: `${state.dirs.profiles}/${p.name}` }));
                         download(p.name, data.content, 'application/yaml');
-                    }),
-                    button(_('Delete'), async () => {
-                        if (!confirm(_('Delete %s?', p.name))) {
+                    } }),
+                    btn(null, { variant: 'ghost', size: 'sm', icon: 'trash', title: _('Delete'), onClick: async () => {
+                        if (!await confirmDialog(_('Delete %s?', p.name), _('The file is removed from the router.'), { confirm: _('Delete'), destructive: true })) {
                             return;
                         }
                         await run(api('profile_delete', { name: p.name }));
                         state.profiles = state.profiles.filter((x) => x.name !== p.name);
                         renderFiles();
-                    }, 'cbi-button-negative')
+                    } })
                 ]))
-            ]));
-        }
-        if (state.profiles.length === 0) {
-            tbl.appendChild(E('tr', {}, E('td', { colspan: 3, class: 'muted' }, _('No profiles uploaded'))));
-        }
-        filesList.appendChild(E('div', { class: 'table-wrap' }, tbl));
+            ])))
+        ])));
     };
     renderFiles();
 
-    const fileInput = E('input', { type: 'file', accept: '.yaml,.yml,.json,.txt', style: { display: 'none' } });
+    const fileInput = E('input', { type: 'file', accept: '.yaml,.yml,.json,.txt', hidden: true });
     fileInput.addEventListener('change', async () => {
         const file = fileInput.files[0];
         if (!file) {
@@ -961,407 +1303,369 @@ function pageProfile() {
         }
         const name = file.name.replace(/[^A-Za-z0-9._ -]/g, '_').replace(/^[._ -]+/, '') || 'profile.yaml';
         const content = await file.text();
-        await run(api('profile_upload', { name: name, content: content }), _('Profile %s is uploaded.', name));
+        fileInput.value = '';
+        await run(api('profile_upload', { name: name, content: content }), _('%s is uploaded.', name));
         const data = await api('load');
         state.profiles = data.profiles || [];
-        fileInput.value = '';
         renderFiles();
     });
 
-    const profileSection = section(_('Profile'), [
-        row(_('Upload Profile'), E('div', {}, [fileInput, E('button', { class: 'btn cbi-button-positive', type: 'button', onclick: () => fileInput.click() }, _('Upload...'))])),
-        row(_('Profiles'), filesList),
-        row(_('Hard Update'), button(_('Hard Update'), async () => {
-            if (!confirm(_('The proxy will be restarted and all providers will be downloaded again. Continue?'))) {
-                return;
-            }
-            await run(api('service', { op: 'hard_update' }), _('Hard update started, see the Log page for progress.'));
-        }, 'cbi-button-negative'), _('Remove everything downloaded from providers of the current profile (proxy and rule providers), download the subscription again and restart. Files of local providers are kept.'))
-    ]);
+    const filesCard = card({
+        title: _('Profile files'),
+        description: _('Complete Mihomo configs uploaded from a computer.'),
+        action: [fileInput, btn(_('Upload'), { variant: 'outline', size: 'sm', icon: 'upload', onClick: () => fileInput.click() })],
+        content: filesContainer
+    });
 
-    const subsContainer = E('div');
-    const renderSubscriptions = () => {
-        clear(subsContainer);
-        const subscriptions = state.draft.subscriptions || [];
-        const tbl = E('table', { class: 'table' }, E('tr', {}, [
-            E('th', {}, _('Subscription Name')), E('th', {}, _('Used')), E('th', {}, _('Total')), E('th', {}, _('Expire At')), E('th', {}, _('Update At')), E('th')
-        ]));
-        subscriptions.forEach((sub, index) => {
-            const st = state.subscriptionStates[sub.id] || {};
-            const updated = st.success === false ? E('span', { class: 'status-stopped' }, `${_('Failed')} ${st.update_failed || ''}`) : (st.update || '-');
-            tbl.appendChild(E('tr', {}, [
-                E('td', {}, sub.name),
-                E('td', {}, st.used || '-'),
-                E('td', {}, st.total || '-'),
-                E('td', {}, st.expire || '-'),
-                E('td', {}, updated),
-                E('td', { class: 'row-actions' }, E('span', { class: 'inline-actions' }, [
-                    button(_('Update'), async () => {
-                        if (JSON.stringify((state.config.subscriptions || []).find((s) => s.id === sub.id)) !== JSON.stringify(sub)) {
-                            notify(_('Save the subscription first.'), 'warning');
-                            return;
-                        }
-                        await run(api('subscription_update', { id: sub.id }), _('Subscription update started.'));
-                        const before = st.update || st.update_failed;
-                        for (let i = 0; i < 30; i++) {
-                            await new Promise((resolve) => setTimeout(resolve, 3000));
-                            const data = await api('load');
-                            const next = (data.subscription_states || {})[sub.id] || {};
-                            if ((next.update || next.update_failed) !== before) {
-                                state.subscriptionStates = data.subscription_states || {};
-                                renderSubscriptions();
-                                notify(next.success ? _('Subscription is updated.') : _('Subscription update failed, see the Log page.'), next.success ? '' : 'error');
-                                return;
-                            }
-                        }
-                    }, 'cbi-button-positive'),
-                    E('button', { class: 'btn', type: 'button', onclick: () => subscriptionModal(sub, (edited) => {
-                        subscriptions[index] = edited;
-                        renderSubscriptions();
-                        changed();
-                    }) }, _('Edit')),
-                    E('button', { class: 'btn cbi-button-negative', type: 'button', onclick: () => {
-                        if (!confirm(_('Delete %s?', sub.name))) {
-                            return;
-                        }
-                        subscriptions.splice(index, 1);
-                        renderSubscriptions();
-                        changed();
-                    } }, _('Delete'))
-                ]))
-            ]));
-        });
-        if (subscriptions.length === 0) {
-            tbl.appendChild(E('tr', {}, E('td', { colspan: 6, class: 'muted' }, _('This section contains no values yet'))));
-        }
-        subsContainer.appendChild(E('div', { class: 'table-wrap' }, tbl));
-        subsContainer.appendChild(E('div', { style: { marginTop: '8px' } }, E('button', { class: 'btn cbi-button-positive', type: 'button', onclick: () => {
-            subscriptionModal({ id: newId(), name: '', url: '', info_url: '', user_agent: 'Mihomo/Exodus v{version}', send_hwid: true, prefer: 'remote' }, (created) => {
-                state.draft.subscriptions = (state.draft.subscriptions || []).concat([created]);
-                renderSubscriptions();
-                changed();
-            });
-        } }, _('Add'))));
-    };
-    renderSubscriptions();
-
-    return [profileSection, section(_('Subscription'), subsContainer), pageActions()];
-}
-
-function pageAdvanced() {
-    const segments = (state.hosts && state.hosts.segments) || [];
-    const interfaces = (state.interfaces || []).map((i) => [i, i]);
-    const proxies = state.proxies || [];
     const hwid = state.hwid || {};
-    const d = () => state.draft;
-    const unmodified = { optional: true };
+    const headers = hwid.headers || {};
+    const detected = (value) => (value ? E('span', { class: 'mono' }, value) : E('span', { class: 'muted' }, _('not detected')));
+    const hwidCard = card({
+        title: 'HWID',
+        description: _('Panels with a device limit (Remnawave and others) tell the router from other devices by these headers.'),
+        content: [
+            field(_('Device ID'), input(ref('config.hwid'), { empty: '', placeholder: hwid.generated || _('Automatic') }),
+                _('Made from the hardware of the router, it stays the same after a reinstall. Change it only to take the place of another device.')),
+            infoList([
+                [E('span', { class: 'mono' }, 'x-device-os'), detected(headers['x-device-os'])],
+                [E('span', { class: 'mono' }, 'x-ver-os'), detected(headers['x-ver-os'])],
+                [E('span', { class: 'mono' }, 'x-device-model'), detected(headers['x-device-model'])]
+            ])
+        ]
+    });
 
-    const proxySection = section(_('Proxy Config'), tabs('proxy', [
-        ['proxy', _('Proxy Config'), [
-            row(_('Enable'), flag(ref('proxy.enabled'))),
-            row(_('TCP Mode'), select(ref('proxy.tcp_mode'), [['redirect', _('Redirect Mode')], ['tproxy', _('TPROXY Mode')]], { optional: true, placeholder: _('Disable'), empty: '' }),
-                _('TPROXY for TCP on Keenetic needs port 443 of the router free: move the web interface of the router to another port on the Users and access page. Redirect has no such limit.')),
-            row(_('UDP Mode'), select(ref('proxy.udp_mode'), [['tproxy', _('TPROXY Mode')]], { optional: true, placeholder: _('Disable'), empty: '' })),
-            row(_('IPv4 DNS Hijack'), flag(ref('proxy.ipv4_dns_hijack')), _('DNS requests of the proxied devices go to the core, whatever DNS is set on the router: Internet filter, DNS profiles or servers of the Internet page.')),
-            row(_('IPv6 DNS Hijack'), flag(ref('proxy.ipv6_dns_hijack'))),
-            row(_('IPv4 Proxy'), flag(ref('proxy.ipv4_proxy'))),
-            row(_('IPv6 Proxy'), flag(ref('proxy.ipv6_proxy'))),
-            row(_('Fake-IP Ping Hijack'), flag(ref('proxy.fake_ip_ping_hijack')))
-        ]],
-        ['router', _('Router Proxy'), [
-            row(_('Enable'), flag(ref('proxy.router_proxy')), _('Proxy the traffic of the router itself: Entware applications and the services of the router. DNS of the router is not hijacked.')),
-            row(_('Core Routing Mark'), input(ref('routing.router_proxy_mark'), { number: true, type: 'uinteger', empty: 255 }), _('The core marks its connections with it, they are not proxied again.'), () => d().proxy.router_proxy === true)
-        ]],
-        ['lan', _('LAN Proxy'), [
-            row(_('Enable'), flag(ref('proxy.lan_proxy'))),
-            row(_('Inbound Interface'), dynlist(ref('proxy.lan_inbound_interface'), { values: [['br+', _('All segments')]].concat(segments.map((s) => [s.ifname, s.name || s.ifname])) }),
-                _('br+ matches all segments of the router, the devices are chosen on the main page.'), () => d().proxy.lan_proxy === true),
-            row(_('Respect Parental Control'), flag(ref('proxy.respect_parental_control')), _('Devices blocked in the router (no internet access, schedules) are not proxied, otherwise they would get internet through the core.'), () => d().proxy.lan_proxy === true)
-        ]],
-        ['bypass', _('Bypass'), [
-            row(_('Destination TCP Port to Proxy'), input(ref('proxy.proxy_tcp_dport'), { type: 'portlist', empty: '0-65535', values: [['0-65535', _('All Port')], ['21 22 80 110 143 194 443 465 853 993 995 8080 8443', _('Commonly Used Port')]] })),
-            row(_('Destination UDP Port to Proxy'), input(ref('proxy.proxy_udp_dport'), { type: 'portlist', empty: '0-65535', values: [['0-65535', _('All Port')], ['123 443 8443', _('Commonly Used Port')]] })),
-            row(_('Bypass FWMark'), dynlist(ref('proxy.bypass_fwmark'), { type: 'fwmark', placeholder: '0x100/0xff00' }))
-        ]],
-        ['dscp', 'DSCP / QoS', [
-            row(_('Bypass DSCP'), dynlist(ref('proxy.dscp_bypass'), { type: 'dscp', number: true }), _('Traffic with these DSCP marks goes directly, like DSCP 62 of XKeen.')),
-            row(_('Proxy DSCP'), dynlist(ref('proxy.dscp_proxy'), { type: 'dscp', number: true }), _('Traffic with these DSCP marks is proxied even from excluded devices and on all ports, like DSCP 63 of XKeen.')),
-            row(_('Force Proxy DSCP'), input(ref('proxy.dscp_force'), { number: true, type: 'dscp', placeholder: _('Disable') }), _('Traffic with this DSCP mark goes to the chosen proxy, bypassing the rules of the profile, like DSCP 61 of XKeen.')),
-            row(_('Force Proxy'), input(ref('proxy.force_proxy'), { empty: '', values: proxies, placeholder: _('Disable') }), _('A proxy or a proxy group of the profile, exodus adds listeners with it. Empty disables the force proxy DSCP.'), () => d().proxy.dscp_force != null),
-            row(_('Force Redirect Port'), input(ref('proxy.force_redir_port'), { number: true, type: 'port', empty: 7893 }), null, () => d().proxy.dscp_force != null && !!d().proxy.force_proxy),
-            row(_('Force TPROXY Port'), input(ref('proxy.force_tproxy_port'), { number: true, type: 'port', empty: 7894 }), null, () => d().proxy.dscp_force != null && !!d().proxy.force_proxy),
-            row('', E('div', { class: 'cbi-value-description', html: _('DSCP marks are set by the devices, for example with QoS policies of Windows: gpedit.msc → Policy-based QoS → Create new policy with a DSCP value for an application. On a Windows outside of a domain set HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\QoS "Do not use NLA" = "1" and reboot. Works for Wi-Fi and wired devices alike.') }))
-        ]],
-        ['misc', _('Misc'), [
-            row(_('Reserved IP'), dynlist(ref('proxy.reserved_ip'), { type: 'ip4' })),
-            row(_('Reserved IP6'), dynlist(ref('proxy.reserved_ip6'), { type: 'ip6' })),
-            row(_('TPROXY FWMark'), input(ref('routing.tproxy_fw_mark'), { type: 'fwmark', empty: '0x111' })),
-            row(_('TPROXY FWMark Mask'), input(ref('routing.tproxy_fw_mask'), { type: 'fwmark', empty: '0xffffffff' })),
-            row(_('TPROXY Rule Priority'), input(ref('routing.tproxy_rule_pref'), { number: true, type: 'uinteger', empty: 100 })),
-            row(_('TPROXY Route Table'), input(ref('routing.tproxy_route_table'), { number: true, type: 'uinteger', empty: 111 })),
-            row(_('HWID'), input(ref('config.hwid'), { empty: '', placeholder: hwid.generated || _('Auto') }), _('Device identifier sent to subscriptions with HWID enabled (device limit). Generated from the router hardware when empty.')),
-            [['x-device-os', _('Device OS')], ['x-ver-os', _('OS Version')], ['x-device-model', _('Device Model')]].map(([header, title]) =>
-                row(title, E('span', { class: 'mono' }, (hwid.headers || {})[header] || '-'), _('Sent in the %s header, read from the router.', header)))
-        ]]
-    ]));
-
-    const passwordOld = E('input', { type: 'password', autocomplete: 'current-password' });
-    const passwordNew = E('input', { type: 'password', autocomplete: 'new-password' });
-    const passwordRepeat = E('input', { type: 'password', autocomplete: 'new-password' });
-    const keeneticSection = section('Keenetic', [
-        row(_('RCI Access Token'), input(ref('keenetic.rci_token'), { password: true, empty: '' }), _('Needed on KeeneticOS 5.2 and newer to read devices, Wi-Fi points and parental control from the router. Create it in the web interface of the router.')),
-        row(_('Keep Router Domains Real'), flag(ref('keenetic.fake_ip_filter')), _('my.keenetic.net and KeenDNS names get real addresses instead of Fake-IP, so the router stays reachable by name.')),
-        row(_('Web UI Port'), input(ref('web.port'), { number: true, type: 'port', empty: 9099 }), _('The web UI moves to the new port after saving.')),
-        row(_('Current Password'), passwordOld),
-        row(_('New Password'), passwordNew),
-        row(_('Repeat Password'), passwordRepeat),
-        row('', button(_('Change Password'), async () => {
-            if (passwordNew.value !== passwordRepeat.value) {
-                notify(_('Passwords do not match.'), 'error');
+    const hardUpdateCard = card({
+        title: _('Hard update'),
+        description: _('Remove everything downloaded by the providers of the current profile, download the subscription again and restart. Files of local providers are kept.'),
+        footer: btn(_('Hard update'), { variant: 'destructive-outline', icon: 'refresh-cw', onClick: async () => {
+            if (!await confirmDialog(_('Hard update?'), _('The proxy restarts and all providers are downloaded again.'), { confirm: _('Hard update'), destructive: true })) {
                 return;
             }
-            await run(api('password', { old: passwordOld.value, new: passwordNew.value }), _('The password is changed.'));
-            passwordOld.value = passwordNew.value = passwordRepeat.value = '';
-        }))
-    ]);
-
-    const nameserverTypes = ['default-nameserver', 'proxy-server-nameserver', 'direct-nameserver', 'nameserver', 'fallback'].map((t) => [t, t]);
-    const enabledColumn = ['enabled', _('Enable'), (r) => flag(r)];
-    const nameserverColumn = ['nameserver', _('Nameserver'), (r) => dynlist(r)];
-
-    const mixinSection = section(_('Mixin Option'), tabs('mixin', [
-        ['general', _('General Config'), [
-            row(_('Log Level'), select(ref('mixin.log_level'), ['silent', 'error', 'warning', 'info', 'debug'].map((v) => [v, v]), unmodified)),
-            row(_('Mode'), select(ref('mixin.mode'), [['global', _('Global Mode')], ['rule', _('Rule Mode')], ['direct', _('Direct Mode')]], unmodified)),
-            row(_('Match Process'), select(ref('mixin.match_process'), ['off', 'strict', 'always'].map((v) => [v, v]), unmodified)),
-            row(_('Outbound Interface'), select(ref('mixin.outbound_interface'), interfaces, unmodified), _('A Linux name of the interface: ppp0, eth3, nwg0 and so on.')),
-            row('IPv6', tri(ref('mixin.ipv6'))),
-            row(_('Unify Delay'), tri(ref('mixin.unify_delay'))),
-            row(_('TCP Concurrent'), tri(ref('mixin.tcp_concurrent'))),
-            row(_('Disable TCP Keep Alive'), tri(ref('mixin.disable_tcp_keep_alive'))),
-            row(_('TCP Keep Alive Idle'), input(ref('mixin.tcp_keep_alive_idle'), { number: true, type: 'uinteger', placeholder: _('Unmodified') })),
-            row(_('TCP Keep Alive Interval'), input(ref('mixin.tcp_keep_alive_interval'), { number: true, type: 'uinteger', placeholder: _('Unmodified') }))
-        ]],
-        ['external_control', _('External Control Config'), [
-            row(_('Dashboard'), E('div', { class: 'inline-actions' }, [
-                E('button', { class: 'btn', type: 'button', onclick: openDashboard }, _('Open Dashboard')),
-                button(_('Update Dashboard'), () => run(api('update_dashboard'), _('Dashboard is updated.')), 'cbi-button-positive')
-            ])),
-            row(_('UI Path'), input(ref('mixin.ui_path'), { placeholder: _('Unmodified') })),
-            row(_('UI Name'), input(ref('mixin.ui_name'), { placeholder: _('Unmodified') })),
-            row(_('UI Url'), input(ref('mixin.ui_url'), { placeholder: _('Unmodified'), values: [
-                ['https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip', 'Zashboard (CDN Fonts)'],
-                ['https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip', 'Zashboard'],
-                ['https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip', 'MetaCubeXD'],
-                ['https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip', 'YACD'],
-                ['https://github.com/MetaCubeX/Razord-meta/archive/refs/heads/gh-pages.zip', 'Razord']
-            ] })),
-            row(_('API Listen'), input(ref('mixin.api_listen'), { type: 'hostport', placeholder: _('Unmodified') })),
-            row(_('API TLS Listen'), input(ref('mixin.api_tls_listen'), { type: 'hostport', placeholder: _('Unmodified') })),
-            row(_('API TLS Cert'), input(ref('mixin.api_tls_cert'), { placeholder: _('Unmodified') })),
-            row(_('API TLS Key'), input(ref('mixin.api_tls_key'), { placeholder: _('Unmodified') })),
-            row(_('API TLS ECH Key'), input(ref('mixin.api_tls_ech_key'), { placeholder: _('Unmodified') })),
-            row(_('API Secret'), input(ref('mixin.api_secret'), { password: true, placeholder: _('Unmodified') })),
-            row(_('Save Proxy Selection'), tri(ref('mixin.selection_cache')))
-        ]],
-        ['inbound', _('Inbound Config'), [
-            row(_('Allow Lan'), tri(ref('mixin.allow_lan'))),
-            row(_('HTTP Port'), input(ref('mixin.http_port'), { number: true, type: 'port', placeholder: _('Unmodified') })),
-            row(_('SOCKS Port'), input(ref('mixin.socks_port'), { number: true, type: 'port', placeholder: _('Unmodified') })),
-            row(_('Mixed Port'), input(ref('mixin.mixed_port'), { number: true, type: 'port', placeholder: _('Unmodified') })),
-            row(_('Redirect Port'), input(ref('mixin.redir_port'), { number: true, type: 'port', placeholder: _('Unmodified') })),
-            row(_('TPROXY Port'), input(ref('mixin.tproxy_port'), { number: true, type: 'port', placeholder: _('Unmodified') })),
-            row(_('Overwrite Authentication'), flag(ref('mixin.authentication'))),
-            row(_('Edit Authentications'), table(ref('mixin.authentications'), [
-                enabledColumn,
-                ['username', _('Username'), (r) => input(r, { empty: '' })],
-                ['password', _('Password'), (r) => input(r, { password: true, empty: '' })]
-            ], { create: () => ({ enabled: true, username: '', password: '' }) }), null, () => d().mixin.authentication === true)
-        ]],
-        ['dns', _('DNS Config'), [
-            row(_('Enable'), tri(ref('mixin.dns_enabled'))),
-            row(_('DNS Cache Algorithm'), select(ref('mixin.dns_cache_algorithm'), [['lru', _('Least Recently Used (LRU)')], ['arc', _('Adaptive Replacement Cache (ARC)')]], unmodified)),
-            row(_('DNS Listen'), input(ref('mixin.dns_listen'), { type: 'hostport', placeholder: _('Unmodified') })),
-            row('IPv6', tri(ref('mixin.dns_ipv6'))),
-            row(_('DNS Mode'), select(ref('mixin.dns_mode'), [['redir-host', 'Redir-Host'], ['fake-ip', 'Fake-IP']], unmodified)),
-            row(_('Fake-IP Range'), input(ref('mixin.fake_ip_range'), { type: 'ip4', placeholder: _('Unmodified') })),
-            row(_('Fake-IP6 Range'), input(ref('mixin.fake_ip6_range'), { type: 'ip6', placeholder: _('Unmodified') })),
-            row(_('Fake-IP TTL'), input(ref('mixin.fake_ip_ttl'), { number: true, type: 'uinteger', placeholder: _('Unmodified') })),
-            row(_('Overwrite Fake-IP Filter'), flag(ref('mixin.fake_ip_filter'))),
-            row(_('Edit Fake-IP Filters'), dynlist(ref('mixin.fake_ip_filters')), null, () => d().mixin.fake_ip_filter === true),
-            row(_('Fake-IP Filter Mode'), select(ref('mixin.fake_ip_filter_mode'), [['blacklist', _('Block Mode')], ['whitelist', _('Allow Mode')], ['rule', _('Rule Mode')]], unmodified)),
-            row(_('Fake-IP Cache'), tri(ref('mixin.fake_ip_cache'))),
-            row(_('Respect Rules'), tri(ref('mixin.dns_respect_rules'))),
-            row(_('DoH Prefer HTTP/3'), tri(ref('mixin.dns_doh_prefer_http3'))),
-            row(_('Use System Hosts'), tri(ref('mixin.dns_system_hosts'))),
-            row(_('Use Hosts'), tri(ref('mixin.dns_hosts'))),
-            row(_('Overwrite Hosts'), flag(ref('mixin.hosts'))),
-            row(_('Edit Hosts'), table(ref('mixin.hosts_entries'), [
-                enabledColumn,
-                ['domain_name', _('Domain Name'), (r) => input(r, { empty: '' })],
-                ['ip', 'IP', (r) => dynlist(r)]
-            ], { create: () => ({ enabled: true, domain_name: '', ip: [] }) }), null, () => d().mixin.hosts === true),
-            row(_('Overwrite Nameserver'), flag(ref('mixin.dns_nameserver'))),
-            row(_('Edit Nameservers'), table(ref('mixin.nameservers'), [
-                enabledColumn,
-                ['type', _('Type'), (r) => select(r, nameserverTypes)],
-                nameserverColumn
-            ], { create: () => ({ enabled: true, type: 'nameserver', nameserver: [] }) }), null, () => d().mixin.dns_nameserver === true),
-            row(_('Overwrite Proxy Server Nameserver Policy'), flag(ref('mixin.dns_proxy_server_nameserver_policy'))),
-            row(_('Edit Proxy Server Nameserver Policies'), table(ref('mixin.proxy_server_nameserver_policies'), [
-                enabledColumn,
-                ['matcher', _('Matcher'), (r) => input(r, { empty: '' })],
-                nameserverColumn
-            ], { create: () => ({ enabled: true, matcher: '', nameserver: [] }) }), null, () => d().mixin.dns_proxy_server_nameserver_policy === true),
-            row(_('Direct Nameserver Follow Policy'), tri(ref('mixin.dns_direct_nameserver_follow_policy'))),
-            row(_('Overwrite Nameserver Policy'), flag(ref('mixin.dns_nameserver_policy'))),
-            row(_('Edit Nameserver Policies'), table(ref('mixin.nameserver_policies'), [
-                enabledColumn,
-                ['matcher', _('Matcher'), (r) => input(r, { empty: '' })],
-                nameserverColumn
-            ], { create: () => ({ enabled: true, matcher: '', nameserver: [] }) }), null, () => d().mixin.dns_nameserver_policy === true)
-        ]],
-        ['sniffer', _('Sniffer Config'), [
-            row(_('Enable'), tri(ref('mixin.sniffer'))),
-            row(_('Sniff Redir-Host'), tri(ref('mixin.sniffer_sniff_dns_mapping'))),
-            row(_('Sniff Pure IP'), tri(ref('mixin.sniffer_sniff_pure_ip'))),
-            row(_('Overwrite Force Sniff Domain Name'), flag(ref('mixin.sniffer_force_domain_name'))),
-            row(_('Force Sniff Domain Name'), dynlist(ref('mixin.sniffer_force_domain_names')), null, () => d().mixin.sniffer_force_domain_name === true),
-            row(_('Overwrite Ignore Sniff Domain Name'), flag(ref('mixin.sniffer_ignore_domain_name'))),
-            row(_('Ignore Sniff Domain Name'), dynlist(ref('mixin.sniffer_ignore_domain_names')), null, () => d().mixin.sniffer_ignore_domain_name === true),
-            row(_('Overwrite Sniff By Protocol'), flag(ref('mixin.sniffer_sniff'))),
-            row(_('Sniff By Protocol'), table(ref('mixin.sniffs'), [
-                enabledColumn,
-                ['protocol', _('Protocol'), (r) => input(r, { readonly: true })],
-                ['port', _('Port'), (r) => dynlist(r)],
-                ['overwrite_destination', _('Overwrite Destination'), (r) => flag(r)]
-            ], { addremove: false, sortable: false }), null, () => d().mixin.sniffer_sniff === true)
-        ]],
-        ['rule', _('Rule Config'), [
-            row(_('Append Rule Provider'), flag(ref('mixin.rule_provider'))),
-            row(_('Edit Rule Providers'), table(ref('mixin.rule_providers'), [
-                ['enabled', _('Enable'), (r) => flag(r)],
-                ['name', _('Name'), (r) => input(r, { empty: '' })],
-                ['type', _('Type'), (r) => select(r, [['http', 'http'], ['file', 'file']])],
-                ['url', _('Url'), (r) => input(r, { empty: '' }), null, (item) => item.type !== 'file'],
-                ['node', _('Node'), (r) => input(r, { values: ['GLOBAL', 'DIRECT'].concat(proxies) }), null, (item) => item.type !== 'file'],
-                ['file_size_limit', _('File Size Limit'), (r) => input(r, { number: true, type: 'uinteger' }), null, (item) => item.type !== 'file'],
-                ['file_path', _('File Path'), (r) => input(r, { empty: '' }), _('A file in %s.', `${(state.dirs || {}).rule_providers || ''}`), (item) => item.type === 'file'],
-                ['file_format', _('File Format'), (r) => select(r, [['mrs', 'mrs'], ['yaml', 'yaml'], ['text', 'text']])],
-                ['behavior', _('Behavior'), (r) => select(r, [['classical', 'classical'], ['domain', 'domain'], ['ipcidr', 'ipcidr']])],
-                ['update_interval', _('Update Interval'), (r) => input(r, { number: true, type: 'uinteger' }), null, (item) => item.type !== 'file']
-            ], { cards: true, create: () => ({ enabled: true, name: '', type: 'http', url: '', node: 'DIRECT', file_size_limit: 0, file_format: 'yaml', behavior: 'classical', update_interval: 0 }) }),
-            null, () => d().mixin.rule_provider === true),
-            row(_('Append Rule'), flag(ref('mixin.rule'))),
-            row(_('Edit Rules'), table(ref('mixin.rules'), [
-                enabledColumn,
-                ['type', _('Type'), (r) => input(r, { empty: '', values: [
-                    ['RULE-SET', _('Rule Set')], ['DOMAIN', _('Domain Name')], ['DOMAIN-SUFFIX', _('Domain Name Suffix')], ['DOMAIN-WILDCARD', _('Domain Name Wildcard')],
-                    ['DOMAIN-KEYWORD', _('Domain Name Keyword')], ['DOMAIN-REGEX', _('Domain Name Regex')], ['IP-CIDR', _('Destination IP')], ['DST-PORT', _('Destination Port')],
-                    ['SRC-IP-CIDR', _('Source IP')], ['GEOSITE', _('Domain Name Geo')], ['GEOIP', _('Destination IP Geo')], ['MATCH', 'MATCH']
-                ] })],
-                ['matcher', _('Matcher'), (r) => input(r, { empty: '' })],
-                ['node', _('Node'), (r) => input(r, { empty: '', values: ['GLOBAL', 'DIRECT', 'REJECT', 'REJECT-DROP'].concat(proxies) })],
-                ['no_resolve', _('No Resolve'), (r) => flag(r)]
-            ], { create: () => ({ enabled: true, type: 'DOMAIN-SUFFIX', matcher: '', node: 'DIRECT', no_resolve: false }) }), null, () => d().mixin.rule === true)
-        ]],
-        ['geox', _('GeoX Config'), [
-            row(_('GeoIP Format'), select(ref('mixin.geoip_format'), [['dat', 'DAT'], ['mmdb', 'MMDB']], unmodified)),
-            row(_('GeoData Loader'), select(ref('mixin.geodata_loader'), [['standard', _('Standard Loader')], ['memconservative', _('Memory Conservative Loader')]], unmodified)),
-            row(_('GeoSite Url'), input(ref('mixin.geosite_url'), { placeholder: _('Unmodified') })),
-            row(_('GeoIP(MMDB) Url'), input(ref('mixin.geoip_mmdb_url'), { placeholder: _('Unmodified') })),
-            row(_('GeoIP(DAT) Url'), input(ref('mixin.geoip_dat_url'), { placeholder: _('Unmodified') })),
-            row(_('GeoIP(ASN) Url'), input(ref('mixin.geoip_asn_url'), { placeholder: _('Unmodified') })),
-            row(_('GeoX Auto Update'), tri(ref('mixin.geox_auto_update'))),
-            row(_('GeoX Update Interval'), input(ref('mixin.geox_update_interval'), { number: true, type: 'uinteger', placeholder: _('Unmodified') }))
-        ]],
-        ['mixin_file_content', _('Mixin File Content'), [
-            row(_('Enable'), flag(ref('mixin.mixin_file_content')), _('Please go to the editor tab to edit the file for mixin'))
-        ]]
-    ]));
-
-    const coreSection = section(_('Core Config'), tabs('core', [
-        ['general', _('General Config'), [
-            row(_('Redirect Listener Name'), input(ref('core.redirect_listener_name'), { empty: '' }), _('Used when the profile has no redir-port.')),
-            row(_('TPROXY Listener Name'), input(ref('core.tproxy_listener_name'), { empty: '' }), _('Used when the profile has no tproxy-port.'))
-        ]],
-        ['limits', _('Limits'), [
-            row(_('Number of Open Files'), input(ref('core.nofile'), { type: 'uinteger', empty: '', placeholder: _('Auto') }), _('Entware allows 1024 files, the core gets 40000 on arm64 and 10000 on mips by default.')),
-            row('GOMEMLIMIT', input(ref('core.gomemlimit'), { empty: '', placeholder: _('Half of RAM') }), _('For example 128MiB, off disables the limit. Without a limit the router may kill the core when memory runs out.')),
-            row('GOMAXPROCS', input(ref('core.gomaxprocs'), { empty: '', type: 'uinteger', placeholder: _('Unlimited') }))
-        ]],
-        ['environment_variable', _('Environment Variable Config'), [
-            row(_('Safe Paths'), dynlist(ref('core.safe_paths'))),
-            row(_('Disable Loopback Detector'), flag(ref('core.disable_loopback_detector'))),
-            row(_('Disable GSO of quic-go'), flag(ref('core.disable_quic_go_gso'))),
-            row(_('Disable ECN of quic-go'), flag(ref('core.disable_quic_go_ecn'))),
-            row(_('Skip System IPv6 Check'), flag(ref('core.skip_system_ipv6_check')))
-        ]]
-    ]));
+            await run(api('service', { op: 'hard_update' }), _('Hard update started, the progress is in the app log.'));
+        } })
+    });
 
     return [
-        E('div', { class: 'alert-message warning' }, _('These settings are for experienced users only. Do not change anything here unless you know exactly what you are doing: wrong values can break the proxy or the internet access of the whole network.')),
-        proxySection, keeneticSection, mixinSection, coreSection, pageActions()
+        pageHeader(_('Profiles'), _('Configs of the core: subscriptions of providers and your own files.')),
+        E('div', { class: 'stack' }, [subscriptionsCard, filesCard, E('div', { class: 'grid-2' }, [hwidCard, hardUpdateCard])])
+    ];
+}
+
+const DASHBOARDS = [
+    ['https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip', 'Zashboard'],
+    ['https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip', 'MetaCubeXD'],
+    ['https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip', 'YACD']
+];
+
+const RULE_TYPES = [
+    ['DOMAIN-SUFFIX', _('Domain and subdomains')], ['DOMAIN', _('Domain')], ['DOMAIN-KEYWORD', _('Domain keyword')],
+    ['GEOSITE', _('Geosite category')], ['IP-CIDR', _('Destination network')], ['GEOIP', _('Geoip country')],
+    ['SRC-IP-CIDR', _('Source network')], ['DST-PORT', _('Destination port')], ['RULE-SET', _('Rule provider')], ['MATCH', _('Everything else')]
+];
+
+function rulesEditor() {
+    const r = ref('mixin.rules');
+    const container = E('div', { class: 'stack' });
+    const rows = () => (Array.isArray(r.get()) ? r.get() : []);
+    const targets = ['DIRECT', 'REJECT', 'REJECT-DROP', 'GLOBAL'].concat(state.proxies || []);
+    const update = (next) => {
+        r.set(next);
+        render();
+        changed();
+    };
+    const render = () => {
+        clear(container);
+        const list = rows();
+        if (list.length === 0) {
+            container.appendChild(empty('list', _('No rules yet.')));
+        } else {
+            container.appendChild(E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
+                E('thead', {}, E('tr', {}, [E('th', {}, _('On')), E('th', {}, _('Type')), E('th', {}, _('Value')), E('th', {}, _('Target')), E('th', { title: 'no-resolve' }, _('No resolve')), E('th')])),
+                E('tbody', {}, list.map((rule, index) => E('tr', {}, [
+                    E('td', {}, switchControl({ get: () => rule.enabled !== false, set: (v) => { rule.enabled = v; } })),
+                    E('td', {}, input(objRef(rule, 'type'), { empty: '', values: RULE_TYPES })),
+                    E('td', {}, input(objRef(rule, 'matcher'), { empty: '', placeholder: rule.type === 'MATCH' ? '' : 'example.com' })),
+                    E('td', {}, input(objRef(rule, 'node'), { empty: '', values: targets })),
+                    E('td', {}, checkbox(objRef(rule, 'no_resolve'))),
+                    E('td', { class: 'actions' }, E('div', { class: 'row' }, [
+                        btn(null, { variant: 'ghost', size: 'sm', icon: 'chevron-up', title: _('Up'), disabled: index === 0, onClick: () => {
+                            const next = list.slice();
+                            next.splice(index - 1, 0, next.splice(index, 1)[0]);
+                            update(next);
+                        } }),
+                        btn(null, { variant: 'ghost', size: 'sm', icon: 'chevron-down', title: _('Down'), disabled: index === list.length - 1, onClick: () => {
+                            const next = list.slice();
+                            next.splice(index + 1, 0, next.splice(index, 1)[0]);
+                            update(next);
+                        } }),
+                        btn(null, { variant: 'ghost', size: 'sm', icon: 'trash', title: _('Delete'), onClick: () => update(list.filter((_x, i) => i !== index)) })
+                    ]))
+                ])))
+            ])));
+        }
+        container.appendChild(E('div', {}, btn(_('Add rule'), { variant: 'outline', size: 'sm', icon: 'plus', onClick: () => update(rows().concat([
+            { enabled: true, type: 'DOMAIN-SUFFIX', matcher: '', node: 'DIRECT', no_resolve: false }
+        ])) })));
+    };
+    render();
+    return container;
+}
+
+function pageSettings() {
+    const d = () => state.draft;
+    const proxyOn = () => d().proxy.enabled === true;
+    const interfaces = (state.interfaces || []).map((i) => [i, i]);
+    const proxies = state.proxies || [];
+
+    const proxyTab = [
+        card({
+            title: _('Transparent proxy'),
+            description: _('How the traffic of the local network gets to the core.'),
+            content: [
+                switchField(_('Enable'), _('Intercept the traffic of the devices chosen on the Status page. When off, only the core runs: its proxy port and the dashboard.'), ref('proxy.enabled')),
+                dependOn(E('div', { class: 'grid-2' }, [
+                    field('TCP', select(ref('proxy.tcp_mode'), [['redirect', 'Redirect'], ['tproxy', 'TPROXY']], { optional: true, placeholder: _('Off'), empty: '' }),
+                        _('Redirect works everywhere. TPROXY for TCP needs port 443 of the router free: move the web interface of the router to another port.')),
+                    field('UDP', select(ref('proxy.udp_mode'), [['tproxy', 'TPROXY']], { optional: true, placeholder: _('Off'), empty: '' }),
+                        _('For QUIC, games and calls. Needs the Netfilter kernel modules component of the router.'))
+                ]), proxyOn),
+                switchField(_('DNS through the core'), _('DNS queries of the proxied devices go to the core, whatever DNS the router uses. Required for Fake-IP and domain rules.'), ref('proxy.dns_hijack'), proxyOn),
+                switchField('IPv6', _('Proxy IPv6 and give IPv6 addresses in DNS answers. Turn it off if the provider has no IPv6.'), ref('proxy.ipv6'), proxyOn),
+                switchField(_('Traffic of the router'), _('Proxy the connections of the router itself, for example of Entware applications. DNS of the router is not intercepted.'), ref('proxy.router_proxy'), proxyOn),
+                switchField(_('Respect parental control'), _('Devices blocked in the router (no internet access, schedules) are not proxied, otherwise they would get internet through the core.'), ref('proxy.respect_parental_control'), proxyOn)
+            ]
+        }),
+        card({
+            title: _('Ports and exclusions'),
+            description: _('Traffic that goes directly, past the core.'),
+            content: [
+                E('div', { class: 'grid-2' }, [
+                    field(_('TCP ports to proxy'), input(ref('proxy.proxy_tcp_dport'), { type: 'portlist', empty: '0-65535', placeholder: _('All ports'), values: [
+                        ['0-65535', _('All ports')], ['80 443 8080 8443', _('Web only')], ['21 22 80 110 143 194 443 465 853 993 995 8080 8443', _('Common ports')]
+                    ] }), _('Ports and ranges separated by spaces, the other ports go directly.')),
+                    field(_('UDP ports to proxy'), input(ref('proxy.proxy_udp_dport'), { type: 'portlist', empty: '0-65535', placeholder: _('All ports'), values: [
+                        ['0-65535', _('All ports')], ['443 8443', _('QUIC only')]
+                    ] }))
+                ]),
+                field(_('Direct IPv4 networks'), tags(ref('proxy.reserved_ip'), { type: 'ip4', placeholder: '203.0.113.0/24' }),
+                    _('Destinations that never go through the proxy. Local and special networks are here by default.')),
+                field(_('Direct IPv6 networks'), tags(ref('proxy.reserved_ip6'), { type: 'ip6', placeholder: '2001:db8::/32' }), null, () => d().proxy.ipv6 === true)
+            ]
+        })
+    ];
+
+    const dscpTab = [
+        card({
+            title: _('DSCP marks'),
+            description: _('A device can mark its traffic with DSCP to choose the route per application. The marks are the same as in XKeen.'),
+            content: [
+                field(_('Direct'), tags(ref('proxy.dscp_bypass'), { type: 'dscp', number: true, placeholder: '62' }), _('Traffic with these marks goes directly (62 in XKeen).')),
+                field(_('Proxy'), tags(ref('proxy.dscp_proxy'), { type: 'dscp', number: true, placeholder: '63' }), _('Traffic with these marks goes through the proxy even from excluded devices and on any port (63 in XKeen).')),
+                E('div', { class: 'grid-2' }, [
+                    field(_('Mark of the chosen proxy'), input(ref('proxy.dscp_force'), { number: true, type: 'dscp', placeholder: _('Off') }),
+                        _('Traffic with this mark goes to one proxy, past the rules of the profile (61 in XKeen).')),
+                    field(_('Chosen proxy'), input(ref('proxy.force_proxy'), { empty: '', values: proxies, placeholder: _('Off') }),
+                        _('A proxy or a group of the running profile. Empty turns the mark off.'), () => d().proxy.dscp_force != null)
+                ])
+            ]
+        }),
+        alertBox('default', _('How to mark traffic on Windows'), E('span', { html: _('gpedit.msc → Computer Configuration → Windows Settings → Policy-based QoS → Create new policy: choose the DSCP value and the application. Outside of a domain also set <code>HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\QoS</code> "Do not use NLA" = "1" and reboot.') }))
+    ];
+
+    const coreTab = [
+        card({
+            title: 'Mihomo',
+            description: _('Options merged over the profile. An empty choice keeps the value of the profile.'),
+            content: [
+                E('div', { class: 'grid-2' }, [
+                    field(_('Log level'), select(ref('mixin.log_level'), ['silent', 'error', 'warning', 'info', 'debug'].map((v) => [v, v]), { optional: true })),
+                    field(_('Mode'), select(ref('mixin.mode'), [['rule', _('Rules')], ['global', _('Global')], ['direct', _('Direct')]], { optional: true }))
+                ]),
+                E('div', { class: 'grid-2' }, [
+                    field(_('DNS mode'), select(ref('mixin.dns_mode'), [['fake-ip', 'Fake-IP'], ['redir-host', 'Redir-Host']], { optional: true }),
+                        _('Fake-IP answers at once and suits the transparent proxy best.')),
+                    field(_('Outbound interface'), select(ref('mixin.outbound_interface'), interfaces, { optional: true, placeholder: _('Automatic') }),
+                        _('Linux name of the interface for the connections of the core: ppp0, eth3, nwg0 and so on.'))
+                ]),
+                field(_('Memory limit'), input(ref('core.gomemlimit'), { empty: '', placeholder: _('Half of RAM') }),
+                    _('For example <code>128MiB</code>, <code>off</code> removes the limit. Without a limit the router may kill the core when memory runs out.'))
+            ]
+        }),
+        card({
+            title: _('Proxy port'),
+            description: _('HTTP and SOCKS5 on one port, for devices and applications set up by hand.'),
+            content: [
+                E('div', { class: 'grid-2' }, [
+                    field(_('Port'), input(ref('mixin.mixed_port'), { number: true, type: 'port', placeholder: _('From profile') }))
+                ]),
+                switchField(_('Authentication'), _('Ask for a username and password on the proxy port.'), ref('mixin.authentication')),
+                dependOn(E('div', { class: 'grid-2' }, [
+                    field(_('Username'), input(ref('mixin.username'), { empty: '' })),
+                    field(_('Password'), input(ref('mixin.password'), { password: true, empty: '' }))
+                ]), () => d().mixin.authentication === true)
+            ]
+        }),
+        card({
+            title: _('Dashboard'),
+            description: _('Web panel of the core: choose proxies, watch connections and logs.'),
+            action: [
+                btn(_('Open'), { variant: 'outline', size: 'sm', icon: 'external-link', onClick: openDashboard }),
+                btn(_('Update'), { variant: 'outline', size: 'sm', icon: 'download', onClick: () => run(api('update_dashboard'), _('The dashboard is updated.')) })
+            ],
+            content: [
+                E('div', { class: 'grid-2' }, [
+                    field(_('Panel'), select(ref('mixin.ui_url'), DASHBOARDS, { optional: true })),
+                    field(_('API port'), input(ref('mixin.api_port'), { number: true, type: 'port', empty: 9090, placeholder: '9090' }))
+                ]),
+                field(_('API secret'), input(ref('mixin.api_secret'), { password: true, empty: '' }), _('The dashboard and other applications connect to the core with it.'))
+            ]
+        })
+    ];
+
+    const rulesTab = [
+        card({
+            title: _('Rules'),
+            description: _('Added before the rules of the profile, they are checked from top to bottom. Target is DIRECT, REJECT or a proxy or group of the profile.'),
+            content: rulesEditor()
+        }),
+        card({
+            title: _('Mixin file'),
+            description: _('Anything else — DNS servers, hosts, sniffer, rule providers — goes to the mixin file. It is merged into the profile on every start.'),
+            footer: btn(_('Open in Editor'), { variant: 'outline', icon: 'file-text', onClick: () => {
+                state.editorFile = 'mixin';
+                location.hash = '#/editor';
+            } })
+        })
+    ];
+
+    const passwordOld = E('input', { class: 'input', type: 'password', autocomplete: 'current-password' });
+    const passwordNew = E('input', { class: 'input', type: 'password', autocomplete: 'new-password' });
+    const passwordRepeat = E('input', { class: 'input', type: 'password', autocomplete: 'new-password' });
+
+    const serviceTab = [
+        card({
+            title: _('Service'),
+            content: [
+                field(_('Start delay, seconds'), input(ref('config.start_delay'), { number: true, type: 'uinteger', empty: 0, placeholder: '0' }),
+                    _('Wait after the router boots, for example until the USB drive or the internet is ready.')),
+                switchField(_('Scheduled restart'), _('Restart the service on a schedule, for example every night.'), ref('config.scheduled_restart')),
+                field(_('Schedule'), input(ref('config.scheduled_restart_cron'), { type: 'cron', empty: '', placeholder: '0 3 * * *' }),
+                    _('Cron format: minute hour day month weekday. <code>0 3 * * *</code> is every day at 3:00.'), () => d().config.scheduled_restart === true)
+            ]
+        }),
+        card({
+            title: _('Logs'),
+            content: [
+                switchField(_('Clear logs at stop'), null, ref('log.clear_at_stop')),
+                field(_('Log size limit, MB'), input(ref('log.max_size'), { number: true, type: 'uinteger', empty: 0, placeholder: _('No limit') }),
+                    _('Logs are kept in RAM, a log over the limit is cleared.'))
+            ]
+        }),
+        card({
+            title: _('Web UI'),
+            content: [
+                field(_('Port'), input(ref('web.port'), { number: true, type: 'port', empty: 9099, placeholder: '9099' }), _('The web UI moves to the new port after saving.'))
+            ]
+        }),
+        card({
+            title: _('Password'),
+            description: _('Password of this web UI. It can also be reset with exodus passwd over SSH.'),
+            content: E('div', { class: 'grid-3' }, [
+                field(_('Current password'), passwordOld),
+                field(_('New password'), passwordNew),
+                field(_('Repeat'), passwordRepeat)
+            ]),
+            footer: btn(_('Change password'), { variant: 'outline', onClick: async () => {
+                if (passwordNew.value !== passwordRepeat.value) {
+                    toast(_('Passwords do not match.'), 'error');
+                    return;
+                }
+                if (passwordNew.value.length < 4) {
+                    toast(_('The password is too short, at least 4 characters.'), 'error');
+                    return;
+                }
+                await run(api('password', { old: passwordOld.value, new: passwordNew.value }), _('The password is changed.'));
+                passwordOld.value = passwordNew.value = passwordRepeat.value = '';
+            } })
+        })
+    ];
+
+    return [
+        pageHeader(_('Settings'), _('Only what makes sense to change on Keenetic, everything else is in the profile and the mixin file.')),
+        tabs('settings', [
+            ['proxy', _('Proxy'), proxyTab],
+            ['dscp', 'DSCP', dscpTab],
+            ['core', 'Mihomo', coreTab],
+            ['rules', _('Rules'), rulesTab],
+            ['service', _('Service'), serviceTab]
+        ])
     ];
 }
 
 function pageEditor() {
     const files = state.files || {};
     const dirs = files.dirs || {};
-    const choose = E('select');
-    choose.appendChild(E('option', { value: '' }, '-'));
-    const group = (label, list, dir, suffix) => {
+    const choose = E('select', { class: 'select' });
+    choose.appendChild(E('option', { value: '' }, _('Choose a file')));
+    const group = (label, list, dir, title) => {
         if (!list || list.length === 0) {
             return;
         }
-        const g = E('optgroup', { label: label });
-        for (const f of list) {
-            g.appendChild(E('option', { value: `${dir}/${f.name}` }, suffix ? suffix(f) : f.name));
-        }
-        choose.appendChild(g);
+        choose.appendChild(E('optgroup', { label: label }, list.map((f) => E('option', { value: `${dir}/${f.name}` }, title ? title(f) : f.name))));
     };
     const subscriptionNames = {};
     for (const s of state.config.subscriptions || []) {
         subscriptionNames[`${s.id}.yaml`] = s.name;
     }
-    choose.appendChild(E('option', { value: files.mixin }, _('File for Mixin')));
-    choose.appendChild(E('option', { value: files.run_profile }, _('Profile for Startup')));
-    group(_('Profile'), files.profiles, dirs.profiles);
-    group(_('Subscription'), files.subscriptions, dirs.subscriptions, (f) => subscriptionNames[f.name] || f.name);
-    group(_('Rule Provider'), files.rule_providers, dirs.rule_providers);
-    group(_('Proxy Provider'), files.proxy_providers, dirs.proxy_providers);
+    choose.appendChild(E('optgroup', { label: 'Exodus' }, [
+        E('option', { value: files.mixin }, _('Mixin file')),
+        E('option', { value: files.run_profile }, _('Profile for startup (read only on restart)'))
+    ]));
+    group(_('Profile files'), files.profiles, dirs.profiles);
+    group(_('Subscriptions'), files.subscriptions, dirs.subscriptions, (f) => subscriptionNames[f.name] || f.name);
+    group(_('Rule providers'), files.rule_providers, dirs.rule_providers);
+    group(_('Proxy providers'), files.proxy_providers, dirs.proxy_providers);
 
-    const text = E('textarea', { rows: 25, wrap: 'off', spellcheck: 'false' });
-    choose.addEventListener('change', async () => {
+    const text = E('textarea', { class: 'textarea log', wrap: 'off', spellcheck: 'false', placeholder: _('Choose a file to edit.') });
+    const load = async () => {
         text.value = '';
         if (choose.value) {
             text.value = (await run(api('file_read', { path: choose.value }))).content;
         }
-    });
+    };
+    choose.addEventListener('change', load);
+    if (state.editorFile === 'mixin' && files.mixin) {
+        choose.value = files.mixin;
+        load();
+    }
+    state.editorFile = null;
 
     const saveFile = async (restart) => {
         if (!choose.value) {
-            notify(_('Choose a file first.'), 'warning');
+            toast(_('Choose a file first.'), 'warning');
             return;
         }
-        await run(api('file_write', { path: choose.value, content: text.value }), _('File is saved.'));
+        await run(api('file_write', { path: choose.value, content: text.value }), _('The file is saved.'));
         if (restart) {
-            await run(api('service', { op: 'restart' }), _('The service is restarting.'));
+            await serviceOp('restart');
         }
     };
 
     return [
-        section(_('Editor'), [row(_('Choose File'), choose), text]),
-        E('div', { class: 'cbi-page-actions' }, [
-            button(_('Save & Apply'), () => saveFile(true), 'cbi-button-apply'),
-            button(_('Save'), () => saveFile(false), 'cbi-button-save')
-        ])
+        pageHeader(_('Editor'), _('The mixin file, profiles, subscriptions and providers as plain text.')),
+        card({
+            content: [field(_('File'), choose), text],
+            footer: E('div', { class: 'row end', style: { width: '100%' } }, [
+                btn(_('Save'), { variant: 'outline', onClick: () => saveFile(false) }),
+                btn(_('Save & Restart'), { onClick: () => saveFile(true) })
+            ])
+        })
     ];
 }
 
-function pageLog() {
+function pageLogs() {
     const logView = (name) => {
-        const text = E('textarea', { rows: 25, wrap: 'off', readonly: true, spellcheck: 'false' });
+        const text = E('textarea', { class: 'textarea log', wrap: 'off', readonly: true, spellcheck: 'false' });
         let follow = true;
         const load = async () => {
             try {
@@ -1373,7 +1677,7 @@ function pageLog() {
                     }
                 }
             } catch (e) {
-                /* ignore */
+                /* the next poll tries again */
             }
         };
         text.addEventListener('scroll', () => {
@@ -1381,44 +1685,41 @@ function pageLog() {
         });
         load();
         state.timers.push(setInterval(load, 5000));
-        return [
-            E('div', { class: 'inline-actions', style: { marginBottom: '8px' } }, [
-                button(_('Clear Log'), async () => {
-                    await run(api('log_clear', { name: name }));
-                    text.value = '';
-                }, 'cbi-button-negative'),
-                E('button', { class: 'btn', type: 'button', onclick: () => { follow = true; text.scrollTop = text.scrollHeight; } }, _('Scroll To Bottom'))
-            ]),
-            text
-        ];
+        return card({
+            content: [
+                E('div', { class: 'row end' }, [
+                    btn(_('Scroll to bottom'), { variant: 'ghost', size: 'sm', icon: 'arrow-down', onClick: () => {
+                        follow = true;
+                        text.scrollTop = text.scrollHeight;
+                    } }),
+                    btn(_('Clear'), { variant: 'outline', size: 'sm', icon: 'trash', onClick: async () => {
+                        await run(api('log_clear', { name: name }));
+                        text.value = '';
+                    } })
+                ]),
+                text
+            ]
+        });
     };
 
     return [
-        section(_('Log'), tabs('log', [
-            ['log_config', _('Log Config'), [
-                row(_('Clear At Stop'), flag(ref('log.clear_at_stop'))),
-                row(_('Scheduled Clear'), flag(ref('log.scheduled_clear'))),
-                row(_('Scheduled Clear Cron'), input(ref('log.scheduled_clear_cron'), { type: 'cron', empty: '' }), null, () => state.draft.log.scheduled_clear === true),
-                row(_('Scheduled Clear Size Limit'), input(ref('log.scheduled_clear_size_limit'), { number: true, type: 'uinteger', empty: 1 }), null, () => state.draft.log.scheduled_clear === true),
-                row(_('Scheduled Clear Size Limit Unit'), select(ref('log.scheduled_clear_size_limit_unit'), [['KB', 'KB'], ['MB', 'MB'], ['GB', 'GB']]), null, () => state.draft.log.scheduled_clear === true),
-                E('div', { style: { marginTop: '8px' } }, pageActions())
-            ]],
-            ['app_log', _('App Log'), logView('app')],
-            ['core_log', _('Core Log'), logView('core')],
-            ['debug_log', _('Debug Log'), [
-                E('p', { class: 'muted' }, _('The report hides addresses of servers, passwords and subscription links. Check it before you share it.')),
-                button(_('Generate & Download'), async () => {
-                    const data = await run(api('debug'));
-                    download('debug.log', data.content, 'text/markdown');
-                }, 'cbi-button-negative')
-            ]]
-        ]))
+        pageHeader(_('Logs'), _('Logs of Exodus and the core, kept in RAM.'), [
+            btn(_('Debug report'), { variant: 'outline', icon: 'bug', onClick: async () => {
+                const data = await run(api('debug'));
+                download('exodus-debug.md', data.content, 'text/markdown');
+                toast(_('The report hides server addresses, passwords and subscription links. Check it before you share it.'), 'info');
+            } })
+        ]),
+        tabs('logs', [
+            ['app', _('Exodus'), logView('app')],
+            ['core', _('Core'), logView('core')]
+        ])
     ];
 }
 
-function pageUpdate() {
-    const container = E('div', {}, E('div', { class: 'spinning' }));
-    const logView = E('textarea', { rows: 15, wrap: 'off', readonly: true, spellcheck: 'false' });
+function pageUpdates() {
+    const container = E('div', { class: 'contents' }, loader());
+    const logView = E('textarea', { class: 'textarea', rows: 14, wrap: 'off', readonly: true, spellcheck: 'false' });
     const pollLog = async () => {
         const data = await api('log_read', { name: 'update' });
         logView.value = data.content;
@@ -1431,79 +1732,77 @@ function pageUpdate() {
 
     api('check_update').then((info) => {
         clear(container);
-        const coreTitles = { meta: 'Mihomo Meta', alpha: 'Mihomo Alpha', prizrak: 'Prizrak-Core' };
         let available = false;
         const status = (current, next) => {
             if (next == null) {
-                return '-';
+                return badge(_('Unknown'), 'outline');
             }
             if (!current) {
                 available = true;
-                return E('strong', {}, _('Not installed'));
+                return badge(_('Not installed'), 'warning');
             }
             if (current !== next && current.replace(/^v/, '') !== next.replace(/^v/, '')) {
                 available = true;
-                return E('strong', { style: { color: 'orange' } }, _('Update available'));
+                return badge(_('Update available'), 'warning');
             }
-            return E('span', { class: 'status-running', style: { fontStyle: 'normal' } }, _('Up to date'));
+            return badge(_('Up to date'), 'success');
         };
-        const tbl = E('table', { class: 'table' }, [
-            E('tr', {}, [E('th', {}, _('Package')), E('th', {}, _('Installed')), E('th', {}, _('Latest')), E('th', {}, _('Status'))]),
-            E('tr', {}, [E('td', {}, 'Exodus'), E('td', {}, info.app || '-'), E('td', {}, info.app_latest || '-'), E('td', {}, status(info.app, info.app_latest))]),
-            E('tr', {}, [E('td', {}, `${_('Core')} (${coreTitles[info.core_type] || info.core_type})`), E('td', {}, info.core || '-'), E('td', {}, info.core_latest || '-'), E('td', {}, status(info.core, info.core_latest))])
-        ]);
-        const lowSpace = E('input', { type: 'checkbox' });
-        lowSpace.checked = info.free_space != null && info.core_size != null && info.free_space < info.core_size * 1.2;
-        const updateButton = button(_('Update'), async () => {
-            const message = lowSpace.checked
-                ? _('The current core will be removed before the new one is installed. If the update fails, the proxy will not work until the update is done again. Continue?')
-                : _('The proxy will be restarted during the update. Continue?');
-            if (!confirm(message)) {
+        const rows = [
+            ['Exodus', info.app, info.app_latest],
+            [`${_('Core')} · ${CORE_TITLES[info.core_type] || info.core_type}`, info.core, info.core_latest]
+        ];
+        const table = E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
+            E('thead', {}, E('tr', {}, [E('th', {}, _('Component')), E('th', {}, _('Installed')), E('th', {}, _('Latest')), E('th', {}, _('Status'))])),
+            E('tbody', {}, rows.map(([name, current, next]) => E('tr', {}, [
+                E('td', {}, E('div', { class: 'cell-title' }, name)), E('td', { class: 'mono' }, current || '—'), E('td', { class: 'mono' }, next || '—'), E('td', {}, status(current, next))
+            ])))
+        ]));
+        const lowSpace = { value: info.free_space != null && info.core_size != null && info.free_space < info.core_size * 1.2 };
+        const updateButton = btn(_('Update'), { icon: 'download', disabled: !available, onClick: async () => {
+            const message = lowSpace.value
+                ? _('The current core is removed before the new one is installed. If the update fails, the proxy does not work until the update is done again.')
+                : _('The proxy restarts during the update.');
+            if (!await confirmDialog(_('Update now?'), message, { confirm: _('Update') })) {
                 return;
             }
-            await run(api('update', { low_space: lowSpace.checked }));
+            await run(api('update', { low_space: lowSpace.value }));
             logView.value = '';
             const timer = setInterval(async () => {
                 try {
                     if (await pollLog()) {
                         clearInterval(timer);
-                        notify(E('span', {}, [_('Update finished.'), ' ', E('a', { href: '#', onclick: (ev) => { ev.preventDefault(); location.reload(); } }, _('Reload the page'))]));
+                        toast(E('span', {}, [_('Update finished.'), ' ', E('a', { href: '#', onclick: (ev) => { ev.preventDefault(); location.reload(); } }, _('Reload the page'))]));
                     }
                 } catch (e) {
                     /* the web ui restarts during the update */
                 }
             }, 2000);
             state.timers.push(timer);
-        }, 'cbi-button-apply');
-        updateButton.disabled = !available;
-        append(container, [
-            E('p', {}, [
-                `${_('Downloads')}: ${info.gh_proxy ? _('through gh-proxy at %s', info.gh_proxy) : _('directly from GitHub')}`, ' · ',
-                `${_('Architecture')}: ${info.arch || '-'}`, ' · ',
-                `${_('Free space')}: ${formatSize(info.free_space)}`, ' · ',
-                `${_('Core size')}: ${formatSize(info.core_size)}`
-            ]),
-            E('div', { class: 'table-wrap' }, tbl),
-            E('p', {}, E('label', {}, [lowSpace, ' ', _('Low flash space mode: remove the current core before installing the new one')])),
-            E('div', { class: 'cbi-value-description' }, _('Use it when the update fails because there is not enough free space. The proxy does not work until the new core is installed.')),
-            E('div', { class: 'inline-actions', style: { marginTop: '12px', justifyContent: 'flex-end' } }, [
-                E('button', { class: 'btn', type: 'button', onclick: () => render() }, _('Check for Updates')),
-                updateButton
-            ])
-        ]);
+        } });
+        append(container, card({
+            title: _('Versions'),
+            description: _('Exodus and the core are downloaded from GitHub into Entware. Settings, profiles and subscriptions are kept.'),
+            action: btn(_('Check again'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: () => render() }),
+            content: [
+                table,
+                infoList([
+                    [_('Downloads'), info.gh_proxy ? _('through gh-proxy at %s', info.gh_proxy) : _('directly from GitHub')],
+                    [_('Architecture'), E('span', { class: 'mono' }, info.arch || '—')],
+                    [_('Free space'), `${formatSize(info.free_space)} · ${_('core')} ${formatSize(info.core_size)}`]
+                ]),
+                E('p', { class: 'description' }, _('The core and the gh-proxy chosen in the installer are kept, run the installer again to change them.')),
+                switchField(_('Low flash space mode'), _('Remove the current core before installing the new one, when the update fails for lack of space. The proxy does not work until the new core is installed.'), objRef(lowSpace, 'value'))
+            ],
+            footer: E('div', { class: 'row end', style: { width: '100%' } }, updateButton)
+        }));
     }).catch((e) => {
         clear(container);
-        container.appendChild(E('div', { class: 'alert-message warning' }, `${_('Failed to check for updates:')} ${e.message}`));
+        container.appendChild(alertBox('destructive', _('Failed to check for updates'), e.message));
     });
 
     return [
-        E('h2', {}, _('Updates')),
-        E('div', { class: 'cbi-map-descr' }, [
-            _('Exodus and the core are downloaded from GitHub and installed into Entware. Settings, profiles and subscriptions are kept.'), ' ',
-            _('The core and the gh-proxy chosen in the installer are kept, run the installer again to change them.')
-        ]),
-        section(null, container),
-        section(_('Update Log'), logView)
+        pageHeader(_('Updates'), _('New versions of Exodus and the core.')),
+        E('div', { class: 'stack' }, [container, card({ title: _('Update log'), content: logView })])
     ];
 }
 
@@ -1513,28 +1812,24 @@ const pages = [
     ['status', _('Status'), pageStatus, async () => {
         await refreshStatus();
     }],
-    ['profile', _('Profile'), pageProfile, async () => {
-        const files = await api('files');
-        state.dirs = files.dirs;
-    }],
-    ['advanced', _('Advanced'), pageAdvanced, async () => {
-        const [interfaces, proxies, hwid, files] = await Promise.all([
-            api('interfaces').catch(() => ({ interfaces: [] })),
-            api('proxies').catch(() => ({ proxies: [] })),
-            api('hwid').catch(() => ({})),
-            api('files').catch(() => ({})),
-            state.hosts ? null : loadHosts()
-        ]);
-        state.interfaces = interfaces.interfaces;
-        state.proxies = proxies.proxies;
+    ['profiles', _('Profiles'), pageProfiles, async () => {
+        const [files, hwid] = await Promise.all([api('files'), api('hwid').catch(() => ({}))]);
+        state.dirs = files.dirs || {};
         state.hwid = hwid;
-        state.dirs = files.dirs;
+    }],
+    ['settings', _('Settings'), pageSettings, async () => {
+        const [interfaces, proxies] = await Promise.all([
+            api('interfaces').catch(() => ({ interfaces: [] })),
+            api('proxies').catch(() => ({ proxies: [] }))
+        ]);
+        state.interfaces = interfaces.interfaces || [];
+        state.proxies = proxies.proxies || [];
     }],
     ['editor', _('Editor'), pageEditor, async () => {
         state.files = await api('files');
     }],
-    ['log', _('Log'), pageLog, null],
-    ['update', _('Updates'), pageUpdate, null]
+    ['logs', _('Logs'), pageLogs, null],
+    ['updates', _('Updates'), pageUpdates, null]
 ];
 
 function currentPage() {
@@ -1546,16 +1841,24 @@ function renderMenu() {
     const menu = clear(document.getElementById('menu'));
     const current = currentPage()[0];
     for (const [name, title] of pages) {
-        menu.appendChild(E('a', { href: `#/${name}`, class: name === current ? 'active' : null }, title));
+        menu.appendChild(E('a', { href: `#/${name}`, class: name === current ? 'active' : null, 'aria-current': name === current ? 'page' : null }, title));
     }
 }
 
+let renderToken = 0;
+
 async function render() {
+    // the login form stays until the password is entered, start() renders the page then
+    if (state.loginShown) {
+        return;
+    }
+    const token = ++renderToken;
     state.timers.forEach((t) => clearInterval(t));
     state.timers = [];
     dependents = [];
+    liveViews = [];
     const content = clear(document.getElementById('content'));
-    content.appendChild(E('div', { class: 'spinning' }));
+    content.appendChild(loader());
     renderMenu();
     const page = currentPage();
     try {
@@ -1566,28 +1869,37 @@ async function render() {
             await page[3]();
         }
     } catch (e) {
-        if (e.message !== _('Login required')) {
-            clear(content).appendChild(E('div', { class: 'alert-message error' }, e.message));
+        if (token === renderToken && e.message !== _('Login required')) {
+            clear(content).appendChild(alertBox('destructive', _('Failed to load the page'), e.message));
         }
         return;
     }
-    clear(content);
-    append(content, page[2]());
+    // a newer navigation started while this one was loading
+    if (token !== renderToken) {
+        return;
+    }
+    append(clear(content), page[2]());
     changed();
 }
 
 let lastHash = location.hash;
-window.addEventListener('hashchange', () => {
-    if (isDirty() && !confirm(_('There are unsaved changes. Leave the page?'))) {
-        history.replaceState(null, '', lastHash || '#/status');
+window.addEventListener('hashchange', async () => {
+    if (location.hash === lastHash) {
         return;
     }
     if (isDirty()) {
+        const target = location.hash;
+        history.replaceState(null, '', lastHash || '#/status');
+        if (!await confirmDialog(_('Leave the page?'), _('There are unsaved changes, they will be lost.'), { confirm: _('Leave'), destructive: true })) {
+            return;
+        }
         state.draft = clone(state.config);
         state.invalid.clear();
         updateDirty();
+        history.replaceState(null, '', target);
     }
     lastHash = location.hash;
+    closeDialog();
     render();
 });
 
@@ -1609,30 +1921,34 @@ function showLogin() {
         return;
     }
     state.loginShown = true;
-    closeModal();
+    closeDialog();
     document.getElementById('indicator').hidden = true;
     document.getElementById('logout').hidden = true;
     document.getElementById('menu').hidden = true;
-    const password = E('input', { type: 'password', placeholder: _('Password'), autocomplete: 'current-password', autofocus: true });
-    const form = E('form', { class: 'cbi-section login' }, [
-        E('h3', {}, _('Authorization Required')),
-        E('p', { class: 'muted' }, _('Enter the password of the Exodus web UI. It is set by the installer, reset it with exodus passwd over SSH.')),
-        password,
-        E('button', { class: 'btn cbi-button-apply', type: 'submit' }, _('Log in'))
+    document.getElementById('savebar').hidden = true;
+    const password = E('input', { class: 'input', type: 'password', autocomplete: 'current-password' });
+    const form = E('form', { class: 'card' }, [
+        E('div', { class: 'card-header' }, [
+            E('span', { class: 'logo-tile large' }, logo()),
+            E('div', { class: 'card-title' }, 'Exodus'),
+            E('div', { class: 'card-description' }, _('Enter the password of the web UI. It is set by the installer, reset it with exodus passwd over SSH.'))
+        ]),
+        E('div', { class: 'card-content' }, field(_('Password'), password)),
+        E('div', { class: 'card-footer' }, E('button', { class: 'btn btn-default', type: 'submit', style: { width: '100%' } }, _('Sign in')))
     ]);
     form.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         try {
             await api('login', { password: password.value });
         } catch (e) {
-            notify(e.message === 'wrong password' ? _('Invalid password') : e.message, 'error');
+            toast(e.message === 'wrong password' ? _('Invalid password') : e.message, 'error');
             password.select();
             return;
         }
-        clear(document.getElementById('notifications'));
+        clear(document.getElementById('toaster'));
         start();
     });
-    append(clear(document.getElementById('content')), form);
+    append(clear(document.getElementById('content')), E('div', { class: 'login' }, form));
     password.focus();
 }
 
@@ -1651,14 +1967,49 @@ async function start() {
 
 // ---------- init ----------
 
-document.getElementById('lang').textContent = lang === 'ru' ? 'EN' : 'RU';
-document.getElementById('lang').addEventListener('click', () => {
+function effectiveTheme() {
+    const chosen = document.documentElement.getAttribute('data-theme');
+    if (chosen === 'light' || chosen === 'dark') {
+        return chosen;
+    }
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function renderThemeButton() {
+    const button = document.getElementById('theme');
+    append(clear(button), icon(effectiveTheme() === 'dark' ? 'sun' : 'moon'));
+    button.title = effectiveTheme() === 'dark' ? _('Light theme') : _('Dark theme');
+}
+
+document.querySelectorAll('[data-logo]').forEach((el) => el.appendChild(logo()));
+renderThemeButton();
+document.getElementById('theme').addEventListener('click', () => {
+    const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    storageSet('exodus.theme', next);
+    renderThemeButton();
+});
+if (window.matchMedia) {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    if (media.addEventListener) {
+        media.addEventListener('change', renderThemeButton);
+    }
+}
+
+const langButton = document.getElementById('lang');
+langButton.textContent = lang === 'ru' ? 'EN' : 'RU';
+langButton.title = lang === 'ru' ? 'English' : 'Русский';
+langButton.addEventListener('click', () => {
     storageSet('exodus.lang', lang === 'ru' ? 'en' : 'ru');
     location.reload();
 });
-document.getElementById('logout').textContent = _('Logout');
-document.getElementById('logout').addEventListener('click', async () => {
-    if (isDirty() && !confirm(_('There are unsaved changes. Leave the page?'))) {
+
+const logoutButton = document.getElementById('logout');
+logoutButton.title = _('Log out');
+logoutButton.setAttribute('aria-label', _('Log out'));
+logoutButton.appendChild(icon('log-out'));
+logoutButton.addEventListener('click', async () => {
+    if (isDirty() && !await confirmDialog(_('Log out?'), _('There are unsaved changes, they will be lost.'), { confirm: _('Log out'), destructive: true })) {
         return;
     }
     await api('logout').catch(() => {});
@@ -1667,14 +2018,16 @@ document.getElementById('logout').addEventListener('click', async () => {
     updateDirty();
     showLogin();
 });
-document.getElementById('modal').addEventListener('click', (ev) => {
-    if (ev.target.id === 'modal') {
-        closeModal();
+
+renderSavebar();
+document.getElementById('dialog').addEventListener('mousedown', (ev) => {
+    if (ev.target.id === 'dialog') {
+        closeDialog();
     }
 });
 document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape') {
-        closeModal();
+        closeDialog();
     }
 });
 
