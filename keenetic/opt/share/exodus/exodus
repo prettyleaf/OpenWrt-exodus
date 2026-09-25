@@ -24,10 +24,6 @@ usage() {
 	EOF
 }
 
-random_hex() {
-	head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'
-}
-
 # secrets and the hwid are generated once, like uci-defaults on openwrt
 ensure_config() {
 	local secret password hwid

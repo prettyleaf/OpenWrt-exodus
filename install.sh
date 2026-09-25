@@ -368,7 +368,7 @@ if [ ! -f "$home_dir/web.auth" ]; then
 		done
 	fi
 	if [ -z "$password" ]; then
-		password=$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')
+		password=$(head -c 32 /dev/urandom | sha256sum | cut -c 1-12)
 		echo "generated password of the web ui: $password"
 	fi
 	printf '%s\n' "$password" | "$share_dir/exodus" passwd > /dev/null || fail "failed to set the password"

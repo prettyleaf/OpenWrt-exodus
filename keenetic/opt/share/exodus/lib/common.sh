@@ -211,6 +211,18 @@ format_filesize() {
 	}'
 }
 
+# random lowercase hex, $1 is the number of bytes
+# busybox od has no -A and -t, so random bytes are hashed into hex instead
+random_hex() {
+	local chars out
+	chars=$(( $1 * 2 ))
+	out=
+	while [ "${#out}" -lt "$chars" ]; do
+		out="$out$(head -c 32 /dev/urandom | sha256sum | cut -d ' ' -f 1)"
+	done
+	printf '%s' "$out" | cut -c "1-$chars"
+}
+
 generate_hwid() {
 	# derive from the model and the mac of the first ethernet interface, so reinstall or config reset keeps the same hwid
 	local board mac dev

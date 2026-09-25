@@ -65,10 +65,6 @@ password_valid() {
 	[ "$( { printf '%s' "$salt"; jq -j ".$1 // \"\"" "$req"; } | sha256sum | cut -d ' ' -f 1)" = "$hash" ]
 }
 
-random_hex() {
-	head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'
-}
-
 # files the editor may read and write: profiles, subscriptions, providers, the mixin file and the profile for startup
 allowed_path() {
 	local path dir real
