@@ -1,6 +1,6 @@
 ![GitHub License](https://img.shields.io/github/license/prettyleaf/openwrt-exodus?style=for-the-badge&logo=github)
 
-[Русский](README.md) | English
+[Русский](README.RU.md) | English
 
 # Exodus for Keenetic
 
