@@ -23,7 +23,6 @@
     "tcp_mode": "redirect",
     "udp_mode": "tproxy",
     "dns_hijack": true,
-    "ipv6": true,
     "router_proxy": false,
     "access_mode": "exclude",
     "access_items": [],
@@ -38,9 +37,7 @@
     "force_proxy": ""
   },
   "mixin": {
-    "log_level": "warning",
-    "mode": null,
-    "dns_mode": "fake-ip",
+    "log_level": null,
     "outbound_interface": null,
     "mixed_port": 7890,
     "authentication": true,

@@ -93,7 +93,8 @@ fw_prepare() {
 	v6=0
 	v6_nat=0
 	command -v iptables > /dev/null 2>&1 && v4=1
-	if [ "$c_proxy_ipv6" = 1 ] && command -v ip6tables > /dev/null 2>&1 && fw_ipv6_active; then
+	# ipv6 follows the profile, mihomo has it on unless the profile turns it off
+	if [ "$p_ipv6" = 1 ] && command -v ip6tables > /dev/null 2>&1 && fw_ipv6_active; then
 		v6=1
 		ip6tables -w -t nat -S > /dev/null 2>&1 && v6_nat=1
 	fi
@@ -153,7 +154,7 @@ fw_prepare() {
 		fw_var fw_v6 "$v6"
 		fw_var fw_v6_nat "$v6_nat"
 		fw_var fw_proxy4 1
-		fw_var fw_proxy6 "$c_proxy_ipv6"
+		fw_var fw_proxy6 "$p_ipv6"
 		fw_var fw_dns4 "$c_proxy_dns_hijack"
 		fw_var fw_dns6 "$c_proxy_dns_hijack"
 		fw_var fw_ping 1

@@ -380,18 +380,40 @@ gh_url() {
 	esac
 }
 
+# architecture of entware, the builds of the core and yq follow it
+entware_arch() {
+	opkg print-architecture 2> /dev/null | awk '$2 != "all" && $2 != "noarch" { arch = $2 } END { print arch }'
+}
+
+# latest versions are asked from github at most every 6 hours, force asks now; failed checks are not kept
 action_check_update() {
-	local latest core_type core_latest release free core_size proxy_host
-	latest=$(curl -s -f -L -m 20 "$(gh_url "https://raw.githubusercontent.com/$REPOSITORY/$BRANCH/keenetic/opt/share/exodus/VERSION")" 2> /dev/null | head -n 1 | tr -d '\r')
-	echo "$latest" | grep -q -E '^[A-Za-z0-9._-]+$' || latest=
+	local latest core_type core_latest release free core_size proxy_host cache cached now
 	core_type=$(cfg_get .update.core)
 	case "$core_type" in
 		alpha) release="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha" ;;
 		prizrak) release="https://github.com/legiz-ru/Prizrak-Core/releases/latest/download" ;;
 		*) core_type=meta; release="https://github.com/MetaCubeX/mihomo/releases/latest/download" ;;
 	esac
-	core_latest=$(curl -s -f -L -m 20 "$(gh_url "$release/version.txt")" 2> /dev/null | head -n 1 | tr -d '\r')
-	echo "$core_latest" | grep -q -E '^[A-Za-z0-9._-]+$' || core_latest=
+	cache="$RUN_TMP/update_check.json"
+	now=$(date +%s)
+	cached=
+	if [ "$(arg force)" != "true" ]; then
+		cached=$(jq -r --arg core "$core_type" --argjson now "$now" \
+			'select(.core_type == $core and ($now - .time) < 21600 and ($now - .time) >= 0) | "\(.app_latest)\t\(.core_latest)"' "$cache" 2> /dev/null)
+	fi
+	if [ -n "$cached" ]; then
+		latest="${cached%%	*}"
+		core_latest="${cached#*	}"
+	else
+		latest=$(curl -s -f -L -m 20 "$(gh_url "https://raw.githubusercontent.com/$REPOSITORY/$BRANCH/keenetic/opt/share/exodus/VERSION")" 2> /dev/null | head -n 1 | tr -d '\r')
+		echo "$latest" | grep -q -E '^[A-Za-z0-9._-]+$' || latest=
+		core_latest=$(curl -s -f -L -m 20 "$(gh_url "$release/version.txt")" 2> /dev/null | head -n 1 | tr -d '\r')
+		echo "$core_latest" | grep -q -E '^[A-Za-z0-9._-]+$' || core_latest=
+		if [ -n "$latest" ] && [ -n "$core_latest" ]; then
+			jq -n --argjson time "$now" --arg core "$core_type" --arg app "$latest" --arg core_latest "$core_latest" \
+				'{time: $time, core_type: $core, app_latest: $app, core_latest: $core_latest}' > "$cache" 2> /dev/null
+		fi
+	fi
 	free=$(df -k "$EXODUS_OPT" 2> /dev/null | tail -n 1 | awk '{ print $(NF - 2) }')
 	core_size=$(wc -c < "$PROG" 2> /dev/null)
 	proxy_host=$(cfg_get .update.gh_proxy | sed -n 's|^[a-z]*://\([^/]*\).*|\1|p')
@@ -401,7 +423,7 @@ action_check_update() {
 		--arg core_type "$core_type" \
 		--arg core "$(core_version)" \
 		--arg core_latest "$core_latest" \
-		--arg arch "$(opkg print-architecture 2> /dev/null | awk '$2 != "all" && $2 != "noarch" { arch = $2 } END { print arch }')" \
+		--arg arch "$(entware_arch)" \
 		--arg free "$free" \
 		--arg core_size "$core_size" \
 		--arg gh_proxy "$proxy_host" \
@@ -410,6 +432,26 @@ action_check_update() {
 		  free_space: (if $free == "" then null else ($free | tonumber * 1024) end),
 		  core_size: (if $core_size == "" then null else ($core_size | tonumber) end),
 		  gh_proxy: (if $gh_proxy == "" then null else $gh_proxy end)}' | ok
+}
+
+# build info of the web ui: version, branch and commit of the install, the core and the router
+action_about() {
+	local build
+	build=$(cat "$BUILD_PATH" 2> /dev/null)
+	echo "$build" | jq -e 'type == "object"' > /dev/null 2>&1 || build='{}'
+	jq -n \
+		--argjson build "$build" \
+		--argjson router "$(keenetic_version)" \
+		--arg app "$(app_version)" \
+		--arg branch "$BRANCH" \
+		--arg repository "$REPOSITORY" \
+		--arg installed "$(date -r "$VERSION_PATH" '+%Y-%m-%d %H:%M:%S' 2> /dev/null)" \
+		--arg core "$(core_version)" \
+		--arg core_type "$(cfg_get .update.core)" \
+		--arg arch "$(entware_arch)" \
+		'{app: $app, ref: ($build.ref // $branch), commit: ($build.commit // ""), installed: ($build.installed // $installed),
+		  repository: $repository, core: $core, core_type: (if $core_type == "" then "meta" else $core_type end),
+		  model: ($router.model // $router.device // ""), firmware: ($router.title // $router.release // ""), arch: $arch}' | ok
 }
 
 action_update() {
@@ -504,6 +546,7 @@ case "$action" in
 	debug) action_debug ;;
 	hwid) action_hwid ;;
 	check_update) action_check_update ;;
+	about) action_about ;;
 	update) action_update ;;
 	update_dashboard) action_update_dashboard ;;
 	password) action_password ;;

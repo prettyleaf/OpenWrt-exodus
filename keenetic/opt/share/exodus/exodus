@@ -189,7 +189,7 @@ start_locked() {
 		if [ "$fw_v6" = 1 ] && [ "$fw_v6_nat" != 1 ]; then
 			log "Proxy" "ip6tables has no nat table, IPv6 DNS hijack and IPv6 TCP redirect are not available."
 		fi
-		if [ "$c_proxy_ipv6" = 1 ] && [ "$fw_v6" != 1 ]; then
+		if [ "$p_ipv6" = 1 ] && [ "$fw_v6" != 1 ]; then
 			log "Proxy" "No global IPv6 address, IPv6 rules are skipped."
 		fi
 	else

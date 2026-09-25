@@ -198,6 +198,7 @@ profile_params() {
 		def digits: length > 0 and (explode | all(. >= 48 and . <= 57));
 		def port_of(listen): (listen // "" | tostring | split(":") | last // "") | if digits then . else "" end;
 		{
+			ipv6: (if .ipv6 == false then "0" else "1" end),
 			redir_port: (.["redir-port"] // ""),
 			tproxy_port: (.["tproxy-port"] // ""),
 			dns_port: (if .dns.enable == true then port_of(.dns.listen) else "" end),

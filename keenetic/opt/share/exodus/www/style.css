@@ -256,7 +256,7 @@ button, input, select, textarea {
 
 .container {
     width: 100%;
-    max-width: 1040px;
+    max-width: 1360px;
     margin: 0 auto;
     padding: 0 24px;
 }
@@ -341,21 +341,6 @@ main.container {
     height: 1px;
     background: var(--border);
     margin: 4px 0;
-}
-
-.footer {
-    padding-top: 8px;
-    padding-bottom: 32px;
-    color: var(--muted-foreground);
-    font-size: 12px;
-}
-
-.footer a {
-    text-decoration: none;
-}
-
-.footer a:hover {
-    text-decoration: underline;
 }
 
 /* ---------- card ---------- */
@@ -701,6 +686,36 @@ main.container {
     gap: 8px;
     min-width: 0;
     align-content: start;
+}
+
+.label-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+/* (i) next to a label or a title, opens the explanation in a dialog */
+.info-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    color: var(--muted-foreground);
+}
+
+.info-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.info-text {
+    display: grid;
+    gap: 10px;
+    color: var(--muted-foreground);
+}
+
+.info-text strong {
+    color: var(--foreground);
+    font-weight: 500;
 }
 
 .label {
@@ -1210,6 +1225,30 @@ main.container {
     overflow-y: auto;
 }
 
+.picker-list.scroll.short {
+    max-height: 264px;
+}
+
+/* segments and wi-fi points on the left, devices on the right */
+.picker-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 24px;
+    align-items: start;
+}
+
+.picker-column {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
+
+@media (max-width: 959px) {
+    .picker-columns {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .picker-item {
     display: flex;
     align-items: center;
@@ -1341,9 +1380,173 @@ main.container {
 }
 
 .dialog-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     font-size: 18px;
     font-weight: 600;
     line-height: 1.2;
+}
+
+/* ---------- build info ---------- */
+
+.version-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted-foreground);
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.version-chip:hover {
+    color: var(--foreground);
+    background: var(--accent);
+}
+
+.version-chip svg {
+    width: 14px;
+    height: 14px;
+}
+
+.version-chip:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+}
+
+/* an update is available: the chip takes the warning color and pulses */
+.version-chip.update {
+    color: var(--warning);
+    border-color: color-mix(in srgb, var(--warning) 55%, transparent);
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    animation: pulse-ring 2s ease-out infinite;
+}
+
+.version-chip.update .dot {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 25%, transparent);
+}
+
+@keyframes pulse-ring {
+    0% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--warning) 45%, transparent);
+    }
+    70% {
+        box-shadow: 0 0 0 8px color-mix(in srgb, var(--warning) 0%, transparent);
+    }
+    100% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--warning) 0%, transparent);
+    }
+}
+
+.dialog.wide {
+    max-width: 560px;
+}
+
+.build-panel {
+    display: grid;
+    gap: 14px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+
+.build-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.build-head .badge {
+    height: 26px;
+    padding: 0 10px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+}
+
+.build-head .badge svg {
+    width: 14px;
+    height: 14px;
+}
+
+.build-head .badge .badge-logo {
+    width: 18px;
+    height: auto;
+}
+
+.build-head .btn {
+    margin-left: auto;
+}
+
+.build-tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+@media (max-width: 480px) {
+    .build-tiles {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.build-tile {
+    display: grid;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--background);
+    min-width: 0;
+}
+
+.build-tile-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted-foreground);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.build-tile-title svg {
+    width: 14px;
+    height: 14px;
+}
+
+.build-tile-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.build-tile-value .muted {
+    font-family: var(--font);
+}
+
+.build-tile-value a {
+    text-decoration: none;
+}
+
+.build-tile-value a:hover {
+    text-decoration: underline;
+}
+
+.build-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
 }
 
 .dialog-description {

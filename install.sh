@@ -285,10 +285,13 @@ if [ "$core" = "meta" ]; then
 	core_release="https://github.com/MetaCubeX/mihomo/releases/download/$core_latest"
 fi
 
-# download the app, streamed to avoid keeping the archive in ram
+# download the app, the archive is small and the temp dir is on the storage of entware
 echo "download exodus ($ref)"
 mkdir -p "$temp_dir/app"
-curl -s -f -L --connect-timeout 15 -m 300 "$(gh_url "https://github.com/$repository/archive/$ref.tar.gz")" | tar -xzf - -C "$temp_dir/app" 2> /dev/null
+download "https://github.com/$repository/archive/$ref.tar.gz" "$temp_dir/app.tar.gz" 300 && tar -xzf "$temp_dir/app.tar.gz" -C "$temp_dir/app" 2> /dev/null
+# github writes the commit into the pax header of the archive, the web ui shows it
+commit=$(gzip -dc "$temp_dir/app.tar.gz" 2> /dev/null | head -c 1024 | tr -d '\000' | sed -n 's/.*comment=\([0-9a-f]\{40\}\).*/\1/p' | head -n 1)
+rm -f "$temp_dir/app.tar.gz"
 src=$(find "$temp_dir/app" -mindepth 1 -maxdepth 1 -type d | head -n 1)
 if [ -z "$src" ] || [ ! -f "$src/keenetic/opt/share/exodus/exodus" ]; then
 	fail "download failed, if the provider slows down GitHub, install through gh-proxy, see README"
@@ -305,6 +308,8 @@ mkdir -p "$share_dir.new" || fail "can not create $share_dir"
 cp -R "$src/keenetic/opt/share/exodus/." "$share_dir.new/" || fail "install failed, not enough free space?"
 # the installer from the repository root, used by the update page
 cp -f "$src/install.sh" "$share_dir.new/install.sh"
+jq -n --arg ref "$ref" --arg commit "$commit" --arg installed "$(date '+%Y-%m-%d %H:%M:%S')" \
+	'{ref: $ref, commit: $commit, installed: $installed}' > "$share_dir.new/BUILD"
 rm -rf "$share_dir.old"
 [ -d "$share_dir" ] && mv "$share_dir" "$share_dir.old"
 mv "$share_dir.new" "$share_dir" || fail "install failed"
@@ -329,7 +334,6 @@ config_merge='
 	.[0] as $defaults
 	| .[1]
 	| moved(["proxy", "ipv4_dns_hijack"]; ["proxy", "dns_hijack"])
-	| moved(["proxy", "ipv6_proxy"]; ["proxy", "ipv6"])
 	| moved(["mixin", "authentications", 0, "username"]; ["mixin", "username"])
 	| moved(["mixin", "authentications", 0, "password"]; ["mixin", "password"])
 	| if .mixin.api_port == null and (.mixin.api_listen | type) == "string" then .mixin.api_port = (.mixin.api_listen | split(":") | last | tonumber? // null) else . end

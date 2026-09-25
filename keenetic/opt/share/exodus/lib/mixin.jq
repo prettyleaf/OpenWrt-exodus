@@ -1,5 +1,6 @@
 # mihomo options from config.json, merged over the profile on start
 # null keeps the value of the profile; the ports, dns and api the transparent proxy relies on are always set
+# ipv6, mode and the dns mode always come from the profile
 # no regex here: jq of entware is built without oniguruma
 
 def int_or_null: if . == null or . == "" then null else (tonumber? // null) end;
@@ -14,12 +15,9 @@ def drop_nulls:
 
 .mixin as $m
 | .proxy as $p
-| ($p.ipv6 != false) as $ipv6
 | {
 	"log-level": $m.log_level,
-	"mode": $m.mode,
 	"interface-name": $m.outbound_interface,
-	"ipv6": $ipv6,
 	"allow-lan": true,
 
 	"mixed-port": ($m.mixed_port | int_or_null),
@@ -43,9 +41,7 @@ def drop_nulls:
 
 	"dns": {
 		"enable": true,
-		"listen": "[::]:1053",
-		"ipv6": $ipv6,
-		"enhanced-mode": $m.dns_mode
+		"listen": "[::]:1053"
 	},
 
 	# the core marks its own connections, the router proxy lets them out

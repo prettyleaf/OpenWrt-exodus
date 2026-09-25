@@ -62,6 +62,14 @@ const ICONS = {
     'list': '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
     'inbox': '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
     'dashboard': '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+    'git-branch': '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+    'calendar': '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+    'hash': '<line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/>',
+    'copy': '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+    'cpu': '<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>',
+    'router': '<rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6.01 18H6"/><path d="M10.01 18H10"/><path d="M15 10v4"/><path d="M17.84 7.17a4 4 0 0 0-5.66 0"/><path d="M20.66 4.34a8 8 0 0 0-11.31 0"/>',
+    'github': '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>',
+    'arrow-up-circle': '<circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/>',
     'bug': '<path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/>'
 };
 
@@ -327,9 +335,7 @@ async function refreshStatus() {
     } catch (e) {
         return;
     }
-    const indicator = document.getElementById('indicator');
-    indicator.hidden = false;
-    append(clear(indicator), statusBadge());
+    renderAboutButton();
     liveViews.forEach((update) => update());
 }
 
@@ -389,7 +395,7 @@ function alertBox(variant, title, body) {
 
 function card(opts) {
     const header = opts.title || opts.description || opts.action ? E('div', { class: 'card-header' }, [
-        opts.title ? E('div', { class: 'card-title' }, opts.title) : null,
+        opts.title ? E('div', { class: 'card-title' }, [opts.title, opts.info ? infoButton(opts.title, opts.info) : null]) : null,
         opts.description ? E('div', { class: 'card-description' }, opts.description) : null,
         opts.action ? E('div', { class: 'card-action' }, opts.action) : null
     ]) : null;
@@ -425,7 +431,7 @@ let dialogClose = null;
 
 function openDialog(opts) {
     const overlay = document.getElementById('dialog');
-    const box = E('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true' }, [
+    const box = E('div', { class: `dialog${opts.wide ? ' wide' : ''}`, role: 'dialog', 'aria-modal': 'true' }, [
         E('div', { class: 'dialog-header' }, [
             E('h2', { class: 'dialog-title' }, opts.title),
             opts.description ? E('p', { class: 'dialog-description' }, opts.description) : null
@@ -536,12 +542,26 @@ function labelTarget(control) {
 }
 
 // label, control and a muted description under it; descriptions are static strings and may hold <code>
-function field(label, control, description, depends) {
+// info moves a longer explanation behind an (i) next to the label
+function field(label, control, description, depends, info) {
+    const title = label ? E('label', { class: 'label', for: labelTarget(control) }, label) : null;
     return dependOn(E('div', { class: 'field' }, [
-        label ? E('label', { class: 'label', for: labelTarget(control) }, label) : null,
+        info ? E('div', { class: 'label-row' }, [title, infoButton(label, info)]) : title,
         control,
         description ? E('p', { class: 'description', html: description }) : null
     ]), depends);
+}
+
+// (i) that opens the explanation in a dialog; paragraphs are static strings or nodes
+function infoButton(title, paragraphs) {
+    return E('button', { class: 'btn btn-ghost btn-icon info-btn', type: 'button', title: _('More'), 'aria-label': _('More'), onclick: (ev) => {
+        ev.preventDefault();
+        openDialog({
+            title: title,
+            content: E('div', { class: 'info-text' }, paragraphs.map((p) => (typeof p === 'string' ? E('p', { html: p }) : p))),
+            footer: [btn(_('Got it'), { onClick: () => closeDialog() })]
+        });
+    } }, icon('info'));
 }
 
 function switchControl(r) {
@@ -995,13 +1015,18 @@ function devicePicker() {
                 hosts.error ? `${_('Error')}: ${hosts.error}` : _('Names of devices, Wi-Fi points and parental control are not available: only devices from the ARP table of the router are listed.')));
         }
 
+        // segments, wi-fi points and the manual address on the left, devices on the right
+        const left = E('div', { class: 'picker-column' });
+        const right = E('div', { class: 'picker-column' });
+        container.appendChild(E('div', { class: 'picker-columns' }, [left, right]));
+
         if (hosts.segments.length > 0) {
-            container.appendChild(group(_('Network segments'), null, E('div', { class: 'picker-list' }, hosts.segments.map((s) =>
+            left.appendChild(group(_('Network segments'), null, E('div', { class: 'picker-list scroll short' }, hosts.segments.map((s) =>
                 option(`iface:${s.ifname}`, 'network', s.name || s.ifname, [s.ifname, s.address].filter(Boolean).join(' · '))))));
         }
 
         if (hosts.aps.length > 0) {
-            container.appendChild(group(_('Wi-Fi points'), null, E('div', { class: 'picker-list' }, hosts.aps.map((ap) =>
+            left.appendChild(group(_('Wi-Fi points'), hosts.aps.length, E('div', { class: 'picker-list scroll short' }, hosts.aps.map((ap) =>
                 option(`ap:${ap.id}`, 'wifi', ap.ssid || ap.description || ap.id,
                     [ap.band, ap.id, _('clients: %s', ap.clients)].join(' · '),
                     { inactive: ap.state === 'down', tags: ap.state === 'down' ? badge(_('off'), 'outline') : null })))));
@@ -1043,7 +1068,7 @@ function devicePicker() {
             renderHosts();
         });
         renderHosts();
-        container.appendChild(group(_('Devices'), hosts.hosts.length, [E('div', { class: 'search' }, [icon('search'), search]), list]));
+        right.appendChild(group(_('Devices'), hosts.hosts.length, [E('div', { class: 'search' }, [icon('search'), search]), list]));
 
         const manual = E('input', { class: 'input', type: 'text', placeholder: _('MAC, IPv4 or IPv6 address or network'), spellcheck: 'false' });
         const addManual = () => {
@@ -1061,8 +1086,10 @@ function devicePicker() {
                 addManual();
             }
         });
-        container.appendChild(field(_('Add by address'), E('div', { class: 'row', style: { flexWrap: 'nowrap' } }, [manual, btn(_('Add'), { variant: 'outline', icon: 'plus', onClick: addManual })]),
-            _('For a device the router does not list, or a whole network like <code>192.168.1.0/24</code>.')));
+        left.appendChild(field(_('Add by address'), E('div', { class: 'row', style: { flexWrap: 'nowrap' } }, [manual, btn(_('Add'), { variant: 'outline', icon: 'plus', onClick: addManual })]), null, null, [
+            _('For a device the router does not list, or a whole network like <code>192.168.1.0/24</code>.'),
+            _('The IP address of a device the router knows is saved as its MAC, so the choice follows the device when its address changes.')
+        ]));
     };
 
     render();
@@ -1080,7 +1107,6 @@ function pageStatus() {
 
     const service = card({
         title: _('Service'),
-        description: _('Mihomo core and the rules of the transparent proxy.'),
         action: live(statusBadge, () => [status().running, !!state.status]),
         content: [
             state.config.config.enabled !== true ? alertBox('warning', _('The service is disabled'), _('It does not start until Enable is on. Turn it on below and choose Save & Apply.')) : null,
@@ -1115,31 +1141,32 @@ function pageStatus() {
 
     const startup = card({
         title: _('Startup'),
-        description: _('What the service runs.'),
         content: [
             switchField(_('Enable'), _('Run the service and start it when the router boots.'), ref('config.enabled')),
-            field(_('Profile'), select(ref('config.profile'), profileChoices(), { optional: true, placeholder: _('Not selected') }),
-                _('A subscription or an uploaded file, they are managed on the Profiles page.'))
+            field(_('Profile'), select(ref('config.profile'), profileChoices(), { optional: true, placeholder: _('Not selected') }), null, null, [
+                _('A subscription or an uploaded file, they are managed on the Profiles page.'),
+                _('On every start the profile is merged with the settings of Exodus and the mixin file, a subscription is downloaded again unless its update is manual.'),
+                _('Save & Apply restarts the service with the chosen profile.')
+            ])
         ]
     });
 
+    const modeInfo = (key, text) => E('p', {}, [E('strong', {}, key), E('br'), text]);
     const devices = card({
         title: _('Devices'),
-        description: _('Which devices of the local network go through the proxy.'),
         content: [
             d.proxy.enabled !== true ? alertBox('warning', null, _('The transparent proxy is turned off in Settings, the selection has no effect.')) : null,
-            field(_('Mode'), E('div', { class: 'stack', style: { gap: '8px' } }, [
-                segmented(ref('proxy.access_mode'), [['exclude', _('All except selected')], ['include', _('Only selected')]]),
-                dependOn(E('p', { class: 'description' }, _('All devices go through the proxy, the selected ones go directly.')), () => state.draft.proxy.access_mode !== 'include'),
-                dependOn(E('p', { class: 'description' }, _('Only the selected devices go through the proxy, the others go directly.')), () => state.draft.proxy.access_mode === 'include')
-            ])),
-            devicePicker(),
-            E('p', { class: 'description' }, _('A segment matches all its devices, a Wi-Fi point matches the devices connected to it (synced every 30 seconds), a device is matched by its MAC with IPv4 and IPv6. DNS follows the choice: proxied devices ask the core, the others ask the router.'))
+            field(_('Mode'), segmented(ref('proxy.access_mode'), [['exclude', _('All except selected')], ['include', _('Only selected')]]), null, null, [
+                modeInfo(_('All except selected'), _('All devices go through the proxy, the selected ones go directly.')),
+                modeInfo(_('Only selected'), _('Only the selected devices go through the proxy, the others go directly.')),
+                _('A segment matches all its devices, a Wi-Fi point matches the devices connected to it (synced every 30 seconds), a device is matched by its MAC with IPv4 and IPv6. DNS follows the choice: proxied devices ask the core, the others ask the router.')
+            ]),
+            devicePicker()
         ]
     });
 
     return [
-        pageHeader(_('Status'), _('Transparent proxy with the Mihomo core for Keenetic.')),
+        pageHeader(_('Status')),
         E('div', { class: 'stack' }, [E('div', { class: 'grid-2' }, [service, startup]), devices])
     ];
 }
@@ -1159,7 +1186,7 @@ function subscriptionDialog(subscription, onSave) {
         field(_('User agent'), input(objRef(draft, 'user_agent'), { empty: '', values: ['Mihomo/Exodus v{version}', 'clash.meta', 'mihomo', 'clash'] }), _('<code>{version}</code> is replaced with the version of Exodus.')),
         field(_('Update'), select(objRef(draft, 'prefer'), [['remote', _('On every start')], ['local', _('Manually')]]),
             _('Manually: the downloaded file is used until you press Update.')),
-        switchField(_('Send HWID'), _('Needed by panels with a device limit, the headers are shown on this page.'), objRef(draft, 'send_hwid'))
+        switchField(_('Send HWID'), _('Needed by panels with a device limit, the headers are shown in Settings → Service.'), objRef(draft, 'send_hwid'))
     ];
     dependents = saved;
     openDialog({
@@ -1253,7 +1280,6 @@ function pageProfiles() {
 
     const subscriptionsCard = card({
         title: _('Subscriptions'),
-        description: _('Downloaded from the provider, with traffic and expiry when the provider gives them.'),
         action: btn(_('Add'), { variant: 'outline', size: 'sm', icon: 'plus', onClick: () => subscriptionDialog(
             { id: newId(), name: '', url: '', info_url: '', user_agent: 'Mihomo/Exodus v{version}', send_hwid: true, prefer: 'remote' },
             (created) => {
@@ -1312,32 +1338,15 @@ function pageProfiles() {
 
     const filesCard = card({
         title: _('Profile files'),
-        description: _('Complete Mihomo configs uploaded from a computer.'),
         action: [fileInput, btn(_('Upload'), { variant: 'outline', size: 'sm', icon: 'upload', onClick: () => fileInput.click() })],
         content: filesContainer
     });
 
-    const hwid = state.hwid || {};
-    const headers = hwid.headers || {};
-    const detected = (value) => (value ? E('span', { class: 'mono' }, value) : E('span', { class: 'muted' }, _('not detected')));
-    const hwidCard = card({
-        title: 'HWID',
-        description: _('Panels with a device limit (Remnawave and others) tell the router from other devices by these headers.'),
-        content: [
-            field(_('Device ID'), input(ref('config.hwid'), { empty: '', placeholder: hwid.generated || _('Automatic') }),
-                _('Made from the hardware of the router, it stays the same after a reinstall. Change it only to take the place of another device.')),
-            infoList([
-                [E('span', { class: 'mono' }, 'x-device-os'), detected(headers['x-device-os'])],
-                [E('span', { class: 'mono' }, 'x-ver-os'), detected(headers['x-ver-os'])],
-                [E('span', { class: 'mono' }, 'x-device-model'), detected(headers['x-device-model'])]
-            ])
-        ]
-    });
-
+    // a compact row: the text on the left, the button on the right
     const hardUpdateCard = card({
         title: _('Hard update'),
         description: _('Remove everything downloaded by the providers of the current profile, download the subscription again and restart. Files of local providers are kept.'),
-        footer: btn(_('Hard update'), { variant: 'destructive-outline', icon: 'refresh-cw', onClick: async () => {
+        action: btn(_('Hard update'), { variant: 'destructive-outline', icon: 'refresh-cw', onClick: async () => {
             if (!await confirmDialog(_('Hard update?'), _('The proxy restarts and all providers are downloaded again.'), { confirm: _('Hard update'), destructive: true })) {
                 return;
             }
@@ -1347,7 +1356,7 @@ function pageProfiles() {
 
     return [
         pageHeader(_('Profiles'), _('Configs of the core: subscriptions of providers and your own files.')),
-        E('div', { class: 'stack' }, [subscriptionsCard, filesCard, E('div', { class: 'grid-2' }, [hwidCard, hardUpdateCard])])
+        E('div', { class: 'stack' }, [subscriptionsCard, filesCard, hardUpdateCard])
     ];
 }
 
@@ -1411,6 +1420,26 @@ function rulesEditor() {
     return container;
 }
 
+// the device id and the headers subscriptions get with it
+function hwidCard() {
+    const hwid = state.hwid || {};
+    const headers = hwid.headers || {};
+    const detected = (value) => (value ? E('span', { class: 'mono' }, value) : E('span', { class: 'muted' }, _('not detected')));
+    return card({
+        title: 'HWID',
+        description: _('Panels with a device limit tell the router from other devices by these headers.'),
+        content: [
+            field(_('Device ID'), input(ref('config.hwid'), { empty: '', placeholder: hwid.generated || _('Automatic') }),
+                _('Made from the hardware of the router, it stays the same after a reinstall.')),
+            infoList([
+                [E('span', { class: 'mono' }, 'x-device-os'), detected(headers['x-device-os'])],
+                [E('span', { class: 'mono' }, 'x-ver-os'), detected(headers['x-ver-os'])],
+                [E('span', { class: 'mono' }, 'x-device-model'), detected(headers['x-device-model'])]
+            ])
+        ]
+    });
+}
+
 function pageSettings() {
     const d = () => state.draft;
     const proxyOn = () => d().proxy.enabled === true;
@@ -1430,7 +1459,6 @@ function pageSettings() {
                         _('For QUIC, games and calls. Needs the Netfilter kernel modules component of the router.'))
                 ]), proxyOn),
                 switchField(_('DNS through the core'), _('DNS queries of the proxied devices go to the core, whatever DNS the router uses. Required for Fake-IP and domain rules.'), ref('proxy.dns_hijack'), proxyOn),
-                switchField('IPv6', _('Proxy IPv6 and give IPv6 addresses in DNS answers. Turn it off if the provider has no IPv6.'), ref('proxy.ipv6'), proxyOn),
                 switchField(_('Traffic of the router'), _('Proxy the connections of the router itself, for example of Entware applications. DNS of the router is not intercepted.'), ref('proxy.router_proxy'), proxyOn),
                 switchField(_('Respect parental control'), _('Devices blocked in the router (no internet access, schedules) are not proxied, otherwise they would get internet through the core.'), ref('proxy.respect_parental_control'), proxyOn)
             ]
@@ -1449,7 +1477,8 @@ function pageSettings() {
                 ]),
                 field(_('Direct IPv4 networks'), tags(ref('proxy.reserved_ip'), { type: 'ip4', placeholder: '203.0.113.0/24' }),
                     _('Destinations that never go through the proxy. Local and special networks are here by default.')),
-                field(_('Direct IPv6 networks'), tags(ref('proxy.reserved_ip6'), { type: 'ip6', placeholder: '2001:db8::/32' }), null, () => d().proxy.ipv6 === true)
+                field(_('Direct IPv6 networks'), tags(ref('proxy.reserved_ip6'), { type: 'ip6', placeholder: '2001:db8::/32' }),
+                    _('Used when IPv6 is on in the profile and the router has an IPv6 address.'))
             ]
         })
     ];
@@ -1457,6 +1486,10 @@ function pageSettings() {
     const dscpTab = [
         card({
             title: _('DSCP marks'),
+            info: [
+                E('p', {}, E('strong', {}, _('How to mark traffic on Windows'))),
+                _('gpedit.msc → Computer Configuration → Windows Settings → Policy-based QoS → Create new policy: choose the DSCP value and the application. Outside of a domain also set <code>HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\QoS</code> "Do not use NLA" = "1" and reboot.')
+            ],
             description: _('A device can mark its traffic with DSCP to choose the route per application. The marks are the same as in XKeen.'),
             content: [
                 field(_('Direct'), tags(ref('proxy.dscp_bypass'), { type: 'dscp', number: true, placeholder: '62' }), _('Traffic with these marks goes directly (62 in XKeen).')),
@@ -1468,22 +1501,16 @@ function pageSettings() {
                         _('A proxy or a group of the running profile. Empty turns the mark off.'), () => d().proxy.dscp_force != null)
                 ])
             ]
-        }),
-        alertBox('default', _('How to mark traffic on Windows'), E('span', { html: _('gpedit.msc → Computer Configuration → Windows Settings → Policy-based QoS → Create new policy: choose the DSCP value and the application. Outside of a domain also set <code>HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\QoS</code> "Do not use NLA" = "1" and reboot.') }))
+        })
     ];
 
     const coreTab = [
         card({
             title: 'Mihomo',
-            description: _('Options merged over the profile. An empty choice keeps the value of the profile.'),
+            description: _('Options merged over the profile. Mode, DNS mode and IPv6 always come from the profile.'),
             content: [
                 E('div', { class: 'grid-2' }, [
                     field(_('Log level'), select(ref('mixin.log_level'), ['silent', 'error', 'warning', 'info', 'debug'].map((v) => [v, v]), { optional: true })),
-                    field(_('Mode'), select(ref('mixin.mode'), [['rule', _('Rules')], ['global', _('Global')], ['direct', _('Direct')]], { optional: true }))
-                ]),
-                E('div', { class: 'grid-2' }, [
-                    field(_('DNS mode'), select(ref('mixin.dns_mode'), [['fake-ip', 'Fake-IP'], ['redir-host', 'Redir-Host']], { optional: true }),
-                        _('Fake-IP answers at once and suits the transparent proxy best.')),
                     field(_('Outbound interface'), select(ref('mixin.outbound_interface'), interfaces, { optional: true, placeholder: _('Automatic') }),
                         _('Linux name of the interface for the connections of the core: ppp0, eth3, nwg0 and so on.'))
                 ]),
@@ -1553,6 +1580,7 @@ function pageSettings() {
                     _('Cron format: minute hour day month weekday. <code>0 3 * * *</code> is every day at 3:00.'), () => d().config.scheduled_restart === true)
             ]
         }),
+        hwidCard(),
         card({
             title: _('Logs'),
             content: [
@@ -1730,7 +1758,11 @@ function pageUpdates() {
     };
     pollLog().catch(() => {});
 
-    api('check_update').then((info) => {
+    const force = state.forceUpdateCheck === true;
+    state.forceUpdateCheck = false;
+    api('check_update', force ? { force: true } : {}).then((info) => {
+        state.update = info;
+        renderAboutButton();
         clear(container);
         let available = false;
         const status = (current, next) => {
@@ -1741,7 +1773,7 @@ function pageUpdates() {
                 available = true;
                 return badge(_('Not installed'), 'warning');
             }
-            if (current !== next && current.replace(/^v/, '') !== next.replace(/^v/, '')) {
+            if (newer(current, next)) {
                 available = true;
                 return badge(_('Update available'), 'warning');
             }
@@ -1782,7 +1814,10 @@ function pageUpdates() {
         append(container, card({
             title: _('Versions'),
             description: _('Exodus and the core are downloaded from GitHub into Entware. Settings, profiles and subscriptions are kept.'),
-            action: btn(_('Check again'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: () => render() }),
+            action: btn(_('Check again'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: () => {
+                state.forceUpdateCheck = true;
+                render();
+            } }),
             content: [
                 table,
                 infoList([
@@ -1806,6 +1841,138 @@ function pageUpdates() {
     ];
 }
 
+// ---------- build info ----------
+
+function newer(current, next) {
+    return next != null && (!current || (current !== next && current.replace(/^v/, '') !== next.replace(/^v/, '')));
+}
+
+function updateAvailable(info) {
+    return !!info && (newer(info.app, info.app_latest) || newer(info.core, info.core_latest));
+}
+
+// github is asked at most every few hours, the router keeps the answer
+async function checkUpdates() {
+    try {
+        state.update = await api('check_update');
+    } catch (e) {
+        return;
+    }
+    renderAboutButton();
+}
+
+let aboutKey = null;
+
+// the version in the navbar, it pulses when an update is available
+function renderAboutButton() {
+    const button = document.getElementById('about');
+    const version = (state.status && state.status.app_version) || (state.update && state.update.app);
+    const update = updateAvailable(state.update);
+    const key = JSON.stringify([state.loginShown, version, update]);
+    if (key === aboutKey) {
+        return;
+    }
+    aboutKey = key;
+    button.hidden = state.loginShown || !version;
+    button.classList.toggle('update', update);
+    button.title = update ? _('Update available') : _('Build info');
+    append(clear(button), [update ? E('span', { class: 'dot' }) : icon('git-branch'), version || '']);
+}
+
+// the clipboard api needs https, the web ui of the router is http
+async function copyText(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (e) {
+        /* falls back to a selection */
+    }
+    const area = E('textarea', { style: { position: 'fixed', top: '0', left: '0', opacity: '0' } });
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    let copied = false;
+    try {
+        copied = document.execCommand('copy');
+    } catch (e) {
+        copied = false;
+    }
+    area.remove();
+    return copied;
+}
+
+async function openAbout() {
+    let info;
+    try {
+        info = await api('about');
+    } catch (e) {
+        if (e.message !== _('Login required')) {
+            toast(e.message, 'error');
+        }
+        return;
+    }
+    const repo = `https://github.com/${info.repository}`;
+    const core = CORE_TITLES[info.core_type] || info.core_type;
+    const firmware = info.firmware ? `KeeneticOS ${info.firmware}` : '';
+    const text = [
+        `Exodus ${info.app} (${[info.ref, info.commit.substring(0, 12)].filter(Boolean).join(', ')})`,
+        `${_('Installed')}: ${info.installed || '—'}`,
+        `${_('Core')}: ${core} ${info.core || '—'}`,
+        `${_('Router')}: ${[info.model, firmware, info.arch].filter(Boolean).join(', ') || '—'}`
+    ].join('\n');
+    const tile = (iconName, title, value) => E('div', { class: 'build-tile' }, [
+        E('div', { class: 'build-tile-title' }, [icon(iconName), title]),
+        E('div', { class: 'build-tile-value' }, value)
+    ]);
+    const missing = () => E('span', { class: 'muted' }, '—');
+    const update = state.update;
+    const versions = update ? [
+        newer(update.app, update.app_latest) ? `Exodus ${update.app || '—'} → ${update.app_latest}` : null,
+        newer(update.core, update.core_latest) ? `${core} ${update.core || '—'} → ${update.core_latest}` : null
+    ].filter(Boolean) : [];
+    const logoBadge = E('span', { class: 'badge badge-default' }, [logo(), info.app || '—']);
+    logoBadge.firstChild.setAttribute('class', 'badge-logo');
+
+    openDialog({
+        title: [E('span', { class: 'logo-tile' }, logo()), _('Build info')],
+        wide: true,
+        content: [
+            E('div', { class: 'build-panel' }, [
+                E('div', { class: 'build-head' }, [
+                    logoBadge,
+                    E('span', { class: 'badge badge-outline' }, [icon('git-branch'), (info.ref || '—').toUpperCase()]),
+                    btn(null, { variant: 'ghost', size: 'sm', icon: 'copy', title: _('Copy'), onClick: async () => {
+                        const copied = await copyText(text);
+                        toast(copied ? _('Copied.') : _('Copying is not available in this browser.'), copied ? 'success' : 'warning');
+                    } })
+                ]),
+                E('div', { class: 'separator' }),
+                E('div', { class: 'build-tiles' }, [
+                    tile('calendar', _('Installed'), info.installed || missing()),
+                    tile('hash', _('Commit'), info.commit
+                        ? E('a', { href: `${repo}/commit/${info.commit}`, target: '_blank', rel: 'noopener', title: info.commit }, info.commit.substring(0, 12))
+                        : missing())
+                ])
+            ]),
+            E('div', { class: 'build-tiles' }, [
+                tile('cpu', _('Core'), info.core ? [E('div', {}, core), E('div', {}, info.core)] : missing()),
+                tile('router', _('Router'), info.model || firmware ? [E('div', {}, info.model || '—'), E('div', {}, [firmware, info.arch ? ` · ${info.arch}` : ''])] : missing())
+            ]),
+            versions.length > 0 ? alertBox('warning', _('Update available'), E('div', { class: 'stack', style: { gap: '8px' } }, [
+                E('div', { class: 'mono' }, versions.map((v) => E('div', {}, v))),
+                E('div', {}, btn(_('Open Updates'), { variant: 'outline', size: 'sm', icon: 'arrow-up-circle', onClick: () => {
+                    closeDialog();
+                    location.hash = '#/updates';
+                } }))
+            ])) : null,
+            E('div', { class: 'build-links' }, [
+                E('a', { class: 'btn btn-outline', href: `${repo}/issues`, target: '_blank', rel: 'noopener' }, [icon('bug'), _('Issues')]),
+                E('a', { class: 'btn btn-outline', href: `${repo}/tree/${info.ref || 'keenetic'}`, target: '_blank', rel: 'noopener' }, [icon('github'), 'GitHub'])
+            ])
+        ]
+    });
+}
+
 // ---------- router ----------
 
 const pages = [
@@ -1813,17 +1980,18 @@ const pages = [
         await refreshStatus();
     }],
     ['profiles', _('Profiles'), pageProfiles, async () => {
-        const [files, hwid] = await Promise.all([api('files'), api('hwid').catch(() => ({}))]);
+        const files = await api('files');
         state.dirs = files.dirs || {};
-        state.hwid = hwid;
     }],
     ['settings', _('Settings'), pageSettings, async () => {
-        const [interfaces, proxies] = await Promise.all([
+        const [interfaces, proxies, hwid] = await Promise.all([
             api('interfaces').catch(() => ({ interfaces: [] })),
-            api('proxies').catch(() => ({ proxies: [] }))
+            api('proxies').catch(() => ({ proxies: [] })),
+            api('hwid').catch(() => ({}))
         ]);
         state.interfaces = interfaces.interfaces || [];
         state.proxies = proxies.proxies || [];
+        state.hwid = hwid;
     }],
     ['editor', _('Editor'), pageEditor, async () => {
         state.files = await api('files');
@@ -1922,7 +2090,7 @@ function showLogin() {
     }
     state.loginShown = true;
     closeDialog();
-    document.getElementById('indicator').hidden = true;
+    renderAboutButton();
     document.getElementById('logout').hidden = true;
     document.getElementById('menu').hidden = true;
     document.getElementById('savebar').hidden = true;
@@ -1962,6 +2130,7 @@ async function start() {
     if (state.config && !state.statusTimer) {
         state.statusTimer = setInterval(refreshStatus, 5000);
         refreshStatus();
+        checkUpdates();
     }
 }
 
@@ -2020,6 +2189,12 @@ logoutButton.addEventListener('click', async () => {
 });
 
 renderSavebar();
+document.getElementById('about').addEventListener('click', openAbout);
+setInterval(() => {
+    if (!state.loginShown) {
+        checkUpdates();
+    }
+}, 3 * 3600 * 1000);
 document.getElementById('dialog').addEventListener('mousedown', (ev) => {
     if (ev.target.id === 'dialog') {
         closeDialog();

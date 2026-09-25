@@ -18,6 +18,8 @@ SHARE_DIR="$EXODUS_OPT/share/exodus"
 LIB_DIR="$SHARE_DIR/lib"
 EXODUS="$SHARE_DIR/exodus"
 VERSION_PATH="$SHARE_DIR/VERSION"
+# branch, commit and time of the install, written by the installer
+BUILD_PATH="$SHARE_DIR/BUILD"
 MIXIN_JQ="$LIB_DIR/mixin.jq"
 LIGHTTPD_CONF="$SHARE_DIR/lighttpd.conf"
 
@@ -269,7 +271,7 @@ generate_hwid() {
 	fi
 }
 
-# headers for subscriptions with a hwid device limit (remnawave), one "name: value" per line, the web ui shows them too
+# headers for subscriptions with a hwid device limit, one "name: value" per line, the web ui shows them too
 # a field the router did not give is not sent at all
 hwid_headers() {
 	local hwid
