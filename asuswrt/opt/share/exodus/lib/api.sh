@@ -1,71 +1,43 @@
 #!/bin/sh
+# shellcheck shell=sh disable=SC2034,SC2030,SC2031
+# req is set in api_run's subshell; every action is called within that scope.
+# Operations independent of HTTP. Caller sources common.sh first.
+arg() { jq -j --arg key "$1" '.[$key] // "" | tostring' "$req"; }
 
-# backend of the web ui: POST json {"action": "...", ...}, answers json
-# a session cookie is required for everything except login, the X-Exodus header keeps other sites out
-
-# lighttpd runs cgi with a clean environment, the tree is found from the path of the script
-case "$SCRIPT_FILENAME" in
-	*/share/exodus/www/api.cgi) [ -n "$EXODUS_OPT" ] || EXODUS_OPT="${SCRIPT_FILENAME%/share/exodus/www/api.cgi}" ;;
-esac
-
-. "${EXODUS_OPT:-/opt}/share/exodus/lib/common.sh"
-
-SESSION_TTL=43200
-cookie=
-
-reply() {
-	printf 'Status: %s\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n' "$1"
-	[ -n "$cookie" ] && printf 'Set-Cookie: %s; Path=/; HttpOnly; SameSite=Strict\r\n' "$cookie"
-	printf '\r\n'
-	cat
-}
-
-ok() {
-	reply "200 OK"
-}
-
-fail() {
-	jq -n --arg error "$2" '{error: $error}' | reply "$1"
-	cleanup
-	exit 0
-}
-
-cleanup() {
-	rm -f "$req"
-}
-
-# field of the request as raw text
-arg() {
-	jq -j --arg key "$1" '.[$key] // "" | tostring' "$req"
-}
-
-session_token() {
-	echo "$HTTP_COOKIE" | tr ';' '\n' | sed -n 's/^ *exodus_session=\([0-9a-f]\{32\}\) *$/\1/p' | head -n 1
-}
-
-session_valid() {
-	local token expires now
-	token=$(session_token)
-	[ -n "$token" ] && [ -f "$SESSIONS_DIR/$token" ] || return 1
-	expires=$(cat "$SESSIONS_DIR/$token" 2> /dev/null)
-	now=$(date +%s)
-	if [ -z "$expires" ] || [ "$expires" -lt "$now" ] 2> /dev/null; then
-		rm -f "$SESSIONS_DIR/$token"
-		return 1
-	fi
-	echo "$((now + SESSION_TTL))" > "$SESSIONS_DIR/$token"
-}
-
-password_valid() {
-	local stored salt hash
-	stored=$(cat "$AUTH_PATH" 2> /dev/null)
-	[ -n "$stored" ] || return 1
-	salt="${stored%%:*}"
-	hash="${stored#*:}"
-	# an empty hash would match the empty output of a missing sha256sum
-	[ -n "$hash" ] || return 1
-	[ "$( { printf '%s' "$salt"; jq -j ".$1 // \"\"" "$req"; } | sha256sum | cut -d ' ' -f 1)" = "$hash" ]
-}
+api_run() (
+	req="$1"
+	response="$2"
+	umask 077
+	reply() { jq -c --argjson status "${1%% *}" '{status: $status, data: .}' > "$response.tmp" && mv -f "$response.tmp" "$response"; }
+	ok() { reply "200 OK"; }
+	fail() { jq -n --arg error "$2" '{error: $error}' | reply "$1"; exit $?; }
+	jq -e 'type == "object"' "$req" > /dev/null 2>&1 || fail "400 Bad Request" "invalid request"
+	action=$(arg action)
+	case "$action" in
+	status) action_status ;;
+	load) action_load ;;
+	config_set) action_config_set ;;
+	service) action_service ;;
+	subscription_update) action_subscription_update ;;
+	hosts) action_hosts ;;
+	interfaces) action_interfaces ;;
+	proxies) action_proxies ;;
+	profile_upload) action_profile_upload ;;
+	profile_delete) action_profile_delete ;;
+	files) action_files ;;
+	file_read) action_file_read ;;
+	file_write) action_file_write ;;
+	log_read) action_log_read ;;
+	log_clear) action_log_clear ;;
+	debug) action_debug ;;
+	hwid) action_hwid ;;
+	check_update) action_check_update ;;
+	about) action_about ;;
+	update) action_update ;;
+	update_dashboard) action_update_dashboard ;;
+	*) fail "400 Bad Request" "unknown action" ;;
+	esac
+)
 
 # files the editor may read and write: profiles, subscriptions, providers, the mixin file and the profile for startup
 allowed_path() {
@@ -83,14 +55,14 @@ allowed_path() {
 			;;
 		*) return 1 ;;
 	esac
-	# a symlink must not lead outside of the home dir
-	if [ -e "$path" ]; then
-		real=$(readlink -f "$path")
-		case "$real" in
-			"$(readlink -f "$HOME_DIR")"/*) ;;
-			*) return 1 ;;
-		esac
-	fi
+	# Resolve the parent even when the destination does not exist.
+	real=$(readlink -f "${path%/*}") || return 1
+	case "$real/" in
+		"$(readlink -f "$HOME_DIR")"/*) ;;
+		*) return 1 ;;
+	esac
+	[ ! -L "$path" ] || return 1
+	[ ! -L "$path.tmp" ] || return 1
 	return 0
 }
 
@@ -147,12 +119,11 @@ action_load() {
 
 # the whole config is replaced by the one of the web ui, it keeps the keys it does not know
 action_config_set() {
-	local tmp apply old_port new_port
+	local tmp apply
 	tmp="$CONFIG_PATH.web"
 	if ! jq -e '(.config | type == "object") and (.config.config | type == "object") and (.config.proxy | type == "object") and (.config.mixin | type == "object")' "$req" > /dev/null 2>&1; then
 		fail "400 Bad Request" "invalid config"
 	fi
-	old_port=$(cfg_get .web.port)
 	lock_acquire config || fail "503 Service Unavailable" "config is locked"
 	if jq '.config' "$req" > "$tmp" && [ -s "$tmp" ]; then
 		mv -f "$tmp" "$CONFIG_PATH"
@@ -166,8 +137,6 @@ action_config_set() {
 	case "$apply" in
 		restart) daemonize "$EXODUS" restart ;;
 	esac
-	new_port=$(cfg_get .web.port)
-	[ "$old_port" != "$new_port" ] && daemonize "$EXODUS" web restart
 	echo '{"success": true}' | ok
 }
 
@@ -310,7 +279,10 @@ action_profile_upload() {
 	name=$(arg name)
 	valid_name "$name" || fail "400 Bad Request" "invalid file name"
 	mkdir -p "$PROFILES_DIR"
-	jq -j '.content // ""' "$req" > "$PROFILES_DIR/$name.tmp" && mv -f "$PROFILES_DIR/$name.tmp" "$PROFILES_DIR/$name"
+	allowed_path "$PROFILES_DIR/$name" || fail "403 Forbidden" "path is not allowed"
+	if ! jq -j '.content // ""' "$req" > "$PROFILES_DIR/$name.tmp" || ! mv -f "$PROFILES_DIR/$name.tmp" "$PROFILES_DIR/$name"; then
+		fail "500 Internal Server Error" "failed to save file"
+	fi
 	echo '{"success": true}' | ok
 }
 
@@ -318,6 +290,7 @@ action_profile_delete() {
 	local name
 	name=$(arg name)
 	valid_name "$name" || fail "400 Bad Request" "invalid file name"
+	allowed_path "$PROFILES_DIR/$name" || fail "403 Forbidden" "path is not allowed"
 	rm -f "$PROFILES_DIR/$name"
 	echo '{"success": true}' | ok
 }
@@ -354,7 +327,9 @@ action_file_write() {
 	local path
 	path=$(arg path)
 	allowed_path "$path" || fail "403 Forbidden" "path is not allowed"
-	jq -j '.content // ""' "$req" > "$path.tmp" && mv -f "$path.tmp" "$path"
+	if ! jq -j '.content // ""' "$req" > "$path.tmp" || ! mv -f "$path.tmp" "$path"; then
+		fail "500 Internal Server Error" "failed to save file"
+	fi
 	echo '{"success": true}' | ok
 }
 
@@ -420,7 +395,7 @@ latest_code() {
 	dir="$RUN_TMP/latest.$$"
 	rm -rf "$dir"
 	mkdir -p "$dir/src"
-	if curl -s -f -L --connect-timeout 15 -m 60 -o "$dir/app.tar.gz" "$(gh_url "https://github.com/$REPOSITORY/archive/$1.tar.gz")" \
+	if curl -s -f -L --connect-timeout 15 -m 60 -o "$dir/app.tar.gz" "$(gh_url "https://github.com/${2:-$REPOSITORY}/archive/$1.tar.gz")" \
 		&& tar -xzf "$dir/app.tar.gz" -C "$dir/src" 2> /dev/null; then
 		src=$(find "$dir/src" -mindepth 1 -maxdepth 1 -type d | head -n 1)
 		if [ -n "$src" ] && [ -f "$src/asuswrt/opt/share/exodus/VERSION" ]; then
@@ -433,7 +408,7 @@ latest_code() {
 # there is no versioning of the branch: exodus is up to date when its code equals the code of the branch
 # github is asked at most every 6 hours, force asks now; failed checks are not kept
 action_check_update() {
-	local core_type release build ref cache now latest app core_latest free core_size proxy_host
+	local core_type release build repository ref cache now latest app core_latest free core_size proxy_host
 	core_type=$(cfg_get .update.core)
 	case "$core_type" in
 		alpha) release="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha" ;;
@@ -442,26 +417,29 @@ action_check_update() {
 	esac
 	build=$(cat "$BUILD_PATH" 2> /dev/null)
 	printf '%s' "$build" | jq -e 'type == "object"' > /dev/null 2>&1 || build='{}'
+	repository=$(printf '%s' "$build" | jq -r '.repository // empty')
+	[ -n "$repository" ] || repository="$REPOSITORY"
 	ref=$(printf '%s' "$build" | jq -r '.ref // empty')
 	[ -n "$ref" ] || ref="$BRANCH"
 	cache="$RUN_TMP/update_check.json"
 	now=$(date +%s)
 	latest=
 	if [ "$(arg force)" != "true" ]; then
-		latest=$(jq -c --arg core "$core_type" --arg ref "$ref" --argjson now "$now" \
-			'select(.core_type == $core and .ref == $ref and ($now - .time) < 21600 and ($now - .time) >= 0)' "$cache" 2> /dev/null)
+		latest=$(jq -c --arg core "$core_type" --arg repository "$repository" --arg ref "$ref" --argjson now "$now" \
+			'select(.core_type == $core and .repository == $repository and .ref == $ref and ($now - .time) < 21600 and ($now - .time) >= 0)' "$cache" 2> /dev/null)
 	fi
-	if [ -z "$latest" ]; then
-		app=$(latest_code "$ref")
+	if [ -z "$latest" ] && [ "$(arg cached)" != "true" ]; then
+		app=$(latest_code "$ref" "$repository")
 		core_latest=$(curl -s -f -L -m 20 "$(gh_url "$release/version.txt")" 2> /dev/null | head -n 1 | tr -d '\r')
 		echo "$core_latest" | grep -q -E '^[A-Za-z0-9._-]+$' || core_latest=
-		latest=$(printf '%s' "$app" | jq -R -s -c --argjson time "$now" --arg core "$core_type" --arg ref "$ref" --arg core_latest "$core_latest" '
+		latest=$(printf '%s' "$app" | jq -R -s -c --argjson time "$now" --arg core "$core_type" --arg repository "$repository" --arg ref "$ref" --arg core_latest "$core_latest" '
 			split("|") as $a
-			| {time: $time, core_type: $core, ref: $ref, app_latest: ($a[0] // ""), app_latest_commit: ($a[1] // ""), app_latest_code: ($a[2] // ""), core_latest: $core_latest}')
+			| {time: $time, core_type: $core, repository: $repository, ref: $ref, app_latest: ($a[0] // ""), app_latest_commit: ($a[1] // ""), app_latest_code: ($a[2] // ""), core_latest: $core_latest}')
 		if [ -n "$app" ] && [ -n "$core_latest" ]; then
 			printf '%s\n' "$latest" > "$cache"
 		fi
 	fi
+	[ -n "$latest" ] || latest='{}'
 	free=$(df -k "$EXODUS_OPT" 2> /dev/null | tail -n 1 | awk '{ print $(NF - 2) }')
 	core_size=$(wc -c < "$PROG" 2> /dev/null)
 	proxy_host=$(cfg_get .update.gh_proxy | sed -n 's|^[a-z]*://\([^/]*\).*|\1|p')
@@ -504,17 +482,22 @@ action_about() {
 		--arg core_type "$(cfg_get .update.core)" \
 		--arg arch "$(entware_arch)" \
 		'{app: $app, ref: ($build.ref // $branch), commit: ($build.commit // ""), installed: ($build.installed // $installed),
-		  repository: $repository, core: $core, core_type: (if $core_type == "" then "meta" else $core_type end),
+		  repository: ($build.repository // $repository), core: $core, core_type: (if $core_type == "" then "meta" else $core_type end),
 		  model: ($router.model // ""), os: ($router.os // ""), firmware: ($router.firmware // ""), arch: $arch}' | ok
 }
 
 action_update() {
-	local low_space
+	local low_space build repository ref
 	low_space=0
 	[ "$(arg low_space)" = "true" ] && low_space=1
+	build=$(cat "$BUILD_PATH" 2> /dev/null)
+	repository=$(printf '%s' "$build" | jq -r '.repository // empty' 2> /dev/null)
+	[ -n "$repository" ] || repository="$REPOSITORY"
+	ref=$(printf '%s' "$build" | jq -r '.ref // empty' 2> /dev/null)
+	[ -n "$ref" ] || ref="$BRANCH"
 	cp -f "$SHARE_DIR/install.sh" "$RUN_TMP/exodus-update.sh" || fail "500 Internal Server Error" "installer not found"
 	: > "$UPDATE_LOG_PATH"
-	export LOW_SPACE="$low_space"
+	export LOW_SPACE="$low_space" REPOSITORY="$repository" REF="$ref"
 	daemonize sh -c "exec sh '$RUN_TMP/exodus-update.sh' >> '$UPDATE_LOG_PATH' 2>&1"
 	echo '{"success": true}' | ok
 }
@@ -534,77 +517,3 @@ action_update_dashboard() {
 	printf 'header = "Authorization: Bearer %s"\n' "$secret" | curl -s -k -m 120 -X POST -K - "$url" > /dev/null 2>&1
 	echo '{"success": true}' | ok
 }
-
-action_password() {
-	local salt hash
-	password_valid old || { sleep 2; fail "403 Forbidden" "wrong password"; }
-	[ "$(jq -r '.new // "" | length' "$req")" -ge 4 ] || fail "400 Bad Request" "the password is too short"
-	salt=$(random_hex 8)
-	hash=$( { printf '%s' "$salt"; jq -j '.new' "$req"; } | sha256sum | cut -d ' ' -f 1)
-	{ [ -n "$salt" ] && [ -n "$hash" ]; } || fail "500 Internal Server Error" "sha256sum is not found"
-	umask 077
-	echo "$salt:$hash" > "$AUTH_PATH"
-	# other sessions end, this one stays
-	token=$(session_token)
-	find "$SESSIONS_DIR" -type f ! -name "$token" -exec rm -f {} + 2> /dev/null
-	echo '{"success": true}' | ok
-}
-
-[ "$REQUEST_METHOD" = "POST" ] || { echo '{"error": "method not allowed"}' | reply "405 Method Not Allowed"; exit 0; }
-[ "$HTTP_X_EXODUS" = "1" ] || { echo '{"error": "forbidden"}' | reply "403 Forbidden"; exit 0; }
-
-mkdir -p "$SESSIONS_DIR" "$LOG_DIR"
-req="$RUN_TMP/request.$$"
-trap cleanup EXIT
-head -c "${CONTENT_LENGTH:-0}" > "$req"
-jq -e 'type == "object"' "$req" > /dev/null 2>&1 || fail "400 Bad Request" "invalid request"
-action=$(arg action)
-
-case "$action" in
-	login)
-		[ -f "$AUTH_PATH" ] || fail "403 Forbidden" "no password is set, run exodus passwd on the router"
-		if ! password_valid password; then
-			sleep 2
-			fail "403 Forbidden" "wrong password"
-		fi
-		token=$(random_hex 16) || fail "500 Internal Server Error" "sha256sum is not found"
-		echo "$(($(date +%s) + SESSION_TTL))" > "$SESSIONS_DIR/$token"
-		cookie="exodus_session=$token"
-		echo '{"success": true}' | ok
-		exit 0
-		;;
-esac
-
-session_valid || fail "401 Unauthorized" "unauthorized"
-
-case "$action" in
-	logout)
-		token=$(session_token)
-		rm -f "$SESSIONS_DIR/$token"
-		cookie="exodus_session=; Max-Age=0"
-		echo '{"success": true}' | ok
-		;;
-	status) action_status ;;
-	load) action_load ;;
-	config_set) action_config_set ;;
-	service) action_service ;;
-	subscription_update) action_subscription_update ;;
-	hosts) action_hosts ;;
-	interfaces) action_interfaces ;;
-	proxies) action_proxies ;;
-	profile_upload) action_profile_upload ;;
-	profile_delete) action_profile_delete ;;
-	files) action_files ;;
-	file_read) action_file_read ;;
-	file_write) action_file_write ;;
-	log_read) action_log_read ;;
-	log_clear) action_log_clear ;;
-	debug) action_debug ;;
-	hwid) action_hwid ;;
-	check_update) action_check_update ;;
-	about) action_about ;;
-	update) action_update ;;
-	update_dashboard) action_update_dashboard ;;
-	password) action_password ;;
-	*) fail "400 Bad Request" "unknown action" ;;
-esac

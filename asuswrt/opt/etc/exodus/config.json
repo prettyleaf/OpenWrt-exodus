@@ -51,9 +51,6 @@
   "core": {
     "gomemlimit": ""
   },
-  "web": {
-    "port": 9099
-  },
   "update": {
     "core": "meta",
     "gh_proxy": ""

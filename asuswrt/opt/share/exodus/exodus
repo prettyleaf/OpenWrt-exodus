@@ -19,8 +19,8 @@ usage() {
 		  sync                              sync the clients of the chosen wi-fi networks
 		  clear_logs                        clear logs exceeding the size limit
 		  debug                             print the debug report
-		  web start|stop|restart            control the web ui
-		  passwd                            set the password of the web ui
+		  web start|stop|restart|status|url  control the Merlin Web Admin page
+		  passwd                            explain where to change the Merlin password
 	EOF
 }
 
@@ -297,8 +297,6 @@ watch() {
 			fi
 			lock_release firewall
 		fi
-		# the firmware kills the web servers it does not know when it restarts its own one
-		pid_alive "$WEB_PID_PATH" || web start > /dev/null 2>&1
 		minute=$(date +%Y%m%d%H%M)
 		[ "$minute" = "$last" ] && continue
 		last="$minute"
@@ -378,88 +376,29 @@ auto_update() {
 }
 
 web() {
-	local port pid ret lighttpd
-	case "$1" in
-		start)
-			pid_alive "$WEB_PID_PATH" && return 0
-			prepare_files
-			port=$(cfg_get .web.port)
-			# the firmware has its own lighttpd for aicloud, without cgi
-			lighttpd="$EXODUS_OPT/sbin/lighttpd"
-			if [ ! -x "$lighttpd" ]; then
-				echo "lighttpd of entware is not installed"
-				return 1
-			fi
-			sed -e "s|@PORT@|${port:-9099}|g" \
-				-e "s|@WWW@|$SHARE_DIR/www|g" \
-				-e "s|@RUN@|$RUN_TMP|g" \
-				-e "s|@LOG@|$LOG_DIR|g" \
-				-e "s|@OPT@|$EXODUS_OPT|g" \
-				"$LIGHTTPD_CONF" > "$RUN_TMP/lighttpd.conf"
-			# the firmware kills every process named lighttpd when it stops aicloud, so the web ui runs under another name
-			ln -sf "$lighttpd" "$RUN_TMP/exodus-web"
-			# lighttpd of entware and its libpcre2 may differ in symbol versions, the loader warns about it on every start
-			# a file and not a pipe: the daemon keeps stderr open
-			"$RUN_TMP/exodus-web" -f "$RUN_TMP/lighttpd.conf" 2> "$RUN_TMP/lighttpd.err"
-			ret=$?
-			grep -v 'no version information available' "$RUN_TMP/lighttpd.err" >&2
-			rm -f "$RUN_TMP/lighttpd.err"
-			return "$ret"
-			;;
-		stop)
-			if pid_alive "$WEB_PID_PATH"; then
-				pid=$(cat "$WEB_PID_PATH")
-				kill "$pid" 2> /dev/null
-			fi
-			rm -f "$WEB_PID_PATH"
-			;;
-		restart)
-			web stop
-			sleep 1
-			web start
-			;;
-		status)
-			pid_alive "$WEB_PID_PATH" && echo "running" || echo "stopped"
-			;;
-		*)
-			usage
-			return 1
-			;;
-	esac
+    . "$LIB_DIR/webui.sh"
+    case "$1" in
+        start) prepare_files; webui_mount && webui_cache_start ;;
+        stop) webui_cache_stop; webui_unmount ;;
+        restart) webui_cache_stop; webui_mount && webui_cache_start ;;
+        status) if webui_status; then echo "registered: $(webui_url)"; else echo 'not registered'; return 1; fi ;;
+        url) webui_url ;;
+        event) . "$LIB_DIR/webui-api.sh"; webui_event "$2" "$3" ;;
+        updates) . "$LIB_DIR/api.sh"; . "$LIB_DIR/webui-api.sh"; webui_updates_refresh ;;
+        cache)
+            lock_acquire webui-cache-loop 10 || return 1
+            echo "$$" > "$WEBUI_DIR/cache.pid"
+            trap '[ "$(cat "$WEBUI_DIR/cache.pid" 2>/dev/null)" != "$$" ] || rm -f "$WEBUI_DIR/cache.pid"; lock_release webui-cache-loop' EXIT
+            trap 'exit 0' TERM INT
+            trap '' HUP
+            . "$LIB_DIR/webui-api.sh"
+            webui_cache_loop ;;
+        *) usage; return 1 ;;
+    esac
 }
 
 set_password() {
-	local password confirm salt hash
-	if [ -t 0 ]; then
-		stty -echo 2> /dev/null
-		printf 'New password of the web ui: '
-		read -r password
-		printf '\nRepeat: '
-		read -r confirm
-		stty echo 2> /dev/null
-		echo
-		if [ "$password" != "$confirm" ]; then
-			echo "passwords do not match"
-			return 1
-		fi
-	else
-		read -r password
-	fi
-	if [ "${#password}" -lt 4 ]; then
-		echo "the password is too short"
-		return 1
-	fi
-	salt=$(random_hex 8)
-	hash=$(printf '%s' "$salt$password" | sha256sum | cut -d ' ' -f 1)
-	if [ -z "$salt" ] || [ -z "$hash" ]; then
-		echo "sha256sum is not found"
-		return 1
-	fi
-	umask 077
-	echo "$salt:$hash" > "$AUTH_PATH"
-	# sessions of the old password end
-	rm -f "$SESSIONS_DIR"/* 2> /dev/null
-	echo "password is set"
+    echo 'Exodus uses the Merlin Web Admin password. Change it in Administration -> System.'
 }
 
 debug() {
@@ -472,9 +411,9 @@ debug() {
 	echo "exodus $(app_version), core $(core_version), yq $("$YQ" --version 2> /dev/null | awk '{ print $NF }')"
 	echo "$("$FW_IPTABLES" -V 2> /dev/null | head -n 1) ($FW_IPTABLES), $("$FW_IPSET" -v 2> /dev/null | head -n 1)"
 	echo "entware $(opkg print-architecture 2> /dev/null | awk '$2 != "all" && $2 != "noarch" { arch = $2 } END { print arch }'), /opt -> $(readlink -f "$EXODUS_OPT")"
-	opkg list-installed 2> /dev/null | grep -E '^(curl|jq|lighttpd|lighttpd-mod-cgi|ca-bundle) '
+	opkg list-installed 2> /dev/null | grep -E '^(curl|jq|ca-bundle) '
 	echo "jffs scripts: $(nvram_get jffs2_scripts)"
-	grep -H 'exodus' /jffs/scripts/* 2> /dev/null
+	grep -H 'exodus' "$EXODUS_JFFS"/scripts/* 2> /dev/null
 	echo '```'
 	echo "## config"
 	echo '```json'

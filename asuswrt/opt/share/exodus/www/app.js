@@ -1,22 +1,50 @@
 'use strict';
 
-// web ui of exodus for asuswrt-merlin, built after shadcn/ui without any framework
+// Exodus controls inside the native Merlin Web Admin.
 // the config is edited as a draft copy and saved as a whole
 
 (function () {
 
-// ---------- storage and i18n ----------
+// ---------- native language and canvas ----------
 
-function storageGet(key) {
-    try { return localStorage.getItem(key); } catch (e) { return null; }
+const firmwareLang = ((window.ExodusBootstrap || {}).lang || '').toLowerCase();
+const lang = firmwareLang === 'ru' ? 'ru' : 'en';
+const exodusRoot = document.getElementById('exodus-root');
+exodusRoot.lang = lang;
+
+function syncCanvasHeight() {
+    const top = exodusRoot.getBoundingClientRect().top + window.scrollY;
+    const footer = document.getElementById('footer');
+    let height = Math.max(0, window.innerHeight - top - (footer ? footer.offsetHeight : 0) - 20);
+    // Merlin state.js sizes native FormTitle from the menu, minus a 15px footer gap.
+    for (const id of ['mainMenu', 'subMenu']) {
+        const menu = document.getElementById(id);
+        if (menu) height = Math.max(height, menu.getBoundingClientRect().bottom + window.scrollY - top - 15);
+    }
+    exodusRoot.style.setProperty('--exodus-canvas-min-height', Math.ceil(height) + 'px');
 }
 
-function storageSet(key, value) {
-    try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
+let canvasFrame = null;
+function scheduleCanvasHeight() {
+    if (canvasFrame !== null) return;
+    canvasFrame = requestAnimationFrame(() => { canvasFrame = null; syncCanvasHeight(); });
 }
-
-const lang = storageGet('exodus.lang') || ((navigator.language || '').toLowerCase().startsWith('ru') ? 'ru' : 'en');
-document.documentElement.lang = lang;
+window.addEventListener('load', scheduleCanvasHeight);
+window.addEventListener('resize', scheduleCanvasHeight);
+if (typeof ResizeObserver !== 'undefined') {
+    const canvasObserver = new ResizeObserver(scheduleCanvasHeight);
+    const firmwareIds = ['TopBanner', 'mainMenu', 'subMenu', 'tabMenu', 'footer'];
+    function observeFirmware() {
+        for (const id of firmwareIds) {
+            const element = document.getElementById(id);
+            if (element) canvasObserver.observe(element);
+        }
+    }
+    observeFirmware();
+    window.addEventListener('pagehide', () => canvasObserver.disconnect());
+    window.addEventListener('pageshow', () => { observeFirmware(); scheduleCanvasHeight(); });
+}
+syncCanvasHeight();
 
 function _(text) {
     let result = (lang === 'ru' && window.I18N_RU && window.I18N_RU[text]) || text;
@@ -185,38 +213,15 @@ function toast(message, type) {
         E('button', { class: 'btn btn-ghost btn-icon', type: 'button', title: _('Close'), onclick: () => el.remove() }, icon('x'))
     ]);
     document.getElementById('toaster').appendChild(el);
-    setTimeout(() => el.remove(), type === 'error' ? 10000 : 5000);
+    // Errors and messages with links remain available until dismissed.
+    if (type !== 'error' && !el.querySelector('a')) setTimeout(() => el.remove(), 5000);
     return el;
 }
 
 // ---------- api ----------
 
 async function api(action, params) {
-    let response;
-    try {
-        response = await fetch('api.cgi', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json', 'X-Exodus': '1' },
-            body: JSON.stringify(Object.assign({ action: action }, params || {}))
-        });
-    } catch (e) {
-        throw new Error(_('The router does not answer'));
-    }
-    let data;
-    try {
-        data = await response.json();
-    } catch (e) {
-        data = { error: _('Invalid answer of the router (%s)', `${response.status} ${response.statusText}`) };
-    }
-    if (response.status === 401 && action !== 'login') {
-        showLogin();
-        throw new Error(_('Login required'));
-    }
-    if (!response.ok || data.error) {
-        throw new Error(data.error || response.statusText);
-    }
-    return data;
+    return window.ExodusMerlin.request(action, params || {});
 }
 
 function run(promise, success) {
@@ -250,10 +255,16 @@ const state = {
     files: {},
     invalid: new Set(),
     timers: [],
+    pagePollers: [],
     statusTimer: null,
-    loginShown: false,
+    sessionExpired: false,
     editorFile: null
 };
+
+function pollPage(callback) {
+    state.pagePollers.push(callback);
+    state.timers.push(setInterval(callback, 5000));
+}
 
 function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -346,7 +357,7 @@ async function refreshStatus() {
     try {
         state.status = await api('status');
     } catch (e) {
-        return;
+        state.status = null;
     }
     renderAboutButton();
     liveViews.forEach((update) => update());
@@ -364,18 +375,24 @@ function btn(label, opts) {
     if (!label) {
         classes.push('btn-icon');
     }
+    const refreshing = ['refresh-cw', 'rotate-cw'].includes(opts.icon)
+        || (opts.icon === 'download' && /update|обнов/i.test(label || opts.title || ''));
+    const actionIcon = opts.icon ? icon(refreshing && opts.icon === 'download' ? 'refresh-cw' : opts.icon) : null;
+    if (refreshing) actionIcon.classList.add('refresh-icon');
     const el = E('button', { type: opts.submit ? 'submit' : 'button', class: classes.join(' '), title: opts.title || null, disabled: opts.disabled || null, 'aria-label': label ? null : opts.title }, [
-        opts.icon ? icon(opts.icon) : null,
+        actionIcon,
         label ? E('span', {}, label) : null
     ]);
     if (opts.onClick) {
         el.addEventListener('click', async (ev) => {
             el.disabled = true;
+            el.setAttribute('aria-busy', 'true');
+            if (refreshing) { el.classList.add('loading'); actionIcon.classList.add('spin'); }
             const spinner = icon('loader', 'spin');
             // a spinner only for actions that take a while
             const timer = setTimeout(() => {
                 el.classList.add('loading');
-                el.prepend(spinner);
+                if (!refreshing) el.prepend(spinner);
             }, 150);
             try {
                 await opts.onClick(ev);
@@ -386,6 +403,8 @@ function btn(label, opts) {
                 clearTimeout(timer);
                 spinner.remove();
                 el.classList.remove('loading');
+                if (actionIcon) actionIcon.classList.remove('spin');
+                el.setAttribute('aria-busy', 'false');
                 el.disabled = false;
             }
         });
@@ -408,7 +427,7 @@ function alertBox(variant, title, body) {
 
 function card(opts) {
     const header = opts.title || opts.description || opts.action ? E('div', { class: 'card-header' }, [
-        opts.title ? E('div', { class: 'card-title' }, [opts.title, opts.info ? infoButton(opts.title, opts.info) : null]) : null,
+        opts.title ? E('h2', { class: 'card-title' }, [opts.title, opts.info ? infoButton(opts.title, opts.info) : null]) : null,
         opts.description ? E('div', { class: 'card-description' }, opts.description) : null,
         opts.action ? E('div', { class: 'card-action' }, opts.action) : null
     ]) : null;
@@ -427,11 +446,17 @@ function pageHeader(title, description, actions) {
 }
 
 function loader() {
-    return E('div', { class: 'loader' }, icon('loader', 'spin'));
+    return E('div', { class: 'loader skeleton', role: 'status', 'aria-label': _('Loading…') }, [
+        E('span', { class: 'visually-hidden' }, _('Loading…')),
+        E('div', { class: 'skeleton-line' }), E('div', { class: 'skeleton-line' }), E('div', { class: 'skeleton-line' })
+    ]);
 }
 
-function empty(iconName, text) {
-    return E('div', { class: 'empty' }, [icon(iconName), E('div', {}, text)]);
+function empty(iconName, text, description, actions) {
+    return E('div', { class: 'empty' }, [icon(iconName), E('div', {}, [
+        E('strong', {}, text), description ? E('p', { class: 'empty-description' }, description) : null,
+        actions ? E('div', { class: 'empty-actions' }, actions) : null
+    ])]);
 }
 
 function infoList(rows) {
@@ -441,12 +466,16 @@ function infoList(rows) {
 // ---------- dialog ----------
 
 let dialogClose = null;
+let dialogTrigger = null;
 
 function openDialog(opts) {
+    hideHelp();
     const overlay = document.getElementById('dialog');
-    const box = E('div', { class: `dialog${opts.wide ? ' wide' : ''}`, role: 'dialog', 'aria-modal': 'true' }, [
+    if (overlay.hidden) dialogTrigger = document.activeElement;
+    const titleId = nextId();
+    const box = E('div', { class: `dialog${opts.wide ? ' wide' : ''}`, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId }, [
         E('div', { class: 'dialog-header' }, [
-            E('h2', { class: 'dialog-title' }, opts.title),
+            E('h2', { class: 'dialog-title', id: titleId }, opts.title),
             opts.description ? E('p', { class: 'dialog-description' }, opts.description) : null
         ]),
         opts.content ? E('div', { class: 'stack' }, opts.content) : null,
@@ -455,8 +484,9 @@ function openDialog(opts) {
     ]);
     append(clear(overlay), box);
     overlay.hidden = false;
+    for (const id of ['content','menu','savebar']) document.getElementById(id).inert = true;
     dialogClose = opts.onClose || null;
-    const focus = box.querySelector('.stack input, .stack select') || box.querySelector('.dialog-footer .btn:last-child');
+    const focus = box.querySelector('.stack input, .stack select') || box.querySelector('.dialog-footer .btn:last-child') || box.querySelector('.dialog-close');
     if (focus) {
         focus.focus();
     }
@@ -468,7 +498,10 @@ function closeDialog(result) {
         return;
     }
     overlay.hidden = true;
+    for (const id of ['content','menu','savebar']) document.getElementById(id).inert = false;
     clear(overlay);
+    if (dialogTrigger && dialogTrigger.isConnected) dialogTrigger.focus();
+    dialogTrigger = null;
     const callback = dialogClose;
     dialogClose = null;
     if (callback) {
@@ -508,10 +541,12 @@ function changed() {
         dependent.el.hidden = !dependent.depends();
     }
     updateDirty();
+    liveViews.forEach(update => update());
 }
 
 function markInvalid(el, id, invalid) {
     el.classList.toggle('invalid', invalid);
+    el.setAttribute('aria-invalid', String(invalid));
     if (invalid) {
         state.invalid.add(id);
     } else {
@@ -557,48 +592,108 @@ function labelTarget(control) {
 // label, control and a muted description under it; descriptions are static strings and may hold <code>
 // info moves a longer explanation behind an (i) next to the label
 function field(label, control, description, depends, info) {
+    if (control.getAttribute('role') === 'radiogroup') control.setAttribute('aria-label', label);
     const title = label ? E('label', { class: 'label', for: labelTarget(control) }, label) : null;
-    return dependOn(E('div', { class: 'field' }, [
-        info ? E('div', { class: 'label-row' }, [title, infoButton(label, info)]) : title,
-        control,
-        description ? E('p', { class: 'description', html: description }) : null
+    const descriptionId = description ? nextId() : null;
+    const targetId = labelTarget(control);
+    if (descriptionId && targetId) {
+        const target = control.id === targetId ? control : control.querySelector('#' + targetId);
+        if (target) target.setAttribute('aria-describedby', descriptionId);
+    }
+    return dependOn(E('div', { class: 'field' }, [E('div', {class: 'label-row'}, [title, info ? infoButton(label, info) : null]),
+        E('div', { class: 'field-control' }, [control, description ? E('p', { id: descriptionId, class: 'description', html: description }) : null])
     ]), depends);
 }
 
-// (i) that opens the explanation in a dialog; paragraphs are static strings or nodes
+// One viewport-bound help popup; hover and keyboard focus share the same copy.
+let helpPopup = null, helpAnchor = null, helpCloseTimer = null;
+function hideHelp() {
+    clearTimeout(helpCloseTimer);
+    if (helpPopup) helpPopup.hidden = true;
+    if (helpAnchor) helpAnchor.setAttribute('aria-expanded', 'false');
+    helpAnchor = null;
+}
+
+function positionHelp() {
+    if (!helpPopup || helpPopup.hidden || !helpAnchor) return;
+    const rect = helpAnchor.getBoundingClientRect();
+    if (!helpAnchor.isConnected || rect.bottom < 0 || rect.top > innerHeight || rect.right < 0 || rect.left > innerWidth) {
+        hideHelp(); return;
+    }
+    const scale = exodusRoot.getBoundingClientRect().width / exodusRoot.offsetWidth || 1;
+    helpPopup.style.maxWidth = (innerWidth - 24) / scale + 'px';
+    helpPopup.style.maxHeight = (innerHeight - 24) / scale + 'px';
+    const bounds = helpPopup.getBoundingClientRect();
+    const left = Math.max(12, Math.min(rect.left, innerWidth - bounds.width - 12));
+    const top = rect.bottom + bounds.height + 10 <= innerHeight ? rect.bottom + 8 : Math.max(12, rect.top - bounds.height - 8);
+    helpPopup.style.left = left / scale + 'px'; helpPopup.style.top = top / scale + 'px';
+}
+
 function infoButton(title, paragraphs) {
-    return E('button', { class: 'btn btn-ghost btn-icon info-btn', type: 'button', title: _('More'), 'aria-label': _('More'), onclick: (ev) => {
-        ev.preventDefault();
-        openDialog({
-            title: title,
-            content: E('div', { class: 'info-text' }, paragraphs.map((p) => (typeof p === 'string' ? E('p', { html: p }) : p))),
-            footer: [btn(_('Got it'), { onClick: () => closeDialog() })]
-        });
-    } }, icon('info'));
+    const source = E('div', {class: 'help-source', hidden: true, id: nextId()}, paragraphs.map(p => typeof p === 'string' ? E('p', {html: p}) : p));
+    const marker = E('button', {class: 'info-btn', type: 'button', 'aria-label': _('Help: %s', title || _('Settings')), 'aria-describedby': source.id, 'aria-expanded': 'false'}, icon('info'));
+    const interactive = !!source.querySelector('a[href]');
+    if (interactive) marker.setAttribute('aria-haspopup', 'dialog');
+    const show = () => {
+        clearTimeout(helpCloseTimer);
+        if (!helpPopup) {
+            helpPopup = E('div', {id: 'help-popover', class: 'help-popover', role: 'tooltip', hidden: true});
+            exodusRoot.appendChild(helpPopup);
+            helpPopup.addEventListener('mouseenter', () => clearTimeout(helpCloseTimer));
+            helpPopup.addEventListener('mouseleave', () => {helpCloseTimer = setTimeout(hideHelp, 140);});
+            helpPopup.addEventListener('focusin', () => clearTimeout(helpCloseTimer));
+            helpPopup.addEventListener('focusout', event => {
+                if (!helpPopup.contains(event.relatedTarget)) helpCloseTimer = setTimeout(hideHelp, 140);
+            });
+        }
+        if (helpAnchor && helpAnchor !== marker) helpAnchor.setAttribute('aria-expanded', 'false');
+        helpAnchor = marker; marker.setAttribute('aria-expanded', 'true');
+        helpPopup.setAttribute('role', interactive ? 'dialog' : 'tooltip');
+        helpPopup.setAttribute('aria-label', title || _('Settings'));
+        append(clear(helpPopup), [E('strong', {}, title), E('div', {class: 'info-text'}, Array.from(source.children, node => node.cloneNode(true)))]);
+        helpPopup.hidden = false;
+        positionHelp();
+    };
+    marker.addEventListener('mouseenter', show); marker.addEventListener('focus', show);
+    marker.addEventListener('click', show);
+    marker.addEventListener('mouseleave', () => {helpCloseTimer = setTimeout(hideHelp, 140);});
+    marker.addEventListener('blur', () => {helpCloseTimer = setTimeout(hideHelp, 140);});
+    marker.addEventListener('keydown', ev => {
+        if (ev.key === 'Escape') {ev.stopPropagation(); hideHelp();}
+        if (ev.key === 'ArrowDown' && helpAnchor === marker) {
+            const link = helpPopup.querySelector('a[href]');
+            if (link) {ev.preventDefault(); link.focus();}
+        }
+    });
+    return E('span', {class: 'help-tip'}, [marker, source]);
+}
+
+function compactDescriptions(section, except = []) {
+    for (const item of section.querySelectorAll('.field, .field-switch')) {
+        const label = item.querySelector('.label');
+        const description = item.querySelector('.field-control > .description');
+        if (!description || except.includes(label?.textContent)) continue;
+        description.hidden = true;
+        item.querySelector('.label-row').appendChild(infoButton(label?.textContent, [description.innerHTML]));
+    }
 }
 
 function switchControl(r) {
-    const el = E('button', { type: 'button', role: 'switch', class: 'switch' }, E('span', { class: 'switch-thumb' }));
-    const sync = () => el.setAttribute('aria-checked', r.get() === true ? 'true' : 'false');
-    sync();
-    el.addEventListener('click', () => {
-        r.set(r.get() !== true);
-        sync();
-        changed();
-    });
+    const el = E('input', { type: 'checkbox', class: 'checkbox switch' });
+    el.checked = r.get() === true;
+    el.addEventListener('change', () => { r.set(el.checked); changed(); });
     return el;
 }
 
 // an option that is on or off: text on the left, switch on the right
-function switchField(label, description, r, depends) {
+function switchField(label, description, r, depends, compact = false) {
     const control = switchControl(r);
     control.id = nextId();
     return dependOn(E('div', { class: 'field-switch' }, [
-        E('div', {}, [
-            E('label', { class: 'label', for: control.id }, label),
-            description ? E('p', { class: 'description', html: description }) : null
-        ]),
-        control
+        E('div', {class: 'label-row switch-label'}, [control, E('label', { class: 'label', for: control.id }, label), compact && description ? infoButton(label, [description]) : null]),
+        E('div', { class: 'field-control' }, [
+            description && !compact ? E('p', { class: 'description', html: description }) : null
+        ])
     ]), depends);
 }
 
@@ -699,7 +794,7 @@ function input(r, opts) {
         const reveal = E('button', { class: 'btn btn-ghost btn-icon', type: 'button', title: _('Show or hide'), onclick: () => { el.type = el.type === 'password' ? 'text' : 'password'; } }, icon('eye'));
         return E('div', { class: 'input-group' }, [el, reveal]);
     }
-    return list ? E('div', {}, [el, list.el]) : el;
+    return list ? E('div', { class: 'input-list' }, [el, list.el]) : el;
 }
 
 // a list of short values as removable tags, Enter, space or comma adds what is typed
@@ -780,19 +875,35 @@ function tags(r, opts) {
 // two or three choices like a toggle group
 function segmented(r, options) {
     const el = E('div', { class: 'segmented', role: 'radiogroup' });
-    const render = () => {
-        clear(el);
-        for (const [value, label] of options) {
-            const active = r.get() === value;
-            el.appendChild(E('button', { type: 'button', role: 'radio', 'aria-checked': active ? 'true' : 'false', class: `tabs-trigger${active ? ' active' : ''}`, onclick: () => {
-                r.set(value);
-                render();
-                changed();
-            } }, label));
-        }
+    const buttons = options.map(([value, label]) => E('button', {type:'button',role:'radio',class:'tabs-trigger',onclick:()=>{
+        r.set(value); sync(); changed();
+    }}, label));
+    const sync = () => {
+        buttons.forEach((button, i) => {
+            const active = r.get() === options[i][0];
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-checked', String(active));
+            button.tabIndex = active ? 0 : -1;
+        });
     };
-    render();
+    append(el, buttons);
+    compositeKeys(el, buttons);
+    sync();
     return el;
+}
+
+function compositeKeys(group, buttons) {
+    group.addEventListener('keydown', event => {
+        const index = buttons.indexOf(document.activeElement);
+        if (index < 0) return;
+        let target;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') target = (index + 1) % buttons.length;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') target = (index + buttons.length - 1) % buttons.length;
+        if (event.key === 'Home') target = 0;
+        if (event.key === 'End') target = buttons.length - 1;
+        if (target == null) return;
+        event.preventDefault(); buttons[target].click(); buttons[target].focus();
+    });
 }
 
 // tabs keep their choice while the page is open
@@ -800,27 +911,33 @@ const tabChoice = {};
 
 function tabs(id, list) {
     const selected = tabChoice[id] && list.some((t) => t[0] === tabChoice[id]) ? tabChoice[id] : list[0][0];
-    const triggers = E('div', { class: 'tabs-list', role: 'tablist' });
+    const triggers = E('div', { class: 'tabs-list', role: 'tablist', 'aria-label': _(id === 'settings' ? 'Settings' : 'Logs') });
     const container = E('div', { class: 'tabs' }, triggers);
     const panes = [];
     for (const [key, title, content] of list) {
-        const pane = E('div', { class: 'stack', role: 'tabpanel', hidden: key !== selected }, content);
-        const trigger = E('button', { type: 'button', role: 'tab', class: `tabs-trigger${key === selected ? ' active' : ''}`, 'aria-selected': key === selected ? 'true' : 'false' }, title);
+        const paneId=nextId(), triggerId=nextId();
+        const pane = E('div', { id:paneId, class: 'stack', role: 'tabpanel', 'aria-labelledby':triggerId, hidden: key !== selected }, content);
+        const trigger = E('button', { id:triggerId, type: 'button', role: 'tab', tabindex:key===selected?0:-1, 'aria-controls':paneId, class: `tabs-trigger${key === selected ? ' active' : ''}`, 'aria-selected': key === selected ? 'true' : 'false' }, title);
         trigger.addEventListener('click', () => {
             tabChoice[id] = key;
             triggers.querySelectorAll('.tabs-trigger').forEach((t) => {
                 t.classList.remove('active');
                 t.setAttribute('aria-selected', 'false');
+                t.tabIndex=-1;
             });
             trigger.classList.add('active');
             trigger.setAttribute('aria-selected', 'true');
+            trigger.tabIndex=0;
             panes.forEach((p) => { p.hidden = true; });
             pane.hidden = false;
+            hideHelp();
+            if (id === 'logs') state.pagePollers.forEach(poll => poll());
         });
         triggers.appendChild(trigger);
         panes.push(pane);
         container.appendChild(pane);
     }
+    compositeKeys(triggers, Array.from(triggers.children));
     return container;
 }
 
@@ -837,7 +954,8 @@ function renderSavebar() {
     ]);
 }
 
-function resetDraft() {
+async function resetDraft() {
+    if (!await confirmDialog(_('Discard unsaved changes?'), _('Your saved settings will be restored.'), {confirm: _('Reset'), destructive: true})) return;
     state.draft = clone(state.config);
     state.invalid.clear();
     render();
@@ -846,23 +964,23 @@ function resetDraft() {
 async function save(apply) {
     if (state.invalid.size > 0) {
         toast(_('Some fields are invalid, fix them before saving.'), 'error');
+        const search = document.getElementById('settings-search');
+        if (search && search.value) { search.value = ''; search.dispatchEvent(new Event('input')); }
+        const invalid = document.querySelector('#content .invalid');
+        if (invalid) {
+            const pane = invalid.closest('[role="tabpanel"]');
+            if (pane?.hidden) document.getElementById(pane.getAttribute('aria-labelledby'))?.click();
+            invalid.focus();
+        }
         return;
     }
-    const oldPort = state.config.web && state.config.web.port;
-    const newPort = state.draft.web && state.draft.web.port;
     await run(api('config_set', { config: state.draft, apply: apply }), apply === 'restart' ? _('Settings are saved, the service is restarting.') : _('Settings are saved.'));
     state.config = clone(state.draft);
     updateDirty();
     if (apply === 'restart') {
         setTimeout(refreshStatus, 3000);
     }
-    // the web ui moves to the new port
-    if (newPort && oldPort !== newPort) {
-        toast(_('The web UI moves to port %s.', newPort), 'info');
-        setTimeout(() => {
-            location.href = `${location.protocol}//${location.hostname}:${newPort}/`;
-        }, 2500);
-    }
+
 }
 
 // ---------- service ----------
@@ -987,156 +1105,126 @@ async function loadHosts() {
 }
 
 function devicePicker() {
-    const container = E('div', { class: 'picker' });
+    const container = E('div', {class: 'picker'});
+    const countFormat = new Intl.NumberFormat(lang === 'ru' ? 'ru-RU' : 'en-US');
+    const countText = value => value == null ? _('Unknown') : countFormat.format(value);
+    let choices = [], refreshSelected = () => {}, searchBox = null, filter = '';
     const items = () => {
-        if (!Array.isArray(state.draft.proxy.access_items)) {
-            state.draft.proxy.access_items = [];
-        }
+        if (!Array.isArray(state.draft.proxy.access_items)) state.draft.proxy.access_items = [];
         return state.draft.proxy.access_items;
     };
     const toggle = (item, on) => {
-        const list = items().filter((i) => i !== item);
-        if (on) {
-            list.push(item);
-        }
-        state.draft.proxy.access_items = list;
-        render();
+        state.draft.proxy.access_items = items().filter(value => value !== item).concat(on ? [item] : []);
+        choices.forEach(({item: key, box, row}) => {box.checked = items().includes(key); row.classList.toggle('selected', box.checked);});
+        const focused = document.activeElement;
+        refreshSelected();
+        if (focused && !focused.isConnected && searchBox) searchBox.focus();
         changed();
     };
-    let filter = '';
-
     const option = (item, iconName, title, meta, extra) => {
-        const checked = items().includes(item);
-        const box = E('input', { type: 'checkbox', class: 'checkbox' });
-        box.checked = checked;
+        const states = (extra?.tags || []).filter(Boolean);
+        const box = E('input', {type: 'checkbox', class: 'checkbox', 'data-item': item});
+        box.checked = items().includes(item);
         box.addEventListener('change', () => toggle(item, box.checked));
-        return E('label', { class: `picker-item${checked ? ' selected' : ''}${extra && extra.inactive ? ' inactive' : ''}` }, [
-            box,
-            icon(iconName),
-            E('div', { class: 'picker-text' }, [
-                E('div', { class: 'picker-title' }, [E('span', {}, title), extra && extra.tags]),
-                meta ? E('div', { class: 'picker-meta' }, meta) : null
-            ])
-        ]);
+        const row = E('label', {class: `picker-item${box.checked ? ' selected' : ''}${extra?.inactive ? ' inactive' : ''}`}, [
+            box, icon(iconName), E('div', {class: 'picker-text'}, [
+                E('div', {class: 'picker-title'}, [E('span', {class: 'picker-name'}, title), states.length ? E('div', {class: 'row picker-statuses'}, states) : null]),
+                meta ? E('div', {class: 'picker-meta'}, meta) : null])]);
+        choices.push({item, box, row});
+        return row;
     };
-
-    const group = (title, count, content, action) => E('div', { class: 'picker-group' }, [
-        E('div', { class: 'picker-head' }, [E('div', { class: 'label' }, [title, count != null ? badge(String(count), 'secondary') : null]), action]),
-        content
-    ]);
-
     const render = () => {
-        clear(container);
-        const hosts = state.hosts;
-        const selected = items();
-
-        container.appendChild(group(_('Selected'), selected.length,
-            selected.length === 0
-                ? E('p', { class: 'description' }, _('Nothing is selected.'))
-                : E('div', { class: 'chips' }, selected.map((item) => E('span', { class: 'tag plain' }, [
-                    E('span', { title: itemValue(item) }, describeItem(item)),
-                    E('button', { type: 'button', title: _('Delete'), onclick: () => toggle(item, false) }, icon('x'))
-                ]))),
-            btn(_('Refresh'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: async () => {
-                await loadHosts();
-                render();
-            } })));
-
-        if (!hosts) {
-            container.appendChild(loader());
-            return;
-        }
-        if (!hosts.router) {
-            container.appendChild(alertBox('warning', _('The router did not give the list of devices'),
-                hosts.error ? `${_('Error')}: ${hosts.error}` : _('Names of devices, Wi-Fi networks and parental control are not available: only devices from the ARP table of the router are listed.')));
-        }
-
-        // segments, wi-fi points and the manual address on the left, devices on the right
-        const left = E('div', { class: 'picker-column' });
-        const right = E('div', { class: 'picker-column' });
-        container.appendChild(E('div', { class: 'picker-columns' }, [left, right]));
-
-        if (hosts.segments.length > 0) {
-            left.appendChild(group(_('Network segments'), null, E('div', { class: 'picker-list scroll short' }, hosts.segments.map((s) =>
-                option(`iface:${s.ifname}`, 'network', s.name || s.ifname, [s.ifname, s.address].filter(Boolean).join(' · '))))));
-        }
-
-        if (hosts.aps.length > 0) {
-            left.appendChild(group(_('Wi-Fi networks'), hosts.aps.length, E('div', { class: 'picker-list scroll short' }, hosts.aps.map((ap) =>
-                option(`ap:${ap.id}`, 'wifi', ap.ssid || ap.description || ap.id,
-                    [ap.band, ap.id, _('clients: %s', ap.clients)].filter(Boolean).join(' · '),
-                    { inactive: ap.state === 'down', tags: [ap.guest ? badge(_('guest'), 'secondary') : null, ap.state === 'down' ? badge(_('off'), 'outline') : null] })))));
-        }
-
-        const search = E('input', { class: 'input', type: 'search', placeholder: _('Search by name, MAC or IP'), value: filter });
-        const list = E('div', { class: 'picker-list scroll' });
-        const segmentNames = {};
-        for (const s of hosts.segments) {
-            if (s.id) {
-                segmentNames[s.id] = s.name || s.ifname;
-            }
-            segmentNames[s.ifname] = s.name || s.ifname;
-        }
-        const renderHosts = () => {
-            clear(list);
-            const needle = filter.toLowerCase();
-            const shown = hosts.hosts
-                .filter((h) => !needle || [h.name, h.hostname, h.mac, h.ip, h.ssid].some((v) => (v || '').toLowerCase().includes(needle)))
-                .sort((a, b) => (b.active - a.active) || (a.name || a.hostname || a.mac).localeCompare(b.name || b.hostname || b.mac));
-            if (shown.length === 0) {
-                list.appendChild(E('div', { class: 'picker-empty' }, needle ? _('Nothing found') : _('No devices')));
-            }
-            for (const h of shown) {
-                const tagList = [];
-                if (!h.active) {
-                    tagList.push(badge(_('offline'), 'outline'));
-                }
-                if (h.access === 'deny') {
-                    tagList.push(badge(_('blocked'), 'destructive'));
-                }
-                if (h.access === 'schedule') {
-                    tagList.push(badge(_('on schedule'), 'outline'));
-                }
-                list.appendChild(option(`mac:${h.mac}`, h.ssid ? 'wifi' : 'device', h.name || h.hostname || h.mac,
-                    [h.mac, h.ip, h.ssid ? `Wi-Fi ${h.ssid}` : (segmentNames[h.segment] || h.segment || null)].filter(Boolean).join(' · '),
-                    { inactive: !h.active, tags: tagList }));
-            }
+        clear(container); choices = [];
+        const hosts = state.hosts ? {...state.hosts, segments: state.hosts.segments || [], aps: state.hosts.aps || [], hosts: state.hosts.hosts || []} : null;
+        const count = badge(countText(items().length), 'secondary');
+        const summary = E('div', {class: 'picker-summary'});
+        const clearSelection = btn(_('Clear selection'), {variant: 'ghost', size: 'sm', onClick: async () => {
+            if (!await confirmDialog(_('Clear selection?'), _('Remove all selected devices and networks from the draft?'), {confirm: _('Clear selection')})) return;
+            state.draft.proxy.access_items = [];
+            choices.forEach(({box, row}) => {box.checked = false; row.classList.remove('selected');});
+            refreshSelected(); changed();
+        }});
+        refreshSelected = () => {
+            count.textContent = countText(items().length);
+            clearSelection.disabled = items().length === 0;
+            append(clear(summary), items().length ? E('div', {class: 'chips'}, items().map(item => E('span', {class: 'tag plain'}, [
+                E('span', {title: itemValue(item)}, describeItem(item)),
+                E('button', {type: 'button', 'aria-label': _('Remove %s', describeItem(item)), title: _('Remove %s', describeItem(item)), onclick: () => toggle(item, false)}, icon('x'))])))
+                : E('p', {class: 'description'}, _('Select devices below or add an address.')));
         };
-        search.addEventListener('input', () => {
-            filter = search.value;
-            renderHosts();
-        });
-        renderHosts();
-        right.appendChild(group(_('Devices'), hosts.hosts.length, [E('div', { class: 'search' }, [icon('search'), search]), list]));
-
-        const manual = E('input', { class: 'input', type: 'text', placeholder: _('MAC, IPv4 or IPv6 address or network'), spellcheck: 'false' });
+        const manual = E('input', {class: 'input', type: 'text', placeholder: _('MAC, IPv4 or IPv6 address or network'), spellcheck: 'false'});
+        const manualError = E('p', {class: 'description', role: 'status', hidden: true, id: nextId()});
+        manual.setAttribute('aria-describedby', manualError.id);
         const addManual = () => {
             const item = parseItem(manual.value);
             if (!item) {
-                manual.classList.add('invalid');
-                return;
+                manual.classList.add('invalid'); manual.setAttribute('aria-invalid', 'true');
+                manualError.textContent = _('Enter a valid MAC, IP address or network.'); manualError.hidden = false; manual.focus(); return;
             }
-            toggle(item, true);
+            toggle(item, true); manual.value = ''; manual.classList.remove('invalid');
+            manual.removeAttribute('aria-invalid'); manualError.hidden = true; manual.focus();
         };
-        manual.addEventListener('keydown', (ev) => {
-            manual.classList.remove('invalid');
-            if (ev.key === 'Enter') {
-                ev.preventDefault();
-                addManual();
-            }
-        });
-        left.appendChild(field(_('Add by address'), E('div', { class: 'row', style: { flexWrap: 'nowrap' } }, [manual, btn(_('Add'), { variant: 'outline', icon: 'plus', onClick: addManual })]), null, null, [
+        manual.addEventListener('input', () => {manual.classList.remove('invalid'); manual.removeAttribute('aria-invalid'); manualError.hidden = true;});
+        manual.addEventListener('keydown', ev => {if (ev.key === 'Enter') {ev.preventDefault(); addManual();}});
+        const mode = field(_('Mode'), segmented(ref('proxy.access_mode'), [['exclude', _('All except selected')], ['include', _('Only selected')]]), null, null, [
+            _('All devices go through the proxy, the selected ones go directly.'),
+            _('Only the selected devices go through the proxy, the others go directly.'),
+            _('A segment matches all its devices, a Wi-Fi network matches the devices connected to it on this router, not on AiMesh nodes (synced every 30 seconds), a device is matched by its MAC with IPv4 and IPv6. DNS follows the choice: proxied devices ask the core, the others ask the router.')]);
+        const manualField = field(_('Add by address'), E('div', {class: 'manual-address'}, [E('div', {class: 'input-group'}, [manual, btn(_('Add'), {variant: 'outline', icon: 'plus', onClick: addManual})]), manualError]), null, null, [
             _('For a device the router does not list, or a whole network like <code>192.168.1.0/24</code>.'),
-            _('The IP address of a device the router knows is saved as its MAC, so the choice follows the device when its address changes.')
-        ]));
-    };
+            _('The IP address of a device the router knows is saved as its MAC, so the choice follows the device when its address changes.')]);
+        refreshSelected();
+        container.appendChild(card({class: 'selected-routing', title: E('span', {class: 'row'}, [_('Selected'), count]), action: clearSelection,
+            content: [E('div', {class: 'selection-settings'}, [mode, manualField]),
+                live(() => E('p', {class: 'selection-consequence description'}, state.draft.proxy.access_mode === 'include'
+                    ? _('Only the selected devices use the proxy. Every other device connects directly.')
+                    : _('Selected devices connect directly. Every other device uses the proxy.')), () => state.draft.proxy.access_mode),
+                state.draft.proxy.enabled !== true ? alertBox('warning', null, _('The proxy is turned off in Settings, the selection has no effect.')) : null, summary]}));
+        if (!hosts) {container.appendChild(loader()); return;}
+        if (!hosts.router) container.appendChild(alertBox('warning', _('The router did not give the list of devices'), hosts.error
+            ? `${_('Error')}: ${hosts.error}` : _('Names of devices, Wi-Fi networks and parental control are not available: only devices from the ARP table of the router are listed.')));
 
+        const search = E('input', {class: 'input', type: 'search', 'aria-label': _('Search by name, MAC or IP'), placeholder: _('Name, MAC or IP address'), value: filter});
+        searchBox = search;
+        const list = E('div', {class: 'picker-list scroll'});
+        const resultCount = E('p', {class: 'description', role: 'status'});
+        let hostLimit = 50;
+        const more = btn(_('Show more'), {variant: 'outline', size: 'sm', onClick: () => {hostLimit += 50; renderHosts();}});
+        const segmentNames = {};
+        for (const segment of hosts.segments) {if (segment.id) segmentNames[segment.id] = segment.name || segment.ifname; segmentNames[segment.ifname] = segment.name || segment.ifname;}
+        const renderHosts = () => {
+            choices = choices.filter(choice => !list.contains(choice.row)); clear(list);
+            const needle = filter.toLocaleLowerCase();
+            const shown = hosts.hosts.filter(host => !needle || [host.name, host.hostname, host.mac, host.ip, host.ssid].some(value => (value || '').toLocaleLowerCase().includes(needle)))
+                .sort((a,b) => (b.active - a.active) || (a.name || a.hostname || a.mac).localeCompare(b.name || b.hostname || b.mac));
+            if (!shown.length) list.appendChild(E('div', {class: 'picker-empty'}, needle ? _('Nothing found') : _('No devices')));
+            resultCount.textContent = _(shown.length === 1 ? 'Showing %s of %s device' : 'Showing %s of %s devices', countText(Math.min(shown.length, hostLimit)), countText(shown.length));
+            more.hidden = shown.length <= hostLimit;
+            for (const host of shown.slice(0,hostLimit)) list.appendChild(option(`mac:${host.mac}`, host.ssid ? 'wifi' : 'device', host.name || host.hostname || host.mac,
+                [host.mac, host.ip, host.ssid ? `Wi-Fi ${host.ssid}` : (segmentNames[host.segment] || host.segment || null)].filter(Boolean).join(' · '),
+                {inactive: !host.active, tags: [!host.active ? badge(_('offline'), 'outline') : null, host.access === 'deny' ? badge(_('blocked'), 'destructive') : null,
+                    host.access === 'schedule' ? badge(_('on schedule'), 'outline') : null]}));
+        };
+        search.addEventListener('input', () => {filter = search.value; hostLimit = 50; renderHosts();});
+        renderHosts();
+        const devices = card({class: 'devices-discovery', title: E('span', {class: 'row'}, [_('Devices'), badge(countText(hosts.hosts.length))]),
+            action: btn(_('Refresh'), {variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: async () => {await loadHosts(); render();}}),
+            content: [E('label', {class: 'search'}, [E('span', {class: 'visually-hidden'}, _('Search by name, MAC or IP')), icon('search'), search]), list],
+            footer: E('div', {class: 'discovery-footer'}, [resultCount, more])});
+        const networkContent = [];
+        if (hosts.segments.length) networkContent.push(E('section', {class: 'network-section'}, [E('h3', {class: 'section-title'}, _('Network segments')),
+            E('div', {class: 'picker-list'}, hosts.segments.map(segment => option(`iface:${segment.ifname}`, 'network', segment.name || segment.ifname, [segment.ifname, segment.address].filter(Boolean).join(' · '))))]));
+        if (hosts.aps.length) networkContent.push(E('section', {class: 'network-section'}, [E('h3', {class: 'section-title'}, _('Wi-Fi networks')),
+            E('div', {class: 'picker-list'}, hosts.aps.map(ap => option(`ap:${ap.id}`, 'wifi', ap.ssid || ap.description || ap.id,
+                [ap.band, ap.id, _('clients: %s', countText(ap.clients))].filter(Boolean).join(' · '), {inactive: ap.state === 'down', tags: [ap.guest ? badge(_('guest')) : null, ap.state === 'down' ? badge(_('off'), 'outline') : null]})))]));
+        container.appendChild(E('div', {class: 'discovery-grid'}, [card({class: 'networks-discovery', title: _('Networks'),
+            content: networkContent.length ? networkContent : empty('network', _('No networks'))}), devices]));
+    };
     render();
-    if (!state.hosts) {
-        loadHosts().then(render, render);
-    }
+    if (!state.hosts) loadHosts().then(render, render);
     return container;
 }
+
 
 // ---------- pages ----------
 
@@ -1170,74 +1258,31 @@ function providerCard() {
 }
 
 function pageStatus() {
-    const d = state.draft;
     const status = () => state.status || {};
-
-    // the state of the service on the left, what it runs on the right
-    const service = card({
-        title: _('Service'),
-        action: live(statusBadge, () => [status().running, !!state.status]),
-        content: [
-            E('div', { class: 'grid-2 service-grid' }, [
-                E('div', { class: 'stack' }, [
-                    live(() => {
-                        const s = status();
-                        const core = s.core_version ? `${s.core_version} · ${CORE_TITLES[s.core_type] || s.core_type || 'Mihomo'}` : '—';
-                        let proxy;
-                        if (!state.config.proxy.enabled) {
-                            proxy = badge(_('Off'), 'outline');
-                        } else if (s.running && s.hijack) {
-                            proxy = badge(_('Active'), 'success');
-                        } else {
-                            proxy = badge(_('Inactive'), 'secondary');
-                        }
-                        return infoList([
-                            [_('Exodus'), E('span', { class: 'mono' }, s.app_version || '—')],
-                            [_('Core'), E('span', { class: 'mono' }, core)],
-                            [_('Profile'), profileTitle(state.config.config.profile) || '—'],
-                            [_('Proxy'), proxy]
-                        ]);
-                    }, () => [status().app_version, status().core_version, status().core_type, status().running, status().hijack]),
-                    E('div', { class: 'row' }, live(() => (status().running
-                        ? [
-                            btn(_('Restart'), { icon: 'rotate-cw', onClick: () => serviceOp('restart') }),
-                            btn(_('Stop'), { variant: 'outline', icon: 'square', onClick: () => serviceOp('stop') }),
-                            btn(_('Dashboard'), { variant: 'outline', icon: 'external-link', onClick: openDashboard })
-                        ]
-                        : [btn(_('Start'), { icon: 'play', onClick: () => serviceOp('start') })]
-                    ), () => [status().running]))
-                ]),
-                E('div', { class: 'stack' }, [
-                    switchField(_('Autostart'), _('Start the service when the router boots.'), ref('config.enabled')),
-                    field(_('Profile'), select(ref('config.profile'), profileChoices(), { optional: true, placeholder: _('Not selected') }), null, null, [
-                        _('A subscription or an uploaded file, they are managed on the Profiles page.'),
-                        _('On every start the profile is merged with the settings of Exodus and the mixin file, a subscription is downloaded again unless its update is manual.'),
-                        _('Save & Apply restarts the service with the chosen profile.')
-                    ])
-                ])
-            ])
-        ]
-    });
-
-    const modeInfo = (key, text) => E('p', {}, [E('strong', {}, key), E('br'), text]);
-    const devices = card({
-        title: _('Devices'),
-        content: [
-            d.proxy.enabled !== true ? alertBox('warning', null, _('The proxy is turned off in Settings, the selection has no effect.')) : null,
-            field(_('Mode'), segmented(ref('proxy.access_mode'), [['exclude', _('All except selected')], ['include', _('Only selected')]]), null, null, [
-                modeInfo(_('All except selected'), _('All devices go through the proxy, the selected ones go directly.')),
-                modeInfo(_('Only selected'), _('Only the selected devices go through the proxy, the others go directly.')),
-                _('A segment matches all its devices, a Wi-Fi network matches the devices connected to it on this router, not on AiMesh nodes (synced every 30 seconds), a device is matched by its MAC with IPv4 and IPv6. DNS follows the choice: proxied devices ask the core, the others ask the router.')
-            ]),
-            devicePicker()
-        ]
-    });
-
-    return [
-        pageHeader(_('Status')),
-        E('div', { class: 'stack' }, [providerCard(), service, devices])
-    ];
+    const service = card({class: 'service-panel', title: _('Service'), content: [
+        live(() => {
+            const s = status();
+            const proxy = !state.status ? _('Unknown') : !s.running ? _('Stopped') : !state.config.proxy.enabled ? _('Off') : s.hijack ? _('Active') : _('Inactive');
+            return E('dl', {class: 'service-facts'}, [
+                E('div', {}, [E('dt', {}, _('Core')), E('dd', {class: 'service-core-details'}, [E('span', {class: 'service-core-type'}, CORE_TITLES[s.core_type] || s.core_type || 'Mihomo'), E('span', {class: 'fact-meta'}, s.core_version || '—')])]),
+                E('div', {}, [E('dt', {}, _('Proxy')), E('dd', {}, E('span', {id: 'service-status', class: `badge status-block ${s.running && s.hijack && state.config.proxy.enabled ? 'badge-success' : 'badge-secondary'}`}, proxy))])]);
+        }, () => [status().core_version, status().core_type, status().running, status().hijack, !!state.status, state.config.proxy.enabled]),
+        E('div', {class: 'service-settings'}, [
+            field(_('Profile'), select(ref('config.profile'), profileChoices(), {optional: true, placeholder: _('Not selected')}), null, null, [
+                _('A subscription or an uploaded file, they are managed on the Profiles page.'),
+                _('On every start the profile is merged with the settings of Exodus and the mixin file, a subscription is downloaded again unless its update is manual.'),
+                _('Save & Apply restarts the service with the chosen profile.')]),
+            switchField(_('Autostart'), _('Start the service when the router boots.'), ref('config.enabled'), null, true)]),
+        E('div', {class: 'service-actions'}, live(() => [
+            btn(status().running ? _('Restart') : _('Start'), {icon: status().running ? 'rotate-cw' : 'play', onClick: () => serviceOp(status().running ? 'restart' : 'start')}),
+            btn(_('Stop'), {variant: 'destructive', icon: 'square', disabled: !status().running, onClick: () => serviceOp('stop')}),
+            btn(_('Dashboard'), {variant: 'outline', icon: 'external-link', disabled: !status().running, onClick: openDashboard})
+        ], () => [status().running]))
+    ]});
+    return [pageHeader(_('Devices'), _('Choose who uses the proxy. Changes take effect after Save & Apply.')),
+        E('div', {class: 'stack'}, [service, devicePicker(), providerCard()])];
 }
+
 
 function newId() {
     return `sub_${Math.random().toString(16).slice(2, 10)}`;
@@ -1288,7 +1333,13 @@ function subscriptionDialog(subscription, onSave) {
 }
 
 function pageProfiles() {
-    const active = state.draft.config.profile;
+    const profileBadge = value => state.config.config.profile === value ? badge(_('Active'), 'default')
+        : state.draft.config.profile === value ? badge(_('Selected · unsaved'), 'default') : null;
+    const useProfile = value => btn(_('Use profile'), {variant: 'outline', size: 'sm', disabled: state.draft.config.profile === value, onClick: () => {
+        state.draft.config.profile = value;
+        renderSubscriptions(); renderFiles(); changed();
+        toast(_('Profile selected. Save & Apply to use it.'), 'info');
+    }});
 
     // subscriptions are a part of the config, they are saved with the save bar
     const subsContainer = E('div', { class: 'contents' });
@@ -1299,7 +1350,7 @@ function pageProfiles() {
             subsContainer.appendChild(empty('link', _('No subscriptions yet.')));
             return;
         }
-        const tbody = E('tbody');
+        const entries = E('div', {class: 'profile-list'});
         subscriptions.forEach((sub, index) => {
             const st = state.subscriptionStates[sub.id] || {};
             let host = '';
@@ -1308,18 +1359,19 @@ function pageProfiles() {
             } catch (e) {
                 host = '';
             }
-            tbody.appendChild(E('tr', {}, [
-                E('td', {}, [
-                    E('div', { class: 'cell-title' }, [providerLogo(st.logo, 'sub-logo'), sub.name, active === `subscription:${sub.id}` ? badge(_('Active'), 'default') : null]),
-                    host ? E('div', { class: 'description mono' }, host) : null
+            entries.appendChild(E('article', {class: 'profile-entry'}, [
+                E('div', {class: 'profile-entry-top'}, [E('div', {class: 'profile-entry-name'}, [
+                    E('div', { class: 'cell-title' }, [providerLogo(st.logo, 'sub-logo'), sub.name, profileBadge(`subscription:${sub.id}`)]),
+                    host ? E('div', { class: 'description' }, host) : null
+                ]), useProfile(`subscription:${sub.id}`)]),
+                E('div', {class: 'profile-entry-bottom'}, [
+                E('dl', {class: 'profile-meta'}, [
+                    E('div', {}, [E('dt', {}, _('Traffic')), E('dd', {}, st.used || st.total ? `${st.used || '—'} / ${st.total || '∞'}` : '—')]),
+                    E('div', {}, [E('dt', {}, _('Expires')), E('dd', {}, expireText(st))]),
+                    E('div', {}, [E('dt', {}, _('Updated')), E('dd', {}, [st.success === false ? badge(_('Failed'), 'destructive') : (st.update || '—'),
+                        E('span', {class: 'description'}, intervalText(sub))])])
                 ]),
-                E('td', { class: 'nowrap' }, st.used || st.total ? `${st.used || '—'} / ${st.total || '∞'}` : '—'),
-                E('td', { class: 'nowrap' }, expireText(st)),
-                E('td', { class: 'nowrap' }, [
-                    st.success === false ? badge(_('Failed'), 'destructive') : (st.update || '—'),
-                    E('div', { class: 'description' }, intervalText(sub))
-                ]),
-                E('td', { class: 'actions' }, E('div', { class: 'row' }, [
+                E('div', { class: 'row profile-actions' }, [
                     btn(null, { variant: 'ghost', size: 'sm', icon: 'refresh-cw', title: _('Update'), onClick: async () => {
                         if (JSON.stringify((state.config.subscriptions || []).find((s) => s.id === sub.id)) !== JSON.stringify(sub)) {
                             toast(_('Save the subscription first.'), 'warning');
@@ -1362,13 +1414,10 @@ function pageProfiles() {
                         renderSubscriptions();
                         changed();
                     } })
-                ]))
+                ])])
             ]));
         });
-        subsContainer.appendChild(E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
-            E('thead', {}, E('tr', {}, [E('th', {}, _('Name')), E('th', {}, _('Traffic')), E('th', {}, _('Expires')), E('th', {}, _('Updated')), E('th')])),
-            tbody
-        ])));
+        subsContainer.appendChild(entries);
     };
     renderSubscriptions();
 
@@ -1391,12 +1440,11 @@ function pageProfiles() {
             filesContainer.appendChild(empty('file-text', _('No files uploaded.')));
             return;
         }
-        filesContainer.appendChild(E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
-            E('thead', {}, E('tr', {}, [E('th', {}, _('Name')), E('th', {}, _('Size')), E('th')])),
-            E('tbody', {}, state.profiles.map((p) => E('tr', {}, [
-                E('td', {}, E('div', { class: 'cell-title' }, [E('span', { class: 'mono' }, p.name), active === `file:${p.name}` ? badge(_('Active'), 'default') : null])),
-                E('td', { class: 'nowrap' }, formatSize(p.size)),
-                E('td', { class: 'actions' }, E('div', { class: 'row' }, [
+        filesContainer.appendChild(E('div', {class: 'profile-list'}, state.profiles.map(p => E('article', {class: 'profile-entry'}, [
+                E('div', {class: 'profile-entry-top'}, [E('div', { class: 'cell-title profile-entry-name' }, [E('span', {}, p.name), profileBadge(`file:${p.name}`)]), useProfile(`file:${p.name}`)]),
+                E('div', {class: 'profile-entry-bottom'}, [
+                E('p', {class: 'description'}, `${_('Size')}: ${formatSize(p.size)}`),
+                E('div', { class: 'row profile-actions' }, [
                     btn(null, { variant: 'ghost', size: 'sm', icon: 'download', title: _('Download'), onClick: async () => {
                         const data = await run(api('file_read', { path: `${state.dirs.profiles}/${p.name}` }));
                         download(p.name, data.content, 'application/yaml');
@@ -1409,47 +1457,64 @@ function pageProfiles() {
                         state.profiles = state.profiles.filter((x) => x.name !== p.name);
                         renderFiles();
                     } })
-                ]))
-            ])))
-        ])));
+                ])])
+            ]))));
     };
     renderFiles();
 
     const fileInput = E('input', { type: 'file', accept: '.yaml,.yml,.json,.txt', hidden: true });
+    const uploadProgress = E('span', { class: 'muted', role: 'status', 'aria-live': 'polite', hidden: true });
+    const uploadButton = btn(_('Upload'), { variant: 'outline', size: 'sm', icon: 'upload', onClick: () => fileInput.click() });
     fileInput.addEventListener('change', async () => {
         const file = fileInput.files[0];
         if (!file) {
             return;
         }
         const name = file.name.replace(/[^A-Za-z0-9._ -]/g, '_').replace(/^[._ -]+/, '') || 'profile.yaml';
-        const content = await file.text();
+        if (file.size > 8388608) { toast(_('File exceeds 8 MiB.'), 'error'); fileInput.value = ''; return; }
         fileInput.value = '';
-        await run(api('profile_upload', { name: name, content: content }), _('%s is uploaded.', name));
-        const data = await api('load');
-        state.profiles = data.profiles || [];
-        renderFiles();
+        uploadButton.disabled = true;
+        uploadProgress.hidden = false;
+        uploadProgress.textContent = _('Uploading %s…', name);
+        try {
+            const content = await file.text();
+            await api('profile_upload', { name, content, onProgress: ({completed,total}) => {
+                uploadProgress.textContent = _('Uploading %s…', name) + ' ' + Math.floor(completed/total*100) + '%';
+            } });
+            const data = await api('load');
+            state.profiles = data.profiles || [];
+            renderFiles();
+            toast(_('%s is uploaded.', name));
+        } catch (e) {
+            // Async DOM listeners have no caller to catch a rejected upload.
+            toast(e.message, 'error');
+        } finally {
+            uploadButton.disabled = false;
+            uploadProgress.hidden = true;
+        }
     });
 
     const filesCard = card({
         title: _('Profile files'),
-        action: [fileInput, btn(_('Upload'), { variant: 'outline', size: 'sm', icon: 'upload', onClick: () => fileInput.click() })],
-        content: filesContainer
+        content: [filesContainer, E('div', {class: 'profile-import'}, [fileInput, uploadButton, uploadProgress,
+            E('p', {class: 'description'}, _('Add a local configuration file.'))])]
     });
 
     // a compact row: the text on the left, the button on the right
     const hardUpdateCard = card({
-        title: _('Hard update'),
-        description: _('Remove everything downloaded by the providers of the current profile, download the subscription again and restart. Files of local providers are kept.'),
-        action: btn(_('Hard update'), { variant: 'destructive-outline', icon: 'refresh-cw', onClick: async () => {
+        content: [E('div', {class: 'inline-task-copy'}, [E('h2', {class: 'card-title'}, _('Hard update')),
+            E('p', {class: 'description'}, _('Remove everything downloaded by the providers of the current profile, download the subscription again and restart. Files of local providers are kept.'))]),
+        btn(_('Hard update'), { variant: 'destructive-outline', icon: 'refresh-cw', onClick: async () => {
             if (!await confirmDialog(_('Hard update?'), _('The proxy restarts and all providers are downloaded again.'), { confirm: _('Hard update'), destructive: true })) {
                 return;
             }
             await run(api('service', { op: 'hard_update' }), _('Hard update started, the progress is in the app log.'));
-        } })
+        } })]
     });
+    hardUpdateCard.classList.add('inline-task');
 
     return [
-        pageHeader(_('Profiles')),
+        pageHeader(_('Profiles'), _('Add a subscription or upload a configuration, then select the profile to use.')),
         E('div', { class: 'stack' }, [subscriptionsCard, filesCard, hardUpdateCard])
     ];
 }
@@ -1514,6 +1579,11 @@ function rulesEditor() {
     };
     const row = (rule, index, list) => {
         const matcher = input(objRef(rule, 'matcher'), { empty: '' });
+        const named = (control, label) => {
+            (control.matches('input,select,textarea') ? control : control.querySelector('input,select,textarea')).setAttribute('aria-label', `${label} · ${index + 1}`);
+            return control;
+        };
+        named(matcher, _('Value'));
         const incomplete = badge(_('Incomplete'), 'warning');
         incomplete.title = _('Skipped until the type, the value and the target are filled.');
         // the example follows the type, a finished rule loses the warning
@@ -1524,24 +1594,23 @@ function rulesEditor() {
             incomplete.hidden = ruleComplete(rule);
         };
         const tr = E('tr', {}, [
-            E('td', {}, switchControl({ get: () => rule.enabled !== false, set: (v) => { rule.enabled = v; } })),
-            E('td', {}, input(objRef(rule, 'type'), { empty: '', values: types, placeholder: _('Choose') })),
-            E('td', {}, matcher),
-            E('td', {}, input(objRef(rule, 'node'), { empty: '', values: targets, placeholder: _('Choose') })),
-            E('td', {}, checkbox(objRef(rule, 'no_resolve'))),
+            E('td', {}, named(switchControl({ get: () => rule.enabled !== false, set: (v) => { rule.enabled = v; } }), _('On'))),
+            E('td', {}, named(input(objRef(rule, 'type'), { empty: '', values: types, placeholder: _('Choose') }), _('Type'))),
+            E('td', {}, E('div', {class: 'rule-value'}, [matcher, incomplete])),
+            E('td', {}, named(input(objRef(rule, 'node'), { empty: '', values: targets, placeholder: _('Choose') }), _('Target'))),
+            E('td', {}, named(checkbox(objRef(rule, 'no_resolve')), _('No resolve'))),
             E('td', { class: 'actions' }, E('div', { class: 'row' }, [
-                incomplete,
-                btn(null, { variant: 'ghost', size: 'sm', icon: 'chevron-up', title: _('Up'), disabled: index === 0, onClick: () => {
+                btn(null, { variant: 'outline', size: 'sm', icon: 'chevron-up', title: _('Up'), disabled: index === 0, onClick: () => {
                     const next = list.slice();
                     next.splice(index - 1, 0, next.splice(index, 1)[0]);
                     update(next);
                 } }),
-                btn(null, { variant: 'ghost', size: 'sm', icon: 'chevron-down', title: _('Down'), disabled: index === list.length - 1, onClick: () => {
+                btn(null, { variant: 'outline', size: 'sm', icon: 'chevron-down', title: _('Down'), disabled: index === list.length - 1, onClick: () => {
                     const next = list.slice();
                     next.splice(index + 1, 0, next.splice(index, 1)[0]);
                     update(next);
                 } }),
-                btn(null, { variant: 'ghost', size: 'sm', icon: 'trash', title: _('Delete'), onClick: () => update(list.filter((_x, i) => i !== index)) })
+                btn(null, { variant: 'destructive-outline', size: 'sm', icon: 'trash', title: _('Delete'), onClick: () => update(list.filter((_x, i) => i !== index)) })
             ]))
         ]);
         tr.addEventListener('input', refresh);
@@ -1560,7 +1629,7 @@ function rulesEditor() {
             ])));
         }
         // a new rule is empty: a prefilled type or target would hide the other choices of the list
-        container.appendChild(E('div', {}, btn(_('Add rule'), { variant: 'outline', size: 'sm', icon: 'plus', onClick: () => update(rows().concat([
+        container.appendChild(E('div', { class: 'toolbar row' }, btn(_('Add rule'), { variant: 'outline', size: 'sm', icon: 'plus', onClick: () => update(rows().concat([
             { enabled: true, type: '', matcher: '', node: '', no_resolve: false }
         ])) })));
     };
@@ -1588,6 +1657,51 @@ function hwidCard() {
     });
 }
 
+function searchableSettings(list) {
+    const tabset = tabs('settings', list);
+    const tablist = tabset.querySelector('[role="tablist"]');
+    const panels = Array.from(tabset.querySelectorAll('[role="tabpanel"]'));
+    const search = E('input', {id: 'settings-search', type: 'search', class: 'input', placeholder: _('Search by setting or description'), 'aria-label': _('Search settings')});
+    const summary = E('p', {class: 'settings-search-summary description', role: 'status', hidden: true});
+    const noResults = empty('search', _('Nothing found'), _('Try another keyword or clear the search.'));
+    noResults.hidden = true;
+    const groups = panels.map((panel, index) => {
+        const heading = E('h2', {class: 'search-result-group', hidden: true}, list[index][1]);
+        panel.prepend(heading);
+        return {panel, heading, cards: Array.from(panel.querySelectorAll('.card')), key: list[index][0]};
+    });
+    const clearSearch = btn(_('Clear search'), {variant: 'ghost', size: 'sm', icon: 'x', onClick: () => {search.value = ''; filter(); search.focus();}});
+    clearSearch.hidden = true;
+    const filter = () => {
+        const query = search.value.trim().toLocaleLowerCase(lang === 'ru' ? 'ru-RU' : 'en-US');
+        const selected = tabChoice.settings || list[0][0];
+        let found = 0;
+        tablist.hidden = !!query; summary.hidden = !query; clearSearch.hidden = !query;
+        for (const {panel, heading, cards, key} of groups) {
+            let groupMatches = 0;
+            heading.hidden = !query;
+            panel.setAttribute('role', query ? 'region' : 'tabpanel');
+            for (const section of cards) {
+                const categoryMatch = !!query && `${heading.textContent} ${section.querySelector('.card-header')?.textContent || ''}`.toLocaleLowerCase().includes(query);
+                const matches = !query || categoryMatch || section.textContent.toLocaleLowerCase().includes(query);
+                section.classList.toggle('search-filtered', !matches);
+                if (matches) groupMatches++;
+                for (const item of section.querySelectorAll('.field, .field-switch')) {
+                    item.classList.toggle('search-filtered', !!query && !categoryMatch && !item.textContent.toLocaleLowerCase().includes(query));
+                }
+            }
+            panel.hidden = query ? groupMatches === 0 : key !== selected;
+            found += groupMatches;
+        }
+        summary.textContent = _('Matching groups: %s', found);
+        noResults.hidden = !query || found > 0;
+    };
+    search.addEventListener('input', filter);
+    return E('div', {class: 'stack'}, [E('div', {class: 'settings-search'}, [
+        E('label', {class: 'label', for: search.id}, _('Search settings')),
+        E('div', {class: 'row search-input-row'}, [search, clearSearch]), summary]), noResults, tabset]);
+}
+
 function pageSettings() {
     const d = () => state.draft;
     const proxyOn = () => d().proxy.enabled === true;
@@ -1598,7 +1712,7 @@ function pageSettings() {
         card({
             title: _('General'),
             content: [
-                switchField(_('Enable'), _('Intercept the traffic of the devices chosen on the Status page. When off, only the core runs: its proxy port and the dashboard.'), ref('proxy.enabled')),
+                switchField(_('Enable'), _('Intercept the traffic of the devices chosen on the Devices page. When off, only the core runs: its proxy port and the dashboard.'), ref('proxy.enabled')),
                 dependOn(E('div', { class: 'grid-2' }, [
                     field('TCP', select(ref('proxy.tcp_mode'), [['redirect', 'Redirect'], ['tproxy', 'TPROXY']], { optional: true, placeholder: _('Off'), empty: '' }),
                         _('Redirect works everywhere and is recommended. TPROXY for TCP needs the TPROXY module of the firmware, without it TCP is redirected.')),
@@ -1715,10 +1829,6 @@ function pageSettings() {
         })
     ];
 
-    const passwordOld = E('input', { class: 'input', type: 'password', autocomplete: 'current-password' });
-    const passwordNew = E('input', { class: 'input', type: 'password', autocomplete: 'new-password' });
-    const passwordRepeat = E('input', { class: 'input', type: 'password', autocomplete: 'new-password' });
-
     const serviceTab = [
         card({
             title: _('Service'),
@@ -1740,34 +1850,14 @@ function pageSettings() {
                     [_('Logs are kept in RAM, a log over the limit is cleared.')]),
                 switchField(_('Clear logs at stop'), null, ref('log.clear_at_stop'))
             ])
-        }),
-        card({
-            title: _('Web UI'),
-            info: [_('The web UI moves to the new port after saving.'), _('The password can also be reset with exodus passwd over SSH.')],
-            content: E('div', { class: 'grid-4' }, [
-                field(_('Port'), input(ref('web.port'), { number: true, type: 'port', empty: 9099, placeholder: '9099' })),
-                field(_('Current password'), passwordOld),
-                field(_('New password'), passwordNew),
-                field(_('Repeat'), passwordRepeat)
-            ]),
-            footer: btn(_('Change password'), { variant: 'outline', onClick: async () => {
-                if (passwordNew.value !== passwordRepeat.value) {
-                    toast(_('Passwords do not match.'), 'error');
-                    return;
-                }
-                if (passwordNew.value.length < 4) {
-                    toast(_('The password is too short, at least 4 characters.'), 'error');
-                    return;
-                }
-                await run(api('password', { old: passwordOld.value, new: passwordNew.value }), _('The password is changed.'));
-                passwordOld.value = passwordNew.value = passwordRepeat.value = '';
-            } })
         })
     ];
 
+    compactDescriptions(proxyTab[0], ['TCP', 'UDP']);
+    coreTab.forEach(section => compactDescriptions(section));
     return [
-        pageHeader(_('Settings')),
-        tabs('settings', [
+        pageHeader(_('Settings'), _('Find an option or explore the categories. Your changes remain a draft until you save.')),
+        searchableSettings([
             ['proxy', _('Proxy'), proxyTab],
             ['dscp', 'DSCP', dscpTab],
             ['core', 'Mihomo', coreTab],
@@ -1775,6 +1865,10 @@ function pageSettings() {
             ['service', _('Service'), serviceTab]
         ])
     ];
+}
+
+function hasEditorChanges() {
+    return Object.values(state.editorBuffers || {}).some(buffer => buffer.content !== buffer.saved);
 }
 
 function pageEditor() {
@@ -1801,84 +1895,224 @@ function pageEditor() {
     group(_('Rule providers'), files.rule_providers, dirs.rule_providers);
     group(_('Proxy providers'), files.proxy_providers, dirs.proxy_providers);
 
-    const text = E('textarea', { class: 'textarea log', wrap: 'off', spellcheck: 'false', placeholder: _('Choose a file to edit.') });
-    const load = async () => {
-        text.value = '';
-        if (choose.value) {
-            text.value = (await run(api('file_read', { path: choose.value }))).content;
+    const buffers = state.editorBuffers || (state.editorBuffers = Object.create(null));
+    const pageToken = renderToken;
+    const text = E('textarea', { class: 'textarea log', wrap: 'off', spellcheck: 'false', disabled: true, placeholder: _('Choose a file to edit.') });
+    const status = E('p', { class: 'editor-status', role: 'status', id: nextId() }, _('Choose a file to edit.'));
+    text.setAttribute('aria-describedby', status.id);
+    let loadedPath = '', requestToken = 0, loading = false, saving = false, fileError = '';
+    const isCurrent = () => pageToken === renderToken;
+    const sync = () => {
+        const buffer = buffers[loadedPath];
+        text.disabled = !buffer || loading;
+        text.setAttribute('aria-busy', String(loading));
+        saveButton.disabled = restartButton.disabled = !buffer || loading || saving;
+        reloadButton.disabled = !choose.value || loading || saving;
+        downloadButton.disabled = !buffer || loading;
+        if (fileError) status.textContent = fileError;
+        else if (!loading && !saving && buffer) status.textContent = buffer.content !== buffer.saved ? _('Unsaved changes. This draft stays here while you navigate.') : _('Saved to the router.');
+    };
+    const load = async (reload = false) => {
+        const path = choose.value;
+        const token = ++requestToken;
+        fileError = '';
+        state.editorSelected = path;
+        if (!path) {
+            loadedPath = '';
+            text.value = '';
+            loading = false;
+            status.textContent = _('Choose a file to edit.');
+            sync();
+            return;
+        }
+        if (buffers[path] && !reload) {
+            loadedPath = path;
+            text.value = buffers[path].content;
+            loading = false;
+            sync();
+            return;
+        }
+        loading = true;
+        status.textContent = _('Loading file…');
+        sync();
+        try {
+            const result = await api('file_read', { path });
+            // A late response never replaces the currently selected file or a retained draft.
+            if (token !== requestToken || !isCurrent()) return;
+            buffers[path] = { content: result.content, saved: result.content };
+            loadedPath = path;
+            text.value = result.content;
+        } catch (error) {
+            if (token !== requestToken || !isCurrent()) return;
+            choose.value = loadedPath;
+            state.editorSelected = loadedPath;
+            fileError = _('Could not load the file. Your previous draft is intact. %s', error.message);
+            toast(error.message, 'error');
+        } finally {
+            if (token === requestToken && isCurrent()) {
+                loading = false;
+                sync();
+            }
         }
     };
-    choose.addEventListener('change', load);
+    choose.addEventListener('change', () => load());
+    text.addEventListener('input', () => {
+        if (buffers[loadedPath]) buffers[loadedPath].content = text.value;
+        fileError = '';
+        sync();
+    });
+    const saveFile = async (restart) => {
+        if (!loadedPath || !buffers[loadedPath] || loading || saving) return;
+        const path = loadedPath, content = buffers[path].content;
+        saving = true;
+        fileError = '';
+        status.textContent = _('Saving file…');
+        sync();
+        try {
+            await api('file_write', { path, content });
+            buffers[path].saved = content;
+            toast(_('The file is saved.'));
+            if (restart) await serviceOp('restart');
+        } catch (error) {
+            if (isCurrent()) fileError = _('Could not save the file. Your draft is intact. %s', error.message);
+            toast(error.message, 'error');
+        } finally {
+            saving = false;
+            if (isCurrent()) {
+                sync();
+                // The shared button wrapper settles after this callback.
+                setTimeout(sync, 0);
+            }
+        }
+    };
+    const saveButton = btn(_('Save'), { variant: 'outline', disabled: true, onClick: () => saveFile(false) });
+    state.saveEditor = () => saveFile(false);
+    const restartButton = btn(_('Save & Restart'), { disabled: true, onClick: () => saveFile(true) });
+    const reloadButton = btn(_('Reload'), { variant: 'outline', icon: 'refresh-cw', disabled: true, onClick: async () => {
+        const buffer = buffers[choose.value];
+        if (buffer && buffer.content !== buffer.saved && !await confirmDialog(_('Discard this file draft?'), _('Reloading replaces your unsaved edits with the file on the router.'), { confirm: _('Reload'), destructive: true })) return;
+        await load(true);
+        setTimeout(sync, 0);
+    } });
+    const downloadButton = btn(_('Download'), { variant: 'ghost', icon: 'download', disabled: true, onClick: () => download(loadedPath.split('/').pop(), text.value) });
+    const wrap = E('input', { type: 'checkbox', class: 'checkbox' });
+    wrap.addEventListener('change', () => { text.wrap = wrap.checked ? 'soft' : 'off'; });
     if (state.editorFile === 'mixin' && files.mixin) {
         choose.value = files.mixin;
+        load();
+    } else if (state.editorSelected && Array.from(choose.options).some(option => option.value === state.editorSelected)) {
+        choose.value = state.editorSelected;
         load();
     }
     state.editorFile = null;
 
-    const saveFile = async (restart) => {
-        if (!choose.value) {
-            toast(_('Choose a file first.'), 'warning');
-            return;
-        }
-        await run(api('file_write', { path: choose.value, content: text.value }), _('The file is saved.'));
-        if (restart) {
-            await serviceOp('restart');
-        }
-    };
-
     return [
-        pageHeader(_('Editor')),
+        pageHeader(_('Editor'), _('Edit configuration files. File drafts stay in this tab until you reload the page.')),
         card({
-            content: [field(_('File'), choose), text],
+            content: [field(_('File'), choose), E('div', { class: 'editor-toolbar row wrap' }, [reloadButton, downloadButton, E('label', { class: 'checkbox-label' }, [wrap, _('Wrap lines')])]), status,
+                field(_('File contents'), E('div', { class: 'text-surface' }, text))],
             footer: E('div', { class: 'row end', style: { width: '100%' } }, [
-                btn(_('Save'), { variant: 'outline', onClick: () => saveFile(false) }),
-                btn(_('Save & Restart'), { onClick: () => saveFile(true) })
+                saveButton, restartButton
             ])
         })
     ];
 }
 
 function pageLogs() {
+    const retained = state.logBuffers || (state.logBuffers = Object.create(null));
     const logView = (name) => {
-        const text = E('textarea', { class: 'textarea log', wrap: 'off', readonly: true, spellcheck: 'false' });
+        const title = { app: _('Exodus'), core: _('Core'), web: _('Integration') }[name];
+        const text = E('textarea', { class: 'textarea log', wrap: 'off', readonly: true, spellcheck: 'false', 'aria-label': _('%s log', title) });
+        let loaded = typeof retained[name] === 'string';
+        text.value = loaded ? retained[name] : '';
+        text.placeholder = loaded ? _('No log entries yet.') : _('Loading log…');
+        const status = E('p', { class: 'log-status', role: 'status', id: nextId() }, loaded && !text.value ? _('No log entries yet.') : _('Refreshing log…'));
+        text.setAttribute('aria-describedby', status.id);
+        let paused = false, pending = false, clearing = false, generation = 0;
         let follow = true;
-        const load = async () => {
+        const followButton = btn(_('Follow latest'), { variant: 'ghost', size: 'sm', icon: 'arrow-down', onClick: () => {
+            follow = !follow;
+            followButton.setAttribute('aria-pressed', String(follow));
+            if (follow) text.scrollTop = text.scrollHeight;
+        } });
+        followButton.setAttribute('aria-pressed', 'true');
+        const load = async (manual = false) => {
+            if (pending || clearing || (!manual && (paused || !text.isConnected || !text.getClientRects().length))) return;
+            const token = generation;
+            pending = true;
+            text.setAttribute('aria-busy', 'true');
+            status.textContent = _('Refreshing log…');
+            if (!loaded) text.placeholder = _('Loading log…');
             try {
                 const data = await api('log_read', { name: name });
+                if (token !== generation || !text.isConnected) return;
+                if (!data || typeof data.content !== 'string') throw Error(_('Router response does not contain log text.'));
+                loaded = true;
+                retained[name] = data.content;
+                text.placeholder = _('No log entries yet.');
                 if (text.value !== data.content) {
                     text.value = data.content;
                     if (follow) {
                         text.scrollTop = text.scrollHeight;
                     }
                 }
+                status.textContent = paused ? _('Refresh paused') : data.content.length ? _('Updated at %s', new Date().toLocaleTimeString(lang === 'ru' ? 'ru-RU' : 'en-US')) : _('No log entries yet.');
             } catch (e) {
-                /* the next poll tries again */
+                if (token === generation && text.isConnected) {
+                    status.textContent = loaded ? _('Could not refresh. Previous log is retained. %s', e.message) : _('Could not load the log. %s', e.message);
+                    text.placeholder = status.textContent;
+                }
+            } finally {
+                pending = false;
+                text.setAttribute('aria-busy', 'false');
             }
         };
         text.addEventListener('scroll', () => {
             follow = text.scrollTop + text.clientHeight >= text.scrollHeight - 20;
+            followButton.setAttribute('aria-pressed', String(follow));
         });
-        load();
-        state.timers.push(setInterval(load, 5000));
+        const pauseButton = btn(_('Pause refresh'), { variant: 'outline', size: 'sm', onClick: () => {
+            paused = !paused;
+            pauseButton.querySelector('span').textContent = paused ? _('Resume refresh') : _('Pause refresh');
+            pauseButton.setAttribute('aria-pressed', String(paused));
+            status.textContent = paused ? _('Refresh paused') : _('Refreshing log…');
+            if (!paused) load(true);
+        } });
+        pauseButton.setAttribute('aria-pressed', 'false');
+        // Render first, then poll only the visible pane. Hidden panes start when selected.
+        setTimeout(load, 0);
+        pollPage(load);
         return card({
             content: [
-                E('div', { class: 'row end' }, [
-                    btn(_('Scroll to bottom'), { variant: 'ghost', size: 'sm', icon: 'arrow-down', onClick: () => {
-                        follow = true;
-                        text.scrollTop = text.scrollHeight;
-                    } }),
+                E('div', { class: 'row wrap toolbar log-toolbar' }, [
+                    btn(_('Refresh'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: () => load(true) }), pauseButton, followButton,
+                    btn(_('Download'), { variant: 'ghost', size: 'sm', icon: 'download', onClick: () => download(`exodus-${name}.log`, text.value) }),
                     btn(_('Clear'), { variant: 'outline', size: 'sm', icon: 'trash', onClick: async () => {
-                        await run(api('log_clear', { name: name }));
-                        text.value = '';
+                        if (!await confirmDialog(_('Clear %s log?', title), _('This removes the log from the router. Download a copy first if you need it.'), { confirm: _('Clear'), destructive: true })) return;
+                        generation++;
+                        clearing = true;
+                        try {
+                            await api('log_clear', { name: name });
+                            loaded = true;
+                            retained[name] = text.value = '';
+                            text.placeholder = _('No log entries yet.');
+                            status.textContent = _('Log cleared.');
+                        } catch (error) {
+                            status.textContent = _('Could not clear the log. %s', error.message);
+                            toast(error.message, 'error');
+                        } finally {
+                            clearing = false;
+                        }
                     } })
                 ]),
-                text
+                status,
+                E('div', { class: 'text-surface' }, text)
             ]
         });
     };
 
     return [
-        pageHeader(_('Logs'), null, [
+        pageHeader(_('Logs'), _('Inspect the latest events, pause refresh or download a copy for diagnosis.'), [
             btn(_('Debug report'), { variant: 'outline', icon: 'bug', onClick: async () => {
                 const data = await run(api('debug'));
                 download('exodus-debug.md', data.content, 'text/markdown');
@@ -1887,21 +2121,43 @@ function pageLogs() {
         ]),
         tabs('logs', [
             ['app', _('Exodus'), logView('app')],
-            ['core', _('Core'), logView('core')]
+            ['core', _('Core'), logView('core')],
+            ['web', _('Integration'), logView('web')]
         ])
     ];
 }
 
 function pageUpdates() {
+    const pageToken = renderToken;
     const container = E('div', { class: 'contents' });
-    const logView = E('textarea', { class: 'textarea', rows: 10, wrap: 'off', readonly: true, spellcheck: 'false' });
+    const lowSpace = { value: null };
+    const logStatus = E('p', { class: 'log-status', role: 'status', id: nextId() }, _('Loading log…'));
+    const logView = E('textarea', { class: 'textarea', 'aria-label': _('Update log'), 'aria-describedby': logStatus.id, placeholder: _('Loading log…'), rows: 10, wrap: 'off', readonly: true, spellcheck: 'false' });
+    let logLoaded = false;
     const pollLog = async () => {
-        const data = await api('log_read', { name: 'update' });
-        logView.value = data.content;
-        logView.scrollTop = logView.scrollHeight;
-        const lines = data.content.trim().split('\n');
-        const last = lines[lines.length - 1] || '';
-        return last === 'success' || last.startsWith('error:');
+        logView.setAttribute('aria-busy', 'true');
+        logStatus.textContent = _('Refreshing log…');
+        try {
+            const data = await api('log_read', { name: 'update' });
+            if (pageToken !== renderToken) return false;
+            if (!data || typeof data.content !== 'string') throw Error(_('Router response does not contain log text.'));
+            logLoaded = true;
+            logView.value = data.content;
+            logView.placeholder = _('No log entries yet.');
+            logView.scrollTop = logView.scrollHeight;
+            logStatus.textContent = data.content.length ? _('Updated at %s', new Date().toLocaleTimeString(lang === 'ru' ? 'ru-RU' : 'en-US')) : _('No log entries yet.');
+            const lines = data.content.trim().split('\n');
+            const last = (lines[lines.length - 1] || '').trim();
+            return last === 'success' || last === '[ OK ] Installation complete.' || last.startsWith('error:');
+        } catch (error) {
+            if (pageToken === renderToken) {
+                logStatus.textContent = logLoaded ? _('Could not refresh. Previous log is retained. %s', error.message) : _('Could not load the log. %s', error.message);
+                logView.placeholder = logStatus.textContent;
+            }
+            throw error;
+        } finally {
+            logView.setAttribute('aria-busy', 'false');
+        }
     };
     pollLog().catch(() => {});
 
@@ -1920,18 +2176,32 @@ function pageUpdates() {
             }
             return update ? badge(_('Update available'), 'warning') : badge(_('Up to date'), 'success');
         };
-        const rows = [
-            ['Exodus', appBuild(info.app, info.app_commit), appBuild(info.app_latest, info.app_latest_commit), status(info.app_update, info.app)],
-            [`${_('Core')} · ${CORE_TITLES[info.core_type] || info.core_type}`, info.core, info.core_latest,
-                status(info.core_latest == null ? null : newer(info.core, info.core_latest), info.core)]
-        ];
-        const table = E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
-            E('thead', {}, E('tr', {}, [E('th', {}, _('Component')), E('th', {}, _('Installed')), E('th', {}, _('Latest')), E('th', {}, _('Status'))])),
-            E('tbody', {}, rows.map(([name, current, next, badgeEl]) => E('tr', {}, [
-                E('td', {}, E('div', { class: 'cell-title' }, name)), E('td', { class: 'mono' }, current || '—'), E('td', { class: 'mono' }, next || '—'), E('td', {}, badgeEl)
-            ])))
-        ]));
-        const lowSpace = { value: info.free_space != null && info.core_size != null && info.free_space < info.core_size * 1.2 };
+        const version = (label, value, commit) => E('div', {}, [E('dt', {}, label), E('dd', {}, [
+            E('span', {class: 'version-value'}, value || '—'),
+            value && commit ? E('span', {class: 'version-commit'}, `${_('Commit')} ${commit.substring(0, 7)}`) : null])]);
+        const component = (name, subtitle, current, next, badgeEl, currentCommit, nextCommit) => {
+            badgeEl.classList.add('update-status', 'status-block');
+            return E('article', {class: 'update-component', 'aria-label': name}, [
+                E('div', {class: 'update-component-main'}, [
+                    E('div', {class: 'update-component-header'}, E('div', {class: 'update-component-name'}, [
+                        E('h3', {class: 'update-component-title'}, [name, subtitle ? E('span', {class: 'update-component-subtitle'}, ` | ${subtitle}`) : null])])),
+                    E('dl', {class: 'update-versions'}, [version(_('Installed'), current, currentCommit), version(_('Latest'), next, nextCommit)])]),
+                badgeEl]);
+        };
+        const components = E('div', {class: 'update-components'}, [
+            component('Exodus', null, info.app, info.app_latest, status(info.app_update, info.app), info.app_commit, info.app_latest_commit),
+            component(_('Core'), CORE_TITLES[info.core_type] || info.core_type, info.core, info.core_latest,
+                status(info.core_latest == null ? null : newer(info.core, info.core_latest), info.core))]);
+        const environment = E('div', {class: 'update-environment'}, [
+            E('h3', {class: 'update-component-title'}, _('Downloads')),
+            E('dl', {class: 'update-environment-details'}, [
+                E('div', {class: 'update-source'}, [E('dt', {class: 'visually-hidden'}, _('Downloads')), E('dd', {}, info.gh_proxy ? _('through gh-proxy at %s', info.gh_proxy) : _('directly from GitHub'))]),
+                E('div', {class: 'update-architecture'}, [E('dt', {}, _('Architecture')), E('dd', {}, info.arch || '—')]),
+                E('div', {}, [E('dt', {class: 'visually-hidden'}, _('Free space')), E('dd', {class: 'status-block update-space-summary'}, [formatSize(info.free_space), info.core_size != null
+                    ? E('span', {class: 'update-space-note'}, `${_('Core')}: ${formatSize(info.core_size)}`) : null])])])]);
+        if (lowSpace.value === null) {
+            lowSpace.value = info.free_space != null && info.core_size != null && info.free_space < info.core_size * 1.2;
+        }
         const updateButton = btn(_('Update'), { icon: 'download', disabled: !available, onClick: async () => {
             const message = lowSpace.value
                 ? _('The current core is removed before the new one is installed. If the update fails, the proxy does not work until the update is done again.')
@@ -1954,6 +2224,7 @@ function pageUpdates() {
             state.timers.push(timer);
         } });
         append(container, card({
+            class: 'updates-panel',
             title: _('Versions'),
             info: [
                 _('Exodus and the core are downloaded from GitHub into Entware. Settings, profiles and subscriptions are kept.'),
@@ -1965,13 +2236,9 @@ function pageUpdates() {
                 renderVersions(await run(fetchUpdate(true)));
             } }),
             content: [
-                table,
-                infoList([
-                    [_('Downloads'), info.gh_proxy ? _('through gh-proxy at %s', info.gh_proxy) : _('directly from GitHub')],
-                    [_('Architecture'), E('span', { class: 'mono' }, info.arch || '—')],
-                    [_('Free space'), `${formatSize(info.free_space)} · ${_('core')} ${formatSize(info.core_size)}`]
-                ]),
-                switchField(_('Low flash space mode'), _('Remove the current core before installing the new one, when the update fails for lack of space. The proxy does not work until the new core is installed.'), objRef(lowSpace, 'value'))
+                components,
+                environment,
+                switchField(_('Low flash space mode'), _('Remove the current core before installing the new one, when the update fails for lack of space. The proxy does not work until the new core is installed.'), objRef(lowSpace, 'value'), null, true)
             ],
             footer: E('div', { class: 'row end', style: { width: '100%' } }, updateButton)
         }));
@@ -1983,20 +2250,26 @@ function pageUpdates() {
     } else {
         container.appendChild(loader());
     }
-    fetchUpdate().then((info) => {
-        if (JSON.stringify(info) !== shown) {
-            renderVersions(info);
-        }
-    }).catch((e) => {
-        if (!shown) {
-            clear(container);
-            container.appendChild(alertBox('destructive', _('Failed to check for updates'), e.message));
-        }
-    });
+    const refreshVersions = () => {
+        if (pageToken !== renderToken || state.sessionExpired) return;
+        return fetchUpdate().then((info) => {
+            if (pageToken === renderToken && !state.sessionExpired && JSON.stringify(info) !== shown) {
+                renderVersions(info);
+            }
+        }).catch((e) => {
+            if (pageToken === renderToken && !state.sessionExpired && !shown) {
+                clear(container);
+                container.appendChild(alertBox('destructive', _('Failed to check for updates'), e.message));
+            }
+        });
+    };
+    // Read the RAM result when the background GitHub check finishes; never force a check here.
+    refreshVersions();
+    pollPage(refreshVersions);
 
     return [
-        pageHeader(_('Updates')),
-        E('div', { class: 'stack' }, [container, card({ title: _('Update log'), content: logView })])
+        pageHeader(_('Updates'), _('Check available versions and update Exodus or the core. Profiles and settings are kept.')),
+        E('div', { class: 'stack' }, [container, card({ title: _('Update log'), content: [logStatus, E('div', { class: 'text-surface' }, logView)] })])
     ];
 }
 
@@ -2045,20 +2318,18 @@ async function checkUpdates() {
 
 let aboutKey = null;
 
-// the version in the navbar, it pulses when an update is available
+// Build information is available without a persistent status or version badge.
 function renderAboutButton() {
     const button = document.getElementById('about');
-    const version = (state.status && state.status.app_version) || (state.update && state.update.app);
-    const update = updateAvailable(state.update);
-    const key = JSON.stringify([state.loginShown, version, update]);
+    const key = lang;
     if (key === aboutKey) {
         return;
     }
     aboutKey = key;
-    button.hidden = state.loginShown || !version;
-    button.classList.toggle('update', update);
-    button.title = update ? _('Update available') : _('Build info');
-    append(clear(button), [update ? E('span', { class: 'dot' }) : icon('git-branch'), version || '']);
+    button.hidden = false;
+    button.title = _('Build info');
+    button.setAttribute('aria-label', _('Build info'));
+    append(clear(button), icon('info'));
 }
 
 // the clipboard api needs https, the web ui of the router is http
@@ -2158,7 +2429,7 @@ async function openAbout() {
 // ---------- router ----------
 
 const pages = [
-    ['status', _('Status'), pageStatus, async () => {
+    ['status', _('Devices'), pageStatus, async () => {
         await Promise.all([reloadStates(), refreshStatus()]);
     }],
     ['profiles', _('Profiles'), pageProfiles, async () => {
@@ -2199,15 +2470,18 @@ function renderMenu() {
 let renderToken = 0;
 
 async function render() {
+    hideHelp();
     // the login form stays until the password is entered, start() renders the page then
-    if (state.loginShown) {
+    if (state.sessionExpired) {
         return;
     }
     const token = ++renderToken;
     state.timers.forEach((t) => clearInterval(t));
     state.timers = [];
+    state.pagePollers = [];
     dependents = [];
     liveViews = [];
+    state.saveEditor = null;
     const content = clear(document.getElementById('content'));
     content.appendChild(loader());
     renderMenu();
@@ -2221,7 +2495,10 @@ async function render() {
         }
     } catch (e) {
         if (token === renderToken && e.message !== _('Login required')) {
-            clear(content).appendChild(alertBox('destructive', _('Failed to load the page'), e.message));
+            clear(content).appendChild(alertBox('destructive', _('Failed to load the page'), [
+                E('p', {}, e.message), E('p', {}, _('Check the connection to the router and try again.')),
+                btn(_('Try again'), {variant: 'outline', icon: 'refresh-cw', onClick: render})
+            ]));
         }
         return;
     }
@@ -2255,58 +2532,17 @@ window.addEventListener('hashchange', async () => {
 });
 
 window.addEventListener('beforeunload', (ev) => {
-    if (isDirty()) {
+    if (isDirty() || hasEditorChanges()) {
         ev.preventDefault();
         ev.returnValue = '';
     }
 });
 
-// ---------- login ----------
-
-function showLogin() {
-    state.timers.forEach((t) => clearInterval(t));
-    state.timers = [];
-    clearInterval(state.statusTimer);
-    state.statusTimer = null;
-    if (state.loginShown) {
-        return;
-    }
-    state.loginShown = true;
-    closeDialog();
-    renderAboutButton();
-    document.getElementById('logout').hidden = true;
-    document.getElementById('menu').hidden = true;
-    document.getElementById('savebar').hidden = true;
-    const password = E('input', { class: 'input', type: 'password', autocomplete: 'current-password' });
-    const form = E('form', { class: 'card' }, [
-        E('div', { class: 'card-header' }, [
-            E('span', { class: 'logo-tile large' }, logo()),
-            E('div', { class: 'card-title' }, 'Exodus'),
-            E('div', { class: 'card-description' }, _('Enter the password of the web UI. It is set by the installer, reset it with exodus passwd over SSH.'))
-        ]),
-        E('div', { class: 'card-content' }, field(_('Password'), password)),
-        E('div', { class: 'card-footer' }, E('button', { class: 'btn btn-default', type: 'submit', style: { width: '100%' } }, _('Sign in')))
-    ]);
-    form.addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        try {
-            await api('login', { password: password.value });
-        } catch (e) {
-            toast(e.message === 'wrong password' ? _('Invalid password') : e.message, 'error');
-            password.select();
-            return;
-        }
-        clear(document.getElementById('toaster'));
-        start();
-    });
-    append(clear(document.getElementById('content')), E('div', { class: 'login' }, form));
-    password.focus();
-}
+// ---------- native session ----------
 
 async function start() {
-    state.loginShown = false;
+    state.sessionExpired = false;
     document.getElementById('menu').hidden = false;
-    document.getElementById('logout').hidden = false;
     state.config = null;
     state.hosts = null;
     await render();
@@ -2319,62 +2555,22 @@ async function start() {
 
 // ---------- init ----------
 
-function effectiveTheme() {
-    const chosen = document.documentElement.getAttribute('data-theme');
-    if (chosen === 'light' || chosen === 'dark') {
-        return chosen;
-    }
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-function renderThemeButton() {
-    const button = document.getElementById('theme');
-    append(clear(button), icon(effectiveTheme() === 'dark' ? 'sun' : 'moon'));
-    button.title = effectiveTheme() === 'dark' ? _('Light theme') : _('Dark theme');
-}
-
-document.querySelectorAll('[data-logo]').forEach((el) => el.appendChild(logo()));
-renderThemeButton();
-document.getElementById('theme').addEventListener('click', () => {
-    const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    storageSet('exodus.theme', next);
-    renderThemeButton();
-});
-if (window.matchMedia) {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    if (media.addEventListener) {
-        media.addEventListener('change', renderThemeButton);
-    }
-}
-
-const langButton = document.getElementById('lang');
-langButton.textContent = lang === 'ru' ? 'EN' : 'RU';
-langButton.title = lang === 'ru' ? 'English' : 'Русский';
-langButton.addEventListener('click', () => {
-    storageSet('exodus.lang', lang === 'ru' ? 'en' : 'ru');
-    location.reload();
-});
-
-const logoutButton = document.getElementById('logout');
-logoutButton.title = _('Log out');
-logoutButton.setAttribute('aria-label', _('Log out'));
-logoutButton.appendChild(icon('log-out'));
-logoutButton.addEventListener('click', async () => {
-    if (isDirty() && !await confirmDialog(_('Log out?'), _('There are unsaved changes, they will be lost.'), { confirm: _('Log out'), destructive: true })) {
-        return;
-    }
-    await api('logout').catch(() => {});
-    state.config = null;
-    state.draft = null;
-    updateDirty();
-    showLogin();
-});
-
 renderSavebar();
+window.addEventListener('resize', hideHelp);
+window.addEventListener('scroll', event => {
+    if (!helpPopup || (event.target instanceof Node && helpPopup.contains(event.target))) return;
+    // Scrolling a marker into view can deliver its scroll event after mouseenter.
+    // Preserve anchored help while hovered or focused, without rebuilding its links.
+    if (helpAnchor && (helpAnchor.matches(':hover,:focus') || helpPopup.matches(':hover') || helpPopup.contains(document.activeElement))) positionHelp();
+    else hideHelp();
+}, true);
+const brandMark = document.getElementById('brand-mark');
+if (brandMark) brandMark.appendChild(logo());
+const workspaceLabel = document.getElementById('workspace-label');
+if (workspaceLabel) workspaceLabel.textContent = _('Device routing workspace');
 document.getElementById('about').addEventListener('click', openAbout);
 setInterval(() => {
-    if (!state.loginShown) {
+    if (!state.sessionExpired) {
         checkUpdates();
     }
 }, 3 * 3600 * 1000);
@@ -2384,10 +2580,47 @@ document.getElementById('dialog').addEventListener('mousedown', (ev) => {
     }
 });
 document.addEventListener('keydown', (ev) => {
+    const overlay = document.getElementById('dialog');
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's' && overlay.hidden && !state.sessionExpired && exodusRoot.contains(document.activeElement)) {
+        ev.preventDefault();
+        const operation = currentPage()[0] === 'editor' ? state.saveEditor : isDirty() ? () => save('none') : null;
+        if (operation) Promise.resolve(operation()).catch(() => {});
+    }
+    if (ev.key === 'Tab' && !overlay.hidden) {
+        const nodes = Array.from(overlay.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href]')).filter(el => el.getClientRects().length);
+        const first = nodes[0], last = nodes[nodes.length - 1];
+        if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+        else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+    }
     if (ev.key === 'Escape') {
+        if (helpPopup && !helpPopup.hidden) {hideHelp(); return;}
         closeDialog();
     }
 });
+
+window.addEventListener('exodus-session-expired', () => {
+    hideHelp();
+    state.sessionExpired = true;
+    state.timers.forEach(clearInterval);
+    state.timers = [];
+    clearInterval(state.statusTimer);
+    state.statusTimer = null;
+    const banner = document.getElementById('session-warning');
+    banner.hidden = false;
+    append(clear(banner), [
+        E('p', {}, _('Web Admin session expired. Your unsaved changes are kept in this tab.')),
+        E('a', {href:'/Main_Login.asp', target:'_blank', rel:'noopener', class:'btn btn-outline'}, _('Sign in to Web Admin')),
+        btn(_('Continue after signing in'), {onClick: () => {
+            window.ExodusMerlin.resume(); state.sessionExpired = false; banner.hidden = true;
+            state.statusTimer = setInterval(refreshStatus, 5000); refreshStatus();
+            for (const poll of state.pagePollers) {
+                state.timers.push(setInterval(poll, 5000));
+                poll();
+            }
+        }})
+    ]);
+});
+window.addEventListener('pagehide', () => window.ExodusMerlin.dispose());
 
 start();
 

@@ -2,7 +2,7 @@
 
 # Exodus: transparent proxy with mihomo, started by rc.unslung of entware
 
-EXODUS=/opt/share/exodus/exodus
+EXODUS="${EXODUS_OPT:-/opt}/share/exodus/exodus"
 
 [ -x "$EXODUS" ] || exit 0
 

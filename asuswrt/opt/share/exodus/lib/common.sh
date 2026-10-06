@@ -6,6 +6,11 @@
 
 EXODUS_OPT="${EXODUS_OPT:-/opt}"
 EXODUS_TMP="${EXODUS_TMP:-/tmp/exodus}"
+EXODUS_JFFS="${EXODUS_JFFS:-/jffs}"
+EXODUS_WWW="${EXODUS_WWW:-/www}"
+EXODUS_HELPER="${EXODUS_HELPER:-/usr/sbin/helper.sh}"
+EXODUS_MENU="${EXODUS_MENU:-/tmp/menuTree.js}"
+EXODUS_PROC="${EXODUS_PROC:-/proc}"
 
 # entware binaries first, the firmware ones are older or limited
 export PATH="$EXODUS_OPT/bin:$EXODUS_OPT/sbin:/sbin:/bin:/usr/sbin:/usr/bin"
@@ -46,7 +51,6 @@ VERSION_PATH="$SHARE_DIR/VERSION"
 # branch, commit and time of the install, written by the installer
 BUILD_PATH="$SHARE_DIR/BUILD"
 MIXIN_JQ="$LIB_DIR/mixin.jq"
-LIGHTTPD_CONF="$SHARE_DIR/lighttpd.conf"
 
 # binaries downloaded by the installer
 LIBEXEC_DIR="$EXODUS_OPT/libexec/exodus"
@@ -85,6 +89,10 @@ PROFILE_JSON_PATH="$RUN_TMP/profile.json"
 API_JSON_PATH="$RUN_TMP/api.json"
 SESSIONS_DIR="$RUN_TMP/sessions"
 ROUTER_INFO_PATH="$RUN_TMP/router.json"
+WEBUI_DIR="$RUN_TMP/webui"
+WEBUI_ADDON="$EXODUS_JFFS/addons/exodus"
+WEBUI_PUBLIC="$EXODUS_WWW/user/exodus"
+WEBUI_SETTINGS="$EXODUS_JFFS/addons/custom_settings.txt"
 
 # listeners of dscp 61, the mark and the route table of tproxy
 # tables 111-115 belong to the vpn clients of asuswrt-merlin, the table of tproxy has the number of its port
@@ -119,7 +127,7 @@ lock_acquire() {
 	mkdir -p "$RUN_TMP"
 	while ! mkdir "$dir" 2> /dev/null; do
 		pid=$(cat "$dir/pid" 2> /dev/null)
-		if [ -n "$pid" ] && ! kill -0 "$pid" 2> /dev/null; then
+		if [ -n "$pid" ] && { ! kill -0 "$pid" 2> /dev/null || grep -q '^State:.*Z' "$EXODUS_PROC/$pid/status" 2>/dev/null; }; then
 			rm -rf "$dir"
 			continue
 		fi
@@ -295,7 +303,7 @@ format_filesize() {
 # hash of the code in a source tree (an unpacked archive of the branch), the update check compares it with the installed one:
 # a commit that changes only the readme is not an update; install.sh has the same function
 code_hash() {
-	(cd "$1" && find asuswrt install.sh -type f 2> /dev/null | LC_ALL=C sort | while read -r file; do sha256sum "$file"; done 2> /dev/null) | sha256sum | cut -d ' ' -f 1
+	(cd "$1" && find asuswrt install.sh uninstall.sh -type f 2> /dev/null | LC_ALL=C sort | while read -r file; do sha256sum "$file"; done 2> /dev/null) | sha256sum | cut -d ' ' -f 1
 }
 
 # github writes the commit into the pax header of an archive of a branch; install.sh has the same function

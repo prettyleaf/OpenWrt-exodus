@@ -11,7 +11,7 @@ It borrows ideas from [XKeen](https://github.com/jameszeroX/XKeen).
 
 ## Requirements
 
-- Asuswrt-Merlin on a Broadcom model. The stock firmware runs no user scripts: the rules are then restored only by the watcher, within 15 seconds after every restart of the firewall.
+- Asuswrt-Merlin on a Broadcom model: **384.15 or newer** on the `3004` family, or **3006.102.1 or newer** on the `3006` family, with Addons API (`am_addons`), `/usr/sbin/helper.sh` and writable `/jffs/addons`.
 - Architectures: `arm64` (RT-AX86U, RT-AX88U, GT-AX6000 and other HND models) and `armv7` (RT-AX58U, RT-AC68U and others). Models without an FPU, like RT-AC68U, get the `armv5` build of the core.
 - Entware on a USB drive, installed with [amtm](https://github.com/decoderman/amtm) (`amtm` → `ep`), and about 70 MB free on it: the Mihomo core is about 40 MB, yq about 15 MB.
 - Other transparent proxies (XRAYUI and similar addons) must be stopped and removed from autostart, they intercept the same traffic.
@@ -31,18 +31,17 @@ In the SSH console of the router:
 curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/asuswrt/install.sh | sh
 ```
 
-At the end it prints the address of the web UI, `http://192.168.50.1:9099/` with the default address of the router.
+At the end it prints the address of the Exodus page in the router's Web Admin. Sign in to the router and open **VPN → Exodus**. Exodus uses the native router interface and administrator session; requests are handled through Merlin's Addons API.
 
 Options can be passed as environment variables before `sh`:
 
 ```shell
-curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/asuswrt/install.sh | CORE=alpha PASSWORD=secret sh
+curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/asuswrt/install.sh | CORE=alpha sh
 ```
 
 | Variable | Meaning |
 | --- | --- |
 | `CORE` | `meta` (stable Mihomo), `alpha` (Mihomo Alpha) or `prizrak` ([Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core)), asked otherwise |
-| `PASSWORD` | password of the web UI on the first install, asked or generated otherwise |
 | `GH_PROXY` | download from GitHub through [gh-proxy](https://github.com/prettyleaf/gh-proxy): `https://example.com/ghproxy/TOKEN` |
 | `LOW_SPACE=1` | remove the current core before writing the new one |
 | `REF` | another branch or tag |
@@ -58,13 +57,13 @@ Two transparent proxies can not intercept the same traffic.
 1. Stop the other addon (XRAYUI, a Clash or sing-box addon) and turn off its autostart, or remove it by its instructions.
 2. Install Exodus, see [Install & Update](#install--update).
 3. **Profiles**: add the subscription of your provider. A Mihomo (Clash Meta) config of the other addon can be uploaded as a profile as it is: Exodus sets its ports, the DNS listener, the API and the dashboard over it, TUN of the profile is turned off. An Xray config does not fit, Exodus needs a subscription or a config for Mihomo.
-4. **Status → Devices**: choose the devices that go through the proxy, then **Save & Apply**.
+4. **Devices**: choose the devices that go through the proxy, then **Save & Apply**.
 
 ## How To Use
 
-1. Open `http://<router address>:9099/` and log in. The web UI is in English and Russian, with light and dark themes.
+1. Sign in to the router's Web Admin and open **VPN → Exodus**. The interface follows Merlin's styling and uses Russian when the router language is Russian, otherwise English.
 2. **Profiles**: add a subscription or upload a profile.
-3. **Status**: turn on **Autostart**, choose the profile, choose the mode and the devices / Wi-Fi networks / segments in the Devices section, then **Save & Apply**. Device names come from the client list of the router, DHCP and its network map.
+3. **Devices**: turn on **Autostart**, choose the profile, choose the mode and the devices / Wi-Fi networks / segments, then **Save & Apply**. Device names come from the client list of the router, DHCP and its network map.
 4. **Settings** holds only what makes sense to change on the router: proxy modes, ports and exclusions, DSCP, a few Mihomo options, your own rules, the service. Everything else (DNS servers, hosts, sniffer, rule providers) goes to the profile or to the mixin file on the **Editor** page, it is merged into the profile on every start.
 
 The **Dashboard** button opens Zashboard, the core downloads it on the first start.
@@ -93,8 +92,8 @@ exodus start | stop | restart | status
 exodus update_subscription <id>   # download a subscription, the running core gets it when it is in use
 exodus hard_update     # remove downloaded providers, update the subscription and restart
 exodus debug           # report for an issue, server addresses and passwords are hidden
-exodus web restart     # restart the web UI
-exodus passwd          # change the password of the web UI
+exodus web restart     # restore the native Exodus page and refresh its cache
+exodus passwd          # shows where to change the router administrator password
 ```
 
 ## Files
@@ -109,7 +108,9 @@ exodus passwd          # change the password of the web UI
 | `/opt/share/exodus/` | scripts and the web UI |
 | `/opt/libexec/exodus/` | `mihomo` and `yq` |
 | `/opt/etc/init.d/S99exodus` | start with Entware |
-| `/jffs/scripts/firewall-start`, `nat-start`, `unmount` | one line marked `# exodus` in each |
+| `/jffs/scripts/firewall-start`, `nat-start`, `unmount`, `services-start`, `service-event` | one line marked `# exodus` in each |
+| `/jffs/addons/exodus/` | native Web Admin page and boot recovery script |
+| `/tmp/exodus/run/webui/` | RAM caches and Addons API request/response files |
 | `/tmp/exodus/log/` | logs of the app, the core and the update |
 
 ## Special Thanks
