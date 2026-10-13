@@ -1,11 +1,11 @@
 ---
 title: Web UI
-description: Pages of the Exodus web UI on Keenetic and Asus.
+description: Pages of the Exodus web UI on Keenetic, Asus and MikroTik.
 ---
 
 import { Steps } from '@astrojs/starlight/components';
 
-The web UI runs on Keenetic and Asus, on OpenWrt [LuCI](/en/usage/luci/) plays its role. The address is `http://<router address>:9099/`, the password is set by the installer. Forgot it — `exodus passwd` over SSH. The UI is in English and Russian, with light and dark themes.
+The web UI runs on Keenetic, Asus and MikroTik, on OpenWrt [LuCI](/en/usage/luci/) plays its role. The address is `http://<router address>:9099/`, the password is set by the installer. Forgot it — `exodus passwd` over SSH, on MikroTik `/container shell exodus cmd="exodus passwd"`. The UI is in English and Russian, with light and dark themes.
 
 ## Quick start
 
@@ -28,7 +28,7 @@ The web UI runs on Keenetic and Asus, on OpenWrt [LuCI](/en/usage/luci/) plays i
 
   You can choose:
   - a **network segment** (home, guest) — all its devices;
-  - a **Wi-Fi network** — the devices connected to it at the moment, synced every 30 seconds. On Keenetic these are Wi-Fi points, on Asus the radios and guest networks of this router, without AiMesh nodes;
+  - a **Wi-Fi network** — the devices connected to it at the moment, synced every 30 seconds. On Keenetic these are Wi-Fi points, on Asus the radios and guest networks of this router, without AiMesh nodes, on MikroTik the wifi, wireless and CAPsMAN interfaces;
   - a **device** — by MAC, with IPv4 and IPv6;
   - **Add by address** — a MAC, an IP or a network like `192.168.1.0/24` for devices the router does not list. The IP of a device the router knows is saved as its MAC, so the choice follows the device when its address changes.
 

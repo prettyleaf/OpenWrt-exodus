@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: Every option of the Settings page of the web UI on Keenetic and Asus.
+description: Every option of the Settings page of the web UI on Keenetic, Asus and MikroTik.
 ---
 
 The **Settings** page holds only what makes sense to change on the router. Everything else (DNS servers, hosts, sniffer, rule providers) goes to the profile or to the [mixin file](/en/usage/overrides/#mixin-file). On changes a bar appears at the bottom: Save only saves, Save & Apply also restarts the service. On OpenWrt the similar options are on the [Advanced](/en/usage/luci/#advanced) page of LuCI.
@@ -10,11 +10,11 @@ The **Settings** page holds only what makes sense to change on the router. Every
 | Option | Default | What it does |
 | --- | --- | --- |
 | Enable | on | intercept the traffic of the devices chosen on the Status page. When off, only the core runs: its proxy port and the dashboard |
-| TCP | Redirect | Redirect works everywhere and is recommended. TPROXY for TCP needs port 443 of the router free on Keenetic, the TPROXY module of the firmware on Asus (without it TCP is redirected) |
+| TCP | Redirect | Redirect works everywhere and is recommended. TPROXY for TCP needs port 443 of the router free on Keenetic, the TPROXY module of the firmware on Asus (without it TCP is redirected). On MikroTik TPROXY is the default, Redirect needs NAT of nftables in the kernel of RouterOS |
 | UDP | TPROXY | for QUIC, games and calls. Needs the Kernel modules for Netfilter component on Keenetic or the TPROXY module on Asus, without it UDP goes directly. Empty — UDP is not proxied |
 | DNS through the core | on | DNS queries of the proxied devices go to the core, whatever DNS the router uses. Required for Fake-IP and domain rules |
 | Traffic of the router | off | proxy the connections of the router itself, for example of Entware applications. DNS of the router is not intercepted |
-| Respect parental control | on | devices blocked in the router and schedules apply to the proxied traffic too, otherwise blocked devices would get internet through the core |
+| Respect parental control | on | devices blocked in the router and schedules apply to the proxied traffic too, otherwise blocked devices would get internet through the core. Not on MikroTik: the `forward` chain of the router applies to proxied connections by itself |
 
 ### Ports and exclusions
 
@@ -84,6 +84,18 @@ Rules of Exodus are checked from top to bottom **before** the rules of the profi
 | `MATCH` | everything else | — |
 
 **No resolve** is for rules by IP (`IP-CIDR`, `IP-ASN`, `GEOIP`): the domain is not resolved to check the rule, it matches only connections to an IP address. More — [rules in the Mihomo documentation](https://wiki.metacubex.one/en/config/rules/).
+
+## RouterOS
+
+MikroTik only. The connection of the container to the REST API of the router, more on the [MikroTik](/en/install/mikrotik/#connection-to-routeros) page.
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| REST API address | the gateway of the container over HTTP | the router as the container sees it, for example `http://172.31.255.1` |
+| User, password | from the installer | the user `exodus`, the installer passes it in `/container/envs`, the container writes it here on every start |
+| Interface list of the local network | `LAN` | only the traffic from these interfaces goes to the container, the web UI is forwarded from the addresses of the router on them. Empty: any interface but the container, without the forwarding |
+
+Check asks the router at once and shows its name, model and RouterOS version, or the error.
 
 ## Service
 

@@ -10,6 +10,7 @@ description: Релизы, версии, сборка пакетов OpenWrt и 
 | `main` | OpenWrt: пакеты `exodus`, `luci-app-exodus`, `mihomo-meta` и установщик |
 | `keenetic` | Keenetic / Netcraze: Entware-версия и её установщик |
 | `asuswrt` | Asuswrt-Merlin: Entware-версия и её установщик |
+| `mikrotik` | MikroTik: контейнер RouterOS, его образ, `install.rsc` и `uninstall.rsc` |
 | `docs` | эта документация (Astro Starlight) |
 
 ## Релизы и версии
@@ -21,8 +22,9 @@ description: Релизы, версии, сборка пакетов OpenWrt и 
 | OpenWrt | тег: `v1.27.0` собирает `exodus` и `luci-app-exodus` 1.27.0-r1; `PKG_VERSION` в их Makefile — для локальных сборок |
 | Keenetic / Netcraze | `keenetic/opt/share/exodus/VERSION` в ветке `keenetic` |
 | Asus / Asuswrt-Merlin | `asuswrt/opt/share/exodus/VERSION` в ветке `asuswrt` |
+| MikroTik | `mikrotik/opt/share/exodus/VERSION` в ветке `mikrotik` |
 
-Ветки Keenetic и Asuswrt-Merlin ставятся прямо из ветки, их версия поднимается вместе с кодом; CI проверяет, что она вида `MAJOR.MINOR.PATCH`. `mihomo-meta` имеет версию упакованного ядра Mihomo.
+Ветки Keenetic, Asuswrt-Merlin и MikroTik ставятся прямо из ветки, их версия поднимается вместе с кодом; CI проверяет, что она вида `MAJOR.MINOR.PATCH`. Workflow `image` ветки `mikrotik` собирает образ `ghcr.io/prettyleaf/exodus-mikrotik` (arm64, armv7, amd64) при каждом изменении кода и раз в неделю, файлы образа лежат в pre-release `mikrotik-image`. `mihomo-meta` имеет версию упакованного ядра Mihomo.
 
 До 1.27.0 у `exodus` были версии-даты (`2026.04.08`), для пакетных менеджеров они выше 1.27.0: установщик ставит пакеты релиза с `opkg install --force-downgrade`, `apk add` ставит переданные файлы как есть.
 

@@ -17,7 +17,7 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'Exodus',
-			description: 'Proxy with the Mihomo core for OpenWrt, Keenetic and Asuswrt-Merlin routers.',
+			description: 'Proxy with the Mihomo core for OpenWrt, Keenetic, Asuswrt-Merlin and MikroTik routers.',
 			plugins: [starlightScrollToTop({ showTooltip: false, borderRadius: '10' })],
 			customCss: ['./src/styles/custom.css'],
 			favicon: '/favicon.svg',
@@ -54,6 +54,7 @@ export default defineConfig({
 						{ label: 'OpenWrt', slug: 'install/openwrt' },
 						{ label: 'Keenetic / Netcraze', slug: 'install/keenetic' },
 						{ label: 'Asus (Asuswrt-Merlin)', slug: 'install/asuswrt' },
+						{ label: 'MikroTik', slug: 'install/mikrotik' },
 						{ label: 'Installer options', translations: { ru: 'Параметры установщика' }, slug: 'install/options' },
 						{ label: 'Migrating from another proxy', translations: { ru: 'Переход с другого прокси' }, slug: 'install/migration' },
 					],

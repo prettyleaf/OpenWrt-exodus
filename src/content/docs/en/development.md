@@ -10,6 +10,7 @@ description: Releases, versions, building the OpenWrt packages and this document
 | `main` | OpenWrt: the `exodus`, `luci-app-exodus`, `mihomo-meta` packages and the installer |
 | `keenetic` | Keenetic / Netcraze: the Entware version and its installer |
 | `asuswrt` | Asuswrt-Merlin: the Entware version and its installer |
+| `mikrotik` | MikroTik: the container of RouterOS, its image, `install.rsc` and `uninstall.rsc` |
 | `docs` | this documentation (Astro Starlight) |
 
 ## Releases and versions
@@ -21,8 +22,9 @@ A release is a tag `vMAJOR.MINOR.PATCH` (for example `v1.27.0`). The `release-pa
 | OpenWrt | the tag: `v1.27.0` builds `exodus` and `luci-app-exodus` 1.27.0-r1; `PKG_VERSION` in their Makefiles is for local builds |
 | Keenetic / Netcraze | `keenetic/opt/share/exodus/VERSION` of the `keenetic` branch |
 | Asus / Asuswrt-Merlin | `asuswrt/opt/share/exodus/VERSION` of the `asuswrt` branch |
+| MikroTik | `mikrotik/opt/share/exodus/VERSION` of the `mikrotik` branch |
 
-The Keenetic and Asuswrt-Merlin branches are installed from the branch itself, their version is raised together with their code; CI checks that it is `MAJOR.MINOR.PATCH`. `mihomo-meta` has the version of the Mihomo core it packages.
+The Keenetic, Asuswrt-Merlin and MikroTik branches are installed from the branch itself, their version is raised together with their code; CI checks that it is `MAJOR.MINOR.PATCH`. The `image` workflow of the `mikrotik` branch builds the image `ghcr.io/prettyleaf/exodus-mikrotik` (arm64, armv7, amd64) on every change of the code and once a week, the image files are in the `mikrotik-image` pre-release. `mihomo-meta` has the version of the Mihomo core it packages.
 
 Before 1.27.0 `exodus` had versions by date (`2026.04.08`), they are higher than 1.27.0 for the package managers: the installer installs the packages of the release with `opkg install --force-downgrade`, `apk add` installs the given files as they are.
 

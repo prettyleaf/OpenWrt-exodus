@@ -1,0 +1,150 @@
+---
+title: MikroTik
+description: Контейнер RouterOS, установка, правила роутера и особенности MikroTik.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+На MikroTik Exodus работает в контейнере RouterOS: в нём ядро Mihomo, [веб-интерфейс](/usage/web-ui/) и панель Zashboard, те же, что на Keenetic. RouterOS отправляет в контейнер трафик выбранных устройств, а правила роутера контейнер поддерживает сам через REST API.
+
+:::caution
+Порт для MikroTik — первая версия, с 1.28.0. Если что-то не работает, приложите к issue отчёт `exodus debug` (см. [«Командная строка и файлы»](#командная-строка-и-файлы)).
+:::
+
+## Требования
+
+- RouterOS **7.20** или новее: в её контейнерах есть nftables с TPROXY.
+- Архитектуры: `arm64`, `arm` (armv7) и `x86` (включая CHR). На роутерах MIPS и SMIPS контейнеров нет.
+- Пакет `container` и режим устройства с контейнерами.
+- Накопитель в **ext4** (USB, NVMe, SATA): образ занимает около 100 МБ. Встроенная память подойдёт, если её хватает, но изнашивается.
+- Около 100 МБ свободной RAM для ядра.
+- REST API через сервис `www` (HTTP) или `www-ssl`. Если оба выключены, установщик включит `www` только для адреса контейнера. Трафик между роутером и контейнером не выходит за пределы роутера.
+
+## Подготовка
+
+<Steps>
+
+1. **Пакет container.** Скачайте *Extra packages* своей версии и архитектуры с [mikrotik.com/download](https://mikrotik.com/download), загрузите `container-*.npk` в **Files** и перезагрузите роутер. Проверка — `/system package print`.
+
+2. **Режим устройства.** Выполните в терминале и в течение 5 минут подтвердите кнопкой reset (или выключением питания):
+
+   ```text
+   /system/device-mode/update container=yes
+   ```
+
+3. **Накопитель.** Отформатируйте его в ext4 в **System → Disks**.
+
+</Steps>
+
+## Установка и обновление
+
+В терминале роутера (WinBox → New Terminal или SSH):
+
+```text
+/tool fetch url="https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/mikrotik/install.rsc" dst-path=exodus-install.rsc; /import exodus-install.rsc
+```
+
+Установщик:
+
+- создаёт veth `veth-exodus`: `172.31.255.2/30` у контейнера, `172.31.255.1` у роутера; NAT для контейнера и правило `input`, чтобы контейнер достучался до REST API и DNS роутера;
+- создаёт таблицу маршрутизации `exodus`, пользователя и группу `exodus` для REST API — пользователь входит только с адреса контейнера;
+- ставит `registry-url` в `/container/config` на `https://ghcr.io` и скачивает образ `prettyleaf/exodus-mikrotik:latest`;
+- создаёт контейнер с mount `<диск>/exodus/data` → `/opt/etc/exodus` и запускает его, автозапуск вместе с роутером включён.
+
+В конце он покажет пароль веб-интерфейса. Адрес — `http://<адрес роутера>:9099/`: контейнер пробрасывает порт с адресов роутера на списке интерфейсов `LAN`. Напрямую — `http://172.31.255.2:9099/`.
+
+**Обновления.** Код Exodus и ядро обновляются на странице **«Обновления»** прямо в работающем контейнере, как на Keenetic. Образ (Alpine и его пакеты) обновляется повторным запуском установщика: он пересоздаёт контейнер из нового образа, настройки, профили и подписки в `<диск>/exodus/data` сохраняются.
+
+**Ядро** (Mihomo Meta, Alpha или Prizrak-Core) меняется установщиком в оболочке контейнера:
+
+```text
+/container shell exodus cmd="sh /opt/share/exodus/install.sh"
+```
+
+### Параметры установщика
+
+Задаются глобальными переменными перед импортом:
+
+```text
+:global exodusDisk "usb1"; :global exodusPassword "secret"; /import exodus-install.rsc
+```
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `exodusDisk` | первый диск ext4 | накопитель контейнера: `usb1`, `nvme1`, `sata1` |
+| `exodusPassword` | генерируется | пароль веб-интерфейса при первой установке |
+| `exodusLanList` | `LAN` | список интерфейсов локальной сети |
+| `exodusNetwork` | `172.31.255` | первые три числа сети /30 контейнера |
+| `exodusIPv6` | `no` | `yes` даёт контейнеру `fd65:786f:6475::2/64` и NAT66, тогда проксируется и IPv6 |
+| `exodusImage` | `prettyleaf/exodus-mikrotik:latest` | образ на ghcr.io |
+| `exodusFile` | — | файл образа на роутере вместо реестра, `github` скачивает `exodus-mikrotik-<arch>.tar` из релиза [mikrotik-image](https://github.com/prettyleaf/openwrt-exodus/releases/tag/mikrotik-image) |
+| `exodusGhProxy` | — | [gh-proxy](/install/options/#если-github-заблокирован) для GitHub: файл образа и обновления внутри контейнера |
+
+Если ghcr.io недоступен, скачайте файл образа через gh-proxy:
+
+```text
+:global exodusFile "github"; :global exodusGhProxy "https://example.com/ghproxy/TOKEN"; /import exodus-install.rsc
+```
+
+## Подключение к RouterOS
+
+Пользователя REST API установщик передаёт контейнеру в `/container/envs`, контейнер записывает его в свои настройки при каждом запуске. Проверить подключение — **«Настройки» → RouterOS** → **«Проверить»**, там же адрес REST API, пользователь, пароль и **список интерфейсов локальной сети**: только трафик с этих интерфейсов идёт в контейнер, на них же пробрасывается веб-интерфейс. Статус подключения виден и на странице **«Статус»**.
+
+Устройства для выбора берутся из RouterOS: DHCP-аренды и ARP, **сегменты** — интерфейсы с адресом (бриджи, VLAN), **сети Wi-Fi** — интерфейсы пакетов wifi и wireless и CAPsMAN; клиенты сетей Wi-Fi синхронизируются каждые 30 секунд.
+
+## Как это работает
+
+У каждого правила контейнера в RouterOS комментарий начинается с `exodus:`, свою часть установщик помечает `exodus setup`.
+
+| Где | Что |
+| --- | --- |
+| `mangle` prerouting → `exodus-pre` | TCP и UDP выбранных устройств получают routing mark `exodus`. Сам роутер, локальные сети и «Прямые сети» из настроек идут напрямую, Fake-IP всегда через прокси, метки DSCP — как на Keenetic |
+| `mangle` output → `exodus-out` | трафик самого роутера, если включён «Трафик роутера» |
+| `nat` dstnat → `exodus-dns` | DNS выбранных устройств уходит в ядро |
+| `filter` forward | два `accept` перед fasttrack: fasttrack пропустил бы routing mark |
+| `address-list` | `exodus-direct` — прямые сети, `exodus-ap` — клиенты выбранных сетей Wi-Fi |
+| маршрут в таблице `exodus` | в контейнер, с `check-gateway=ping` |
+| `netwatch` | выключает правила, когда контейнер не отвечает |
+| `nat` dstnat | веб-интерфейс, API ядра и порт прокси с адресов роутера, пока работает контейнер |
+
+Внутри контейнера nftables отправляет пришедший от роутера трафик на TPROXY-порт ядра.
+
+Правила проверяются каждые 30 секунд и применяются снова, если их удалили, изменили, выключили или чужое правило встало выше. Когда контейнер не отвечает, маршрут становится неактивным, а netwatch выключает правила: устройства идут **напрямую, без прокси**, пока контейнер не вернётся. Остановка сервиса убирает правила сразу.
+
+## Особенности MikroTik
+
+- TCP и UDP по умолчанию идут через TPROXY. Redirect для TCP требует NAT nftables в ядре RouterOS, без него Exodus пишет об этом в лог. TUN не поддерживается, TUN профиля выключается.
+- Проксируемые пакеты останавливаются в `mangle prerouting` на правилах Exodus (`passthrough=no`): последующие правила mangle prerouting, например PCC или свои routing mark, их не видят.
+- Цепочка `forward` роутера по-прежнему действует на новые проксируемые соединения. Строгой цепочке, которая отбрасывает всё, кроме WAN, нужен `accept` для `out-interface=veth-exodus`.
+- `router.lan` и другие имена `.lan` и `.home.arpa` резолвит роутер: его DNS должен принимать удалённые запросы (`/ip dns set allow-remote-requests=yes`, включено в конфигурации по умолчанию).
+- `registry-url` в `/container/config` общий для всех контейнеров: после установки другие контейнеры тоже тянутся с ghcr.io, пока вы не вернёте свой реестр.
+- HWID строится по серийному номеру роутера (software ID на CHR и x86) и не меняется после переустановки.
+
+## Командная строка и файлы
+
+В оболочке контейнера, `/container shell exodus`:
+
+```shell
+exodus start | stop | restart | status
+exodus routeros        # проверить подключение к REST API RouterOS
+exodus apply           # применить правила контейнера и RouterOS заново
+exodus debug           # отчёт для issue, адреса серверов и пароли скрыты
+exodus passwd          # сменить пароль веб-интерфейса
+```
+
+Сбросить пароль без входа в оболочку: `/container shell exodus cmd="exodus passwd"`. Логи контейнера в RouterOS — `/log print where topics~"container"`, логи Exodus и ядра — на странице **«Логи»**. Остальные команды — на странице [«Командная строка и файлы»](/usage/cli/).
+
+| Путь в контейнере | Назначение |
+| --- | --- |
+| `/opt/etc/exodus/` | mount `<диск>/exodus/data`: настройки, профили, подписки, mixin-файл |
+| `/opt/share/exodus/` | скрипты и веб-интерфейс |
+| `/opt/libexec/exodus/` | `mihomo` и `yq` |
+| `/tmp/exodus/log/` | логи приложения, ядра и обновления |
+
+## Удаление
+
+```text
+/tool fetch url="https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/mikrotik/uninstall.rsc" dst-path=exodus-uninstall.rsc; /import exodus-uninstall.rsc
+```
+
+Удаляются контейнер, его правила, пользователь, veth и файлы. `:global exodusKeepData yes` перед импортом сохранит `<диск>/exodus/data`. `registry-url` и сервис `www` остаются как есть.
