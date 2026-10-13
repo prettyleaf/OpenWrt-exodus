@@ -1,0 +1,4 @@
+# only the code of the container goes to the build
+*
+!install.sh
+!mikrotik/opt

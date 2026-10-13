@@ -1,0 +1,80 @@
+name: image
+
+# the image of the container for RouterOS: ghcr.io/<owner>/exodus-mikrotik, and image files for /container/add file=
+# the package on ghcr.io has to be made public once in its settings on GitHub, RouterOS pulls without a login
+
+on:
+  push:
+    branches:
+      - mikrotik
+    paths:
+      - install.sh
+      - mikrotik/**
+      - .github/workflows/image.yml
+  schedule:
+    # a weekly build takes the fixes of alpine and the latest core
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/exodus-mikrotik
+  PLATFORMS: linux/arm64,linux/arm/v7,linux/amd64
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Version
+        id: version
+        run: echo "version=$(cat mikrotik/opt/share/exodus/VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: mikrotik/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          build-args: |
+            COMMIT=${{ github.sha }}
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+
+      # docker archives for routers without access to ghcr.io, one per architecture
+      - name: Image files
+        run: |
+          mkdir -p dist
+          for pair in arm64:linux/arm64 armv7:linux/arm/v7 amd64:linux/amd64; do
+            tag="${pair%%:*}"
+            platform="${pair#*:}"
+            docker pull --platform "$platform" "$IMAGE:latest"
+            docker save "$IMAGE:latest" -o "dist/exodus-mikrotik-$tag.tar"
+            docker rmi "$IMAGE:latest"
+          done
+          ls -l dist
+
+      - name: Release of the image files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view mikrotik-image > /dev/null 2>&1 || gh release create mikrotik-image --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "Exodus for MikroTik: image files" \
+            --notes "Image files of the container for RouterOS without access to ghcr.io, see install.rsc (exodusFile). Rebuilt with every change of the mikrotik branch."
+          gh release upload mikrotik-image dist/*.tar --clobber

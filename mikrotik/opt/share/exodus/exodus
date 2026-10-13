@@ -1,8 +1,8 @@
 #!/bin/sh
 
-# Exodus for Keenetic: transparent proxy with mihomo on entware
-# there is no procd on keenetic: the core is kept running by the supervise loop,
-# the watch loop restores the rules, syncs wi-fi clients and runs the scheduled tasks
+# Exodus for MikroTik: transparent proxy with mihomo in a container of RouterOS
+# the container runs "exodus container" under tini: the web ui, the autostart and the forwarding of the web ui in routeros
+# the core is kept running by the supervise loop, the watch loop keeps the rules of routeros and syncs wi-fi clients
 
 . "${EXODUS_OPT:-/opt}/share/exodus/lib/common.sh"
 . "$LIB_DIR/firewall.sh"
@@ -15,13 +15,42 @@ usage() {
 		  start | stop | restart | status   control the proxy
 		  update_subscription <id>          download a subscription, the running core gets it when it is in use
 		  hard_update                       remove downloaded providers, update the subscription and restart
-		  apply                             apply the rules again
-		  sync                              sync wi-fi clients and parental control with the router
+		  apply                             apply the rules again, in the container and in routeros
+		  sync                              sync the clients of the chosen wi-fi points with routeros
+		  routeros                          check the connection to the rest api of routeros
+		  forward                           forward the web ui from the addresses of the router again
 		  clear_logs                        clear logs exceeding the size limit
 		  debug                             print the debug report
 		  web start|stop|restart            control the web ui
 		  passwd                            set the password of the web ui
+		  container                         the entrypoint of the container
 	EOF
+}
+
+# a new install gets the config and the mixin file of the image; an old config gets the new options with their defaults,
+# the values of the user win and options removed from exodus are dropped
+init_config() {
+	mkdir -p "$HOME_DIR"
+	[ -f "$MIXIN_FILE_PATH" ] || cp -f "$DEFAULTS_DIR/mixin.yaml" "$MIXIN_FILE_PATH"
+	if [ ! -f "$CONFIG_PATH" ]; then
+		cp -f "$DEFAULTS_DIR/config.json" "$CONFIG_PATH"
+		chmod 600 "$CONFIG_PATH"
+		return 0
+	fi
+	lock_acquire config || return 1
+	if jq -s '
+		def known($user):
+			if type == "object" then
+				if ($user | type) == "object" then with_entries(.key as $k | if ($user | has($k)) then .value |= known($user[$k]) else . end) else . end
+			else $user end;
+		.[1] as $user | .[0] | known($user)' "$DEFAULTS_DIR/config.json" "$CONFIG_PATH" > "$CONFIG_PATH.new" 2> /dev/null && [ -s "$CONFIG_PATH.new" ]; then
+		mv -f "$CONFIG_PATH.new" "$CONFIG_PATH"
+	else
+		rm -f "$CONFIG_PATH.new"
+		echo "warning: the config is not valid json, it is kept as is"
+	fi
+	chmod 600 "$CONFIG_PATH"
+	lock_release config
 }
 
 # secrets and the hwid are generated once, like uci-defaults on openwrt
@@ -40,23 +69,53 @@ ensure_config() {
 	fi
 }
 
+# the environment of the container from /container/envs: the rest api of routeros, the gh-proxy, the password of the web ui
+# the web ui runs its scripts without it, so the values go to the config
+container_env() {
+	local password
+	if [ -n "$ROS_URL$ROS_USER$ROS_PASSWORD$ROS_LAN_LIST" ]; then
+		cfg_update '
+			.routeros.url = (if $url != "" then $url else .routeros.url end)
+			| .routeros.username = (if $user != "" then $user else .routeros.username end)
+			| .routeros.password = (if $password != "" then $password else .routeros.password end)
+			| .routeros.lan_list = (if $lan != "" then $lan else .routeros.lan_list end)' \
+			--arg url "$ROS_URL" --arg user "$ROS_USER" --arg password "$ROS_PASSWORD" --arg lan "$ROS_LAN_LIST"
+	fi
+	if [ -n "$GH_PROXY" ]; then
+		cfg_update '.update.gh_proxy = $proxy' --arg proxy "${GH_PROXY%/}"
+	fi
+	if [ ! -f "$AUTH_PATH" ]; then
+		if [ -n "$PASSWORD" ]; then
+			printf '%s\n' "$PASSWORD" | set_password > /dev/null
+		else
+			password=$(random_hex 6)
+			printf '%s\n' "$password" | set_password > /dev/null
+			log "App" "No password of the web UI is given, the generated one is $password, change it in Settings."
+		fi
+	fi
+}
+
 core_env() {
-	local nofile gomemlimit mem_kb
-	# entware allows 1024 files per process, the core needs more, but too many hang the router
+	local nofile gomemlimit mem_kb limit
 	case "$(uname -m)" in
-		aarch64*) nofile=40000 ;;
+		aarch64*|x86_64) nofile=40000 ;;
 		*) nofile=10000 ;;
 	esac
 	ulimit -n "$nofile" 2> /dev/null || ulimit -S -n "$nofile" 2> /dev/null
-	# half of the ram by default, go does not see the limits of the router and gets killed by oom
+	# half of the ram by default, or of the memory limit of the container; go does not see the limits and gets killed by oom
 	gomemlimit="$c_core_gomemlimit"
 	if [ -z "$gomemlimit" ]; then
 		mem_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo 2> /dev/null)
+		limit=$(cat /sys/fs/cgroup/memory.max 2> /dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2> /dev/null)
+		case "$limit" in
+			""|*[!0-9]*) ;;
+			*) [ -n "$mem_kb" ] && [ "$((limit / 1024))" -lt "$mem_kb" ] && mem_kb=$((limit / 1024)) ;;
+		esac
 		[ -n "$mem_kb" ] && gomemlimit="$((mem_kb / 2048))MiB"
 	fi
 	[ "$gomemlimit" = "off" ] && gomemlimit=
 	[ -n "$gomemlimit" ] && export GOMEMLIMIT="$gomemlimit"
-	[ -f "$EXODUS_OPT/etc/ssl/certs/ca-certificates.crt" ] && export SSL_CERT_FILE="$EXODUS_OPT/etc/ssl/certs/ca-certificates.crt"
+	[ -f /etc/ssl/certs/ca-certificates.crt ] && export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 }
 
 is_running() {
@@ -67,7 +126,7 @@ is_running() {
 core_listening() {
 	[ -n "$fw_redir_port" ] && [ "$fw_tcp_mode" = "redirect" ] && ! port_listening tcp "$fw_redir_port" && return 1
 	[ -n "$fw_tproxy_port" ] && [ -n "$fw_tp_protos" ] && ! port_listening tcp "$fw_tproxy_port" && return 1
-	[ -n "$fw_dns_port" ] && { [ "$fw_dns4" = 1 ] || [ "$fw_dns6" = 1 ]; } && ! port_listening udp "$fw_dns_port" && return 1
+	[ -n "$fw_dns_port" ] && [ "$fw_dns" = 1 ] && ! port_listening udp "$fw_dns_port" && return 1
 	return 0
 }
 
@@ -125,7 +184,7 @@ start_locked() {
 	fi
 	log "App" "Start."
 	if [ ! -x "$PROG" ] || [ ! -x "$YQ" ]; then
-		log "App" "Core or yq is not executable, run the installer again."
+		log "App" "Core or yq is not executable, update Exodus on the Updates page or take the image again."
 		log "App" "Exit."
 		return 1
 	fi
@@ -172,19 +231,16 @@ start_locked() {
 		done
 		if ! core_listening; then
 			log "Proxy" "The core does not listen its ports, the rules are applied when it does."
-		elif lock_acquire firewall 100; then
+		elif lock_acquire firewall 300; then
 			if fw_start; then
 				log "Proxy" "Hijack successful."
 			else
-				log "Proxy" "Hijack failed, see the messages above."
+				log "Proxy" "Hijack failed, see the messages above, the rules are applied again every 30 seconds."
 			fi
 			lock_release firewall
 		fi
-		if [ "$fw_v6" = 1 ] && [ "$fw_v6_nat" != 1 ]; then
-			log "Proxy" "ip6tables has no nat table, IPv6 DNS hijack and IPv6 TCP redirect are not available."
-		fi
 		if [ "$p_ipv6" = 1 ] && [ "$fw_v6" != 1 ]; then
-			log "Proxy" "No global IPv6 address, IPv6 rules are skipped."
+			log "Proxy" "The container has no IPv6 address or gateway, IPv6 is not proxied."
 		fi
 	else
 		log "Proxy" "Disabled."
@@ -208,7 +264,7 @@ stop() {
 	# the killed watcher removes its pid file too, the two removals may race
 	rm -f "$WATCH_PID_PATH" 2> /dev/null
 	# rules go first, traffic must not wait for a stopped core
-	lock_acquire firewall 100
+	lock_acquire firewall 300
 	fw_clean
 	lock_release firewall
 	local pid i
@@ -243,35 +299,6 @@ status() {
 	return 1
 }
 
-# ndm calls netfilter.d with $type (iptables/ip6tables) and $table after every rebuild of a table
-hook() {
-	[ -f "$STARTED_FLAG_PATH" ] || return 0
-	fw_env || return 0
-	case "$1" in
-		netfilter)
-			local family; family=4
-			[ "$2" = "ip6tables" ] && family=6
-			case "$3" in
-				nat|mangle|filter) ;;
-				*) return 0 ;;
-			esac
-			# until the core listens the rules would cut the traffic, the watch loop applies them later
-			core_listening || return 0
-			lock_acquire firewall 100 || return 0
-			fw_sets_local
-			fw_apply "$family" "$3"
-			fw_route_apply
-			lock_release firewall
-			;;
-		schedule)
-			# parental control schedules change the list of blocked devices
-			lock_acquire firewall 100 || return 0
-			fw_sets_rci
-			lock_release firewall
-			;;
-	esac
-}
-
 watch() {
 	local last minute tick
 	prepare_files
@@ -287,13 +314,18 @@ watch() {
 		[ -f "$STOP_FLAG_PATH" ] && break
 		tick=$((tick + 1))
 		if fw_env && lock_acquire firewall 50; then
-			# ndm may rebuild a table without calling the hook, and the rules wait for the core after start
-			if ! fw_intact && core_listening; then
-				log "Proxy" "Rules are missing, apply them."
-				fw_start
-			elif [ $((tick % 2)) = 0 ]; then
-				fw_sets_local
-				fw_sets_rci
+			# the rules wait for the core after start; routeros is asked every 30 seconds, the rules may be changed or turned off by netwatch
+			if ! fw_nft_intact && core_listening; then
+				log "Proxy" "Rules of the container are missing, apply them."
+				fw_nft_start
+			fi
+			if [ $((tick % 2)) = 0 ]; then
+				if ! fw_ros_intact && core_listening; then
+					[ -f "$RUN_TMP/routeros_rules.err" ] || log "Proxy" "Rules of RouterOS are missing or changed, apply them."
+					fw_ros_start
+				else
+					fw_ap_sync
+				fi
 			fi
 			lock_release firewall
 		fi
@@ -314,26 +346,26 @@ watch() {
 	rm -f "$WATCH_PID_PATH"
 }
 
-sync_sets() {
+sync_aps() {
 	[ -f "$STARTED_FLAG_PATH" ] || return 0
 	fw_env || return 0
 	lock_acquire firewall 100 || return 1
-	fw_sets_local
-	fw_sets_rci
+	ros_load
+	fw_ap_sync
 	lock_release firewall
 }
 
 apply() {
 	[ -f "$STARTED_FLAG_PATH" ] || return 0
 	fw_env || return 0
-	lock_acquire firewall 100 || return 1
+	lock_acquire firewall 300 || return 1
 	fw_start
 	local ret=$?
 	lock_release firewall
 	return "$ret"
 }
 
-# logs live in ram, a log over the size limit (megabytes, 0 is no limit) is cleared, checked every minute
+# logs are cleared when over the size limit (megabytes, 0 is no limit), checked every minute
 clear_logs() {
 	local limit bytes
 	limit="${c_log_max_size:-1}"
@@ -376,7 +408,7 @@ auto_update() {
 }
 
 web() {
-	local port pid ret
+	local port pid
 	case "$1" in
 		start)
 			pid_alive "$WEB_PID_PATH" && return 0
@@ -392,13 +424,7 @@ web() {
 				-e "s|@LOG@|$LOG_DIR|g" \
 				-e "s|@OPT@|$EXODUS_OPT|g" \
 				"$LIGHTTPD_CONF" > "$RUN_TMP/lighttpd.conf"
-			# lighttpd of entware and its libpcre2 differ in symbol versions, the loader warns about it on every start
-			# a file and not a pipe: the daemon keeps stderr open
-			lighttpd -f "$RUN_TMP/lighttpd.conf" 2> "$RUN_TMP/lighttpd.err"
-			ret=$?
-			grep -v 'no version information available' "$RUN_TMP/lighttpd.err" >&2
-			rm -f "$RUN_TMP/lighttpd.err"
-			return "$ret"
+			lighttpd -f "$RUN_TMP/lighttpd.conf"
 			;;
 		stop)
 			if pid_alive "$WEB_PID_PATH"; then
@@ -444,22 +470,37 @@ set_password() {
 		return 1
 	fi
 	salt=$(random_hex 8)
-	umask 077
-	echo "$salt:$(printf '%s' "$salt$password" | sha256sum | cut -d ' ' -f 1)" > "$AUTH_PATH"
+	mkdir -p "$HOME_DIR"
+	( umask 077; echo "$salt:$(printf '%s' "$salt$password" | sha256sum | cut -d ' ' -f 1)" > "$AUTH_PATH" )
 	# sessions of the old password end
 	rm -f "$SESSIONS_DIR"/* 2> /dev/null
 	echo "password is set"
 }
 
+# the connection to routeros, for the shell of the container
+routeros() {
+	prepare_files
+	if ros_check; then
+		jq -r '"connected to \(.url) as \(.user), \(.identity // "") RouterOS \(.version // "")"' "$ROUTEROS_STATE_PATH"
+		return 0
+	fi
+	jq -r '"no connection to \(.url) as \(.user): \(.error)"' "$ROUTEROS_STATE_PATH"
+	return 1
+}
+
 debug() {
+	local path
 	cfg_load
+	ros_load
 	echo "# Exodus Debug Info"
 	echo "## system"
 	echo '```'
-	keenetic_version | jq -r '"\(.model // "") \(.hw_id // "") \(.title // .release // "")"' 2> /dev/null
+	router_info | jq -r '"\(.model // "") \(.board // "") RouterOS \(.version // "") \(.arch // "")"' 2> /dev/null
 	uname -a
 	echo "exodus $(app_version), core $(core_version), yq $("$YQ" --version 2> /dev/null | awk '{ print $NF }')"
-	opkg list-installed 2> /dev/null | grep -E '^(curl|jq|ipset|iptables|ip-full|lighttpd|lighttpd-mod-cgi|ca-bundle) '
+	head -n 1 /etc/alpine-release 2> /dev/null | sed 's/^/alpine /'
+	apk info -v 2> /dev/null | grep -E '^(curl|jq|lighttpd|nftables|iproute2|ca-certificates|tini)-[0-9]' | tr '\n' ' '
+	echo
 	echo '```'
 	echo "## config"
 	echo '```json'
@@ -468,6 +509,7 @@ debug() {
 		.mixin.api_secret |= hide
 		| .mixin.password |= hide
 		| .config.hwid |= hide
+		| .routeros.password |= hide
 		| .subscriptions |= map(.url |= hide | .info_url |= hide)
 		| .update.gh_proxy |= hide
 		| .proxy.access_items |= map(if (startswith("mac:") or startswith("ip:") or startswith("ip6:")) then (split(":")[0] + ":*") else . end)
@@ -493,37 +535,86 @@ debug() {
 	echo "web ui: $(web status)"
 	grep -v -E '^fw_items_(mac|ip4|ip6)=' "$FIREWALL_ENV_PATH" 2> /dev/null
 	echo '```'
-	echo "## ip rule"
+	echo "## container network"
 	echo '```'
+	ip -o addr show 2> /dev/null | awk '{ print $2, $3, $4 }' | sed -E 's/(([0-9a-fA-F]{2}:){5})[0-9a-fA-F]{2}/\1**/g'
+	ip -4 route show 2> /dev/null
+	ip -6 route show 2> /dev/null | grep -v '^fe80'
 	ip -4 rule list
 	ip -6 rule list 2> /dev/null
-	echo '```'
-	echo "## ip route"
-	echo '```'
 	ip -4 route list table "$TPROXY_TABLE" 2> /dev/null
 	ip -6 route list table "$TPROXY_TABLE" 2> /dev/null
 	echo '```'
-	echo "## iptables"
+	echo "## nftables"
 	echo '```'
-	local ipt table
-	for ipt in iptables ip6tables; do
-		for table in nat mangle filter; do
-			echo "# $ipt $table"
-			"$ipt-save" -t "$table" 2> /dev/null | grep -E '^:EXODUS|EXODUS|^-A (PREROUTING|INPUT|OUTPUT) ' | sed -E 's/(([0-9a-fA-F]{2}:){5})[0-9a-fA-F]{2}/\1**/g'
-		done
+	nft list table inet exodus 2> /dev/null
+	nft list table inet exodus_nat 2> /dev/null
+	echo '```'
+	echo "## routeros"
+	echo '```'
+	ros_check > /dev/null
+	jq -c 'del(.user)' "$ROUTEROS_STATE_PATH" 2> /dev/null
+	echo "veth: $(ros_veth)"
+	for path in $ROS_PROXY_PATHS4 $ROS_PROXY_PATHS6; do
+		ros_json "$path?$(fw_ros_query "$path")" '[]' | jq -r --arg path "$path" --arg prefix "$ROS_COMMENT:" '
+			.[]? | select((.comment // "") | startswith($prefix))
+			| "/\($path) " + (del(.[".id"], .bytes, .packets, .comment) | to_entries | map(select(.value != "" and .value != "false")) | map("\(.key)=\(.value)") | join(" "))
+		' 2> /dev/null | sed -E 's/(([0-9a-fA-F]{2}:){5})[0-9a-fA-F]{2}/\1**/g; s/(src-address=[0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+/\1.*/g'
 	done
+	ros_json "routing/table?name=$ROS_TABLE" '[]' | jq -c '.[]? | {name, fib, disabled}' 2> /dev/null
+	ros_json 'ip/firewall/filter?.proplist=chain,action,disabled,dynamic' '[]' | jq -r '.[]? | select(.action == "fasttrack-connection") | "fasttrack: chain=\(.chain) disabled=\(.disabled) dynamic=\(.dynamic)"' 2> /dev/null
 	echo '```'
-	echo "## ipset"
+	echo "## kernel"
 	echo '```'
-	ipset list -t 2> /dev/null | awk '/^Name:/ { name = $2 } /^Type:/ { type = $2 } /^Number of entries:/ { print name, type, $4 }' | grep exodus
+	nft -v 2> /dev/null
+	echo "tproxy of nftables: $(printf 'table inet exodus_test { chain c { type filter hook prerouting priority mangle; meta nfproto ipv4 meta l4proto udp tproxy ip to :1 } }\n' | nft -c -f - > /dev/null 2>&1 && echo "tproxy ok" || echo "tproxy failed")"
 	echo '```'
-	echo "## kernel modules"
-	echo '```'
-	grep -E '^(xt_|nf_tproxy|ip_set)' /proc/modules 2> /dev/null | cut -d ' ' -f 1 | tr '\n' ' '
-	echo
-	{ tr '\n' ' ' < /proc/net/ip_tables_targets; } 2> /dev/null
-	echo
-	echo '```'
+}
+
+# the entrypoint of the container: tini is the first process, it passes the signals of /container/stop here
+container() {
+	local pause
+	prepare_files
+	if [ -n "$TZ" ] && [ -f "/usr/share/zoneinfo/$TZ" ]; then
+		ln -sf "/usr/share/zoneinfo/$TZ" /etc/localtime 2> /dev/null
+	fi
+	# the processes of the previous run of the container are gone, their files are not
+	rm -f "$SUPERVISOR_PID_PATH" "$CORE_PID_PATH" "$WATCH_PID_PATH" "$WEB_PID_PATH" "$STARTED_FLAG_PATH" "$STOP_FLAG_PATH" \
+		"$FIREWALL_ENV_PATH" "$ROUTER_INFO_PATH" "$ROUTEROS_STATE_PATH" "$RUN_TMP/routeros_rules.err"
+	rm -rf "${RUN_TMP:?}"/*.lock "${SESSIONS_DIR:?}"/*
+	init_config
+	container_env
+	ensure_config
+	log "App" "Container start, Exodus $(app_version)."
+	web start
+	trap 'container_stop' TERM INT
+	daemonize "$EXODUS" boot
+	# the connection to routeros and the forwarding of the web ui, while the container runs; a router that boots is asked more often
+	while :; do
+		pause=15
+		if ros_check > /dev/null; then
+			pause=60
+			if lock_acquire firewall 100; then
+				fw_ros_web
+				lock_release firewall
+			fi
+		fi
+		sleep "$pause" &
+		wait $!
+	done
+}
+
+container_stop() {
+	trap '' TERM INT
+	log "App" "Container stop."
+	stop
+	if lock_acquire firewall 100; then
+		ros_load
+		fw_ros_clean web ip/firewall/nat
+		lock_release firewall
+	fi
+	web stop
+	exit 0
 }
 
 cmd="$1"
@@ -534,7 +625,7 @@ case "$cmd" in
 	restart|reload) stop; start ;;
 	status) status ;;
 	boot)
-		# boot from the init script: only with the autostart, the start delay does not block the other services
+		# boot from the container: only with the autostart, the start delay does not block the web ui
 		prepare_files
 		if [ "$(cfg_get .config.enabled)" = "true" ]; then
 			delay=$(cfg_get .config.start_delay)
@@ -549,9 +640,17 @@ case "$cmd" in
 		;;
 	supervise) supervise ;;
 	watch) watch ;;
-	hook) hook "$@" ;;
-	sync) sync_sets ;;
+	sync) sync_aps ;;
 	apply) apply ;;
+	routeros) routeros ;;
+	forward)
+		# the web ui on the addresses of the router after a change of the ports
+		prepare_files
+		if ros_check > /dev/null && lock_acquire firewall 100; then
+			fw_ros_web
+			lock_release firewall
+		fi
+		;;
 	update_subscription) prepare_files; cfg_load; refresh_subscription "$1" ;;
 	auto_update) auto_update ;;
 	hard_update) hard_update ;;
@@ -559,6 +658,7 @@ case "$cmd" in
 	debug) debug ;;
 	web) web "$@" ;;
 	passwd) set_password ;;
-	init) prepare_files; ensure_config ;;
+	init) prepare_files; init_config; ensure_config ;;
+	container) container ;;
 	*) usage; exit 1 ;;
 esac

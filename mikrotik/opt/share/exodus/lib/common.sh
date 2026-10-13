@@ -1,19 +1,20 @@
 #!/bin/sh
 # shellcheck shell=sh disable=SC2034
 
-# Exodus for Keenetic: paths and helpers shared by the service, the hooks and the web ui
+# Exodus for MikroTik: paths and helpers shared by the service, the container and the web ui
 # EXODUS_OPT and EXODUS_TMP move the whole tree, only used for tests
 
 EXODUS_OPT="${EXODUS_OPT:-/opt}"
 EXODUS_TMP="${EXODUS_TMP:-/tmp/exodus}"
+# the commands the web ui starts find the same tree
+export EXODUS_OPT EXODUS_TMP
 
-# entware binaries first, the firmware ones are older or limited
-export PATH="$EXODUS_OPT/bin:$EXODUS_OPT/sbin:/sbin:/bin:/usr/sbin:/usr/bin"
+export PATH="$EXODUS_OPT/bin:$EXODUS_OPT/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 REPOSITORY="prettyleaf/openwrt-exodus"
-BRANCH="keenetic"
+BRANCH="mikrotik"
 
-# code, replaced on update
+# code, replaced on update; the image brings its own copy
 SHARE_DIR="$EXODUS_OPT/share/exodus"
 LIB_DIR="$SHARE_DIR/lib"
 EXODUS="$SHARE_DIR/exodus"
@@ -22,13 +23,15 @@ VERSION_PATH="$SHARE_DIR/VERSION"
 BUILD_PATH="$SHARE_DIR/BUILD"
 MIXIN_JQ="$LIB_DIR/mixin.jq"
 LIGHTTPD_CONF="$SHARE_DIR/lighttpd.conf"
+# the config and the mixin file of a new install
+DEFAULTS_DIR="$SHARE_DIR/defaults"
 
 # binaries downloaded by the installer
 LIBEXEC_DIR="$EXODUS_OPT/libexec/exodus"
 PROG="$LIBEXEC_DIR/mihomo"
 YQ="$LIBEXEC_DIR/yq"
 
-# settings and profiles, kept on update
+# settings and profiles, the mount of the container: they outlive the container
 HOME_DIR="$EXODUS_OPT/etc/exodus"
 CONFIG_PATH="$HOME_DIR/config.json"
 AUTH_PATH="$HOME_DIR/web.auth"
@@ -41,7 +44,7 @@ PROVIDERS_DIR="$RUN_DIR/providers"
 RULE_PROVIDERS_DIR="$PROVIDERS_DIR/rule"
 PROXY_PROVIDERS_DIR="$PROVIDERS_DIR/proxy"
 
-# logs and runtime state live in ram
+# logs and runtime state, they live as long as the container
 LOG_DIR="$EXODUS_TMP/log"
 APP_LOG_PATH="$LOG_DIR/app.log"
 CORE_LOG_PATH="$LOG_DIR/core.log"
@@ -59,20 +62,21 @@ FIREWALL_ENV_PATH="$RUN_TMP/firewall.env"
 PROFILE_JSON_PATH="$RUN_TMP/profile.json"
 API_JSON_PATH="$RUN_TMP/api.json"
 SESSIONS_DIR="$RUN_TMP/sessions"
-KEENETIC_VERSION_PATH="$RUN_TMP/keenetic_version.json"
+# model and version of the router, the state of the rest api
+ROUTER_INFO_PATH="$RUN_TMP/router.json"
+ROUTEROS_STATE_PATH="$RUN_TMP/routeros.json"
 
-# keenetic rci on localhost, it answers without authorization on keeneticos 4 and 5
-RCI_URL="${EXODUS_RCI_URL:-http://127.0.0.1:79/rci}"
-
-# listeners of dscp 61, the mark and the route table of tproxy like in xkeen
-# the core marks its own connections with 255 (routing-mark in mixin.jq), the router proxy lets them out
+# listeners of dscp 61, the mark and the route table of tproxy inside the container
 FORCE_REDIR_PORT=7893
 FORCE_TPROXY_PORT=7894
 TPROXY_MARK=0x111
 TPROXY_MASK=0xffffffff
 TPROXY_RULE_PREF=100
 TPROXY_TABLE=111
-CORE_MARK=255
+
+# names in routeros: the routing table, the chains, the address lists and the comments of everything exodus adds there
+ROS_TABLE="exodus"
+ROS_COMMENT="exodus"
 
 prepare_files() {
 	mkdir -p "$LOG_DIR" "$RUN_TMP" "$SESSIONS_DIR" "$PROFILES_DIR" "$SUBSCRIPTIONS_DIR" "$RULE_PROVIDERS_DIR" "$PROXY_PROVIDERS_DIR"
@@ -85,7 +89,7 @@ log() {
 }
 
 msleep() {
-	usleep "$(($1 * 1000))" 2> /dev/null || sleep 1
+	usleep "$(($1 * 1000))" 2> /dev/null || sleep "$(awk -v ms="$1" 'BEGIN { printf "%.3f", ms / 1000 }')" 2> /dev/null || sleep 1
 }
 
 # mkdir is atomic, a lock left by a killed process is taken over
@@ -115,10 +119,6 @@ lock_release() {
 daemonize() {
 	if command -v setsid > /dev/null 2>&1; then
 		setsid "$@" < /dev/null > /dev/null 2>&1 &
-	elif command -v start-stop-daemon > /dev/null 2>&1; then
-		local exe; exe="$1"
-		shift
-		start-stop-daemon -S -b -x "$exe" -- "$@"
 	else
 		( trap '' HUP; "$@" < /dev/null > /dev/null 2>&1 & )
 	fi
@@ -131,7 +131,7 @@ pid_alive() {
 
 # config is a json file, every section.option is loaded as c_<section>_<option>
 # booleans become 1/0, lists of scalars are joined with spaces, null is empty
-# jq of entware has no regex (test, sub, capture), names are checked by their characters
+# names are checked by their characters, the same code runs on keenetic where jq has no regex
 cfg_load() {
 	eval "$(jq -r '
 		def sh:
@@ -159,6 +159,7 @@ cfg_update() {
 	lock_acquire config || return 1
 	if jq "$@" "$filter" "$CONFIG_PATH" > "$CONFIG_PATH.tmp" 2> /dev/null && [ -s "$CONFIG_PATH.tmp" ]; then
 		mv -f "$CONFIG_PATH.tmp" "$CONFIG_PATH"
+		chmod 600 "$CONFIG_PATH"
 		lock_release config
 		return 0
 	fi
@@ -187,45 +188,9 @@ core_version() {
 	echo "$version"
 }
 
-# keenetic rci, the path follows the cli: show/ip/hotspot is "show ip hotspot"
-rci_get() {
-	curl -s -f -m 5 --connect-timeout 2 "$RCI_URL/$1" 2> /dev/null
-}
-
-# "show version" through ndmc, it talks to ndm over a unix socket and works when the rci does not
-# the text answer has "key: value" lines, the fields of the header are taken
-ndmc_version() {
-	command -v ndmc > /dev/null 2>&1 || return 1
-	ndmc -c "show version" 2> /dev/null | awk '
-		{
-			line = $0
-			sub(/^[ \t]+/, "", line)
-			i = index(line, ": ")
-			if (i < 2) next
-			key = substr(line, 1, i - 1)
-			value = substr(line, i + 2)
-			sub(/[ \t\r]+$/, "", value)
-			if (key ~ /^(title|release|model|device|hw_id)$/ && !(key in seen) && value != "") {
-				seen[key] = 1
-				print key "\t" value
-			}
-		}' | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]}) | add // empty'
-}
-
-# firmware version and model, cached for the uptime
-keenetic_version() {
-	local version
-	if [ ! -s "$KEENETIC_VERSION_PATH" ]; then
-		version=$(rci_get "show/version" | jq -c 'select(type == "object" and (.title // .release // .model) != null)' 2> /dev/null)
-		[ -n "$version" ] || version=$(ndmc_version)
-		if [ -z "$version" ]; then
-			echo '{}'
-			return
-		fi
-		mkdir -p "$RUN_TMP"
-		printf '%s\n' "$version" > "$KEENETIC_VERSION_PATH"
-	fi
-	cat "$KEENETIC_VERSION_PATH"
+# architecture of the container, the builds of the core and yq follow it
+container_arch() {
+	apk --print-arch 2> /dev/null || uname -m
 }
 
 format_filesize() {
@@ -240,9 +205,9 @@ format_filesize() {
 }
 
 # hash of the code in a source tree (an unpacked archive of the branch), the update check compares it with the installed one:
-# a commit that changes only the readme is not an update; install.sh has the same function
+# a commit that changes only the readme, the image or the routeros scripts is not an update; install.sh has the same function
 code_hash() {
-	(cd "$1" && find keenetic install.sh -type f 2> /dev/null | LC_ALL=C sort | xargs sha256sum 2> /dev/null) | sha256sum | cut -d ' ' -f 1
+	(cd "$1" && find mikrotik/opt install.sh -type f 2> /dev/null | LC_ALL=C sort | xargs sha256sum 2> /dev/null) | sha256sum | cut -d ' ' -f 1
 }
 
 # github writes the commit into the pax header of an archive of a branch; install.sh has the same function
@@ -251,7 +216,6 @@ archive_commit() {
 }
 
 # random lowercase hex, $1 is the number of bytes
-# busybox od has no -A and -t, so random bytes are hashed into hex instead
 random_hex() {
 	local chars out
 	chars=$(( $1 * 2 ))
@@ -262,21 +226,14 @@ random_hex() {
 	printf '%s' "$out" | cut -c "1-$chars"
 }
 
+# derived from the serial number of the router (the software id on chr and x86), so a new container keeps the same hwid
+# without the rest api the mac of the veth is used, routeros keeps it while the veth exists
 generate_hwid() {
-	# derive from the model and the mac of the first ethernet interface, so reinstall or config reset keeps the same hwid
-	local board mac dev
-	board=$(keenetic_version | jq -r '.hw_id // .model // empty' 2> /dev/null)
-	for dev in /sys/class/net/eth* /sys/class/net/*; do
-		[ -e "$dev/address" ] || continue
-		case "${dev##*/}" in
-			lo|br*|ezcfg*|nwg*|t2s*|tun*|ppp*|sit*|ip6tnl*|dummy*|opkgtun*) continue ;;
-		esac
-		mac=$(cat "$dev/address" 2> /dev/null)
-		[ -n "$mac" ] && [ "$mac" != "00:00:00:00:00:00" ] && break
-		mac=
-	done
-	if [ -n "$mac" ]; then
-		printf '%s' "$board$mac" | md5sum | cut -d ' ' -f 1
+	local id
+	id=$(router_info | jq -r '[.serial, .software_id, .model] | map(select(. != null and . != "")) | join("") | select(length > 0)' 2> /dev/null)
+	[ -n "$id" ] || id=$(cat "/sys/class/net/$(net_iface)/address" 2> /dev/null)
+	if [ -n "$id" ] && [ "$id" != "00:00:00:00:00:00" ]; then
+		printf '%s' "$id" | md5sum | cut -d ' ' -f 1
 	else
 		tr -d '-' < /proc/sys/kernel/random/uuid
 	fi
@@ -288,8 +245,8 @@ hwid_headers() {
 	local hwid
 	hwid=$(cfg_get .config.hwid)
 	[ -n "$hwid" ] || hwid=$(generate_hwid)
-	keenetic_version | jq -r --arg hwid "$hwid" '
-		["x-hwid", $hwid], ["x-device-os", "KeeneticOS"], ["x-ver-os", (.title // .release // "")], ["x-device-model", (.model // .device // "")]
+	router_info | jq -r --arg hwid "$hwid" '
+		["x-hwid", $hwid], ["x-device-os", "RouterOS"], ["x-ver-os", (.version // "" | split(" ")[0])], ["x-device-model", (.model // .board // "")]
 		| select(.[1] != "") | "\(.[0]): \(.[1])"' 2> /dev/null
 }
 
@@ -341,3 +298,5 @@ port_listening() {
 		udp) cat /proc/net/udp /proc/net/udp6 2> /dev/null | awk -v port=":$hex" '$2 ~ port"$" && $4 == "07" { found = 1 } END { exit !found }' ;;
 	esac
 }
+
+. "$LIB_DIR/routeros.sh"

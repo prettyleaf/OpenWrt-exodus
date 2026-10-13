@@ -304,7 +304,7 @@ prepare_profile() {
 
 # merge the settings into the profile for startup
 mixin_profile() {
-	local mixin_gen expr anchors
+	local mixin_gen expr anchors gateway
 	log "Mixin" "Mixin config."
 	mixin_gen="$RUN_TMP/mixin.gen.yaml"
 	jq -f "$MIXIN_JQ" "$CONFIG_PATH" | "$YQ" -M -p json -o yaml > "$mixin_gen" || return 1
@@ -320,7 +320,7 @@ mixin_profile() {
 	rm -f "$mixin_gen"
 
 	[ "$c_proxy_enabled" = 1 ] || return 0
-	# keenetic has no tun in the transparent proxy, a tun of the profile would change the routes of the router
+	# the container takes the traffic with tproxy, a tun of the profile would change the routes of the container
 	expr='.tun.enable = false | .listeners = ((.listeners // []) | map(select(.type != "tun")))'
 	# dscp 61 of xkeen: separate listeners that send everything to one proxy, without rules
 	expr="$expr | .listeners = (.listeners | map(select(.name != \"exodus-force-redir\" and .name != \"exodus-force-tproxy\")))"
@@ -332,9 +332,14 @@ mixin_profile() {
 			expr="$expr | .listeners += [{\"name\": \"exodus-force-tproxy\", \"type\": \"tproxy\", \"listen\": \"::\", \"port\": $FORCE_TPROXY_PORT, \"udp\": true, \"proxy\": strenv(EXODUS_FORCE_PROXY)}]"
 		fi
 	fi
-	# my.keenetic.net and keendns names must resolve to real addresses, the router answers them itself
-	expr="$expr | with(select((.dns.fake-ip-filter-mode // \"blacklist\") == \"blacklist\"); .dns.fake-ip-filter = ((.dns.fake-ip-filter // []) + [\"my.keenetic.net\", \"+.keenetic.pro\", \"+.keenetic.link\", \"+.keenetic.name\", \"+.keenetic.io\", \"my.netcraze.net\", \"+.netcraze.pro\", \"+.netcraze.link\", \"+.netcraze.io\"] | unique))"
-	EXODUS_FORCE_PROXY="$c_proxy_force_proxy" "$YQ" -M -i "$expr" "$RUN_PROFILE_PATH"
+	# local names (router.lan of the default config, static dns, names of the dhcp leases) must resolve to real addresses:
+	# the router answers them itself, unless the profile sends them elsewhere
+	expr="$expr | with(select((.dns.fake-ip-filter-mode // \"blacklist\") == \"blacklist\"); .dns.fake-ip-filter = ((.dns.fake-ip-filter // []) + [\"+.lan\", \"+.home.arpa\", \"+.local\"] | unique))"
+	gateway=$(net_gateway 4)
+	if [ -n "$gateway" ]; then
+		expr="$expr | .dns.nameserver-policy[\"+.lan\"] = (.dns.nameserver-policy[\"+.lan\"] // strenv(EXODUS_GATEWAY)) | .dns.nameserver-policy[\"+.home.arpa\"] = (.dns.nameserver-policy[\"+.home.arpa\"] // strenv(EXODUS_GATEWAY))"
+	fi
+	EXODUS_FORCE_PROXY="$c_proxy_force_proxy" EXODUS_GATEWAY="$gateway" "$YQ" -M -i "$expr" "$RUN_PROFILE_PATH"
 }
 
 # the profile for startup as json, read by the rules and the web ui
@@ -366,7 +371,7 @@ profile_params() {
 	' "$PROFILE_JSON_PATH" 2> /dev/null)"
 }
 
-# checks of the profile before start, the same as on openwrt
+# checks of the profile before start, the same as on openwrt and keenetic
 check_profile() {
 	log "Profile" "Checking..."
 	if [ "$c_proxy_dns_hijack" = 1 ] && [ -z "$p_dns_port" ]; then

@@ -20,13 +20,12 @@
   ],
   "proxy": {
     "enabled": true,
-    "tcp_mode": "redirect",
+    "tcp_mode": "tproxy",
     "udp_mode": "tproxy",
     "dns_hijack": true,
     "router_proxy": false,
     "access_mode": "exclude",
     "access_items": [],
-    "respect_parental_control": true,
     "proxy_tcp_dport": "0-65535",
     "proxy_udp_dport": "0-65535",
     "reserved_ip": ["0.0.0.0/8", "10.0.0.0/8", "127.0.0.0/8", "100.64.0.0/10", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4", "240.0.0.0/4", "78.47.125.180/32", "198.51.100.11/32", "198.51.100.37/32"],
@@ -36,9 +35,14 @@
     "dscp_proxy": [63],
     "force_proxy": ""
   },
+  "routeros": {
+    "url": "",
+    "username": "",
+    "password": "",
+    "lan_list": "LAN"
+  },
   "mixin": {
     "log_level": null,
-    "outbound_interface": null,
     "mixed_port": null,
     "authentication": true,
     "username": "exodus",

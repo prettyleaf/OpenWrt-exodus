@@ -110,14 +110,18 @@ file_list() {
 	done | jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {name: .[0], size: (.[1] | tonumber)}) | sort_by(.name)'
 }
 
+# the state of routeros comes from the checks of the container and the errors of the rules, the status does not ask the router
 action_status() {
-	local running started api
+	local running started api routeros rules
 	running=false
 	pid_alive "$SUPERVISOR_PID_PATH" && running=true
 	started=false
 	[ -f "$STARTED_FLAG_PATH" ] && started=true
 	api=$(cat "$API_JSON_PATH" 2> /dev/null)
 	[ -n "$api" ] || api='{}'
+	routeros=$(cat "$ROUTEROS_STATE_PATH" 2> /dev/null)
+	[ -n "$routeros" ] || routeros='{}'
+	rules=$(cat "$RUN_TMP/routeros_rules.err" 2> /dev/null)
 	jq -n \
 		--argjson running "$running" \
 		--argjson started "$started" \
@@ -125,8 +129,11 @@ action_status() {
 		--arg core "$(core_version)" \
 		--arg core_type "$(cfg_get .update.core)" \
 		--argjson api "$api" \
+		--argjson routeros "$routeros" \
+		--arg rules "$rules" \
 		--argjson hijack "$([ -f "$FIREWALL_ENV_PATH" ] && echo true || echo false)" \
-		'{running: $running, started: $started, app_version: $app, core_version: $core, core_type: $core_type, hijack: $hijack, api: $api}' | ok
+		'{running: $running, started: $started, app_version: $app, core_version: $core, core_type: $core_type, hijack: $hijack, api: $api,
+		  routeros: ($routeros | del(.user) + {rules_error: (if $rules == "" then null else $rules end)})}' | ok
 }
 
 action_load() {
@@ -145,14 +152,16 @@ action_load() {
 
 # the whole config is replaced by the one of the web ui, it keeps the keys it does not know
 action_config_set() {
-	local tmp apply old_port new_port
+	local tmp apply old_port new_port old_routeros
 	tmp="$CONFIG_PATH.web"
 	if ! jq -e '(.config | type == "object") and (.config.config | type == "object") and (.config.proxy | type == "object") and (.config.mixin | type == "object")' "$req" > /dev/null 2>&1; then
 		fail "400 Bad Request" "invalid config"
 	fi
 	old_port=$(cfg_get .web.port)
+	old_routeros=$(jq -c '.routeros' "$CONFIG_PATH" 2> /dev/null)
 	lock_acquire config || fail "503 Service Unavailable" "config is locked"
 	if jq '.config' "$req" > "$tmp" && [ -s "$tmp" ]; then
+		chmod 600 "$tmp"
 		mv -f "$tmp" "$CONFIG_PATH"
 	else
 		rm -f "$tmp"
@@ -165,7 +174,14 @@ action_config_set() {
 		restart) daemonize "$EXODUS" restart ;;
 	esac
 	new_port=$(cfg_get .web.port)
-	[ "$old_port" != "$new_port" ] && daemonize "$EXODUS" web restart
+	# another router or user: the cached model and the state are of the old one
+	[ "$(jq -c '.routeros' "$CONFIG_PATH" 2> /dev/null)" != "$old_routeros" ] && rm -f "$ROUTER_INFO_PATH" "$ROUTEROS_STATE_PATH"
+	# the forwarding of the web ui in routeros follows the ports and the interface list
+	if [ "$old_port" != "$new_port" ]; then
+		daemonize sh -c "'$EXODUS' web restart; '$EXODUS' forward"
+	else
+		daemonize "$EXODUS" forward
+	fi
 	echo '{"success": true}' | ok
 }
 
@@ -176,6 +192,7 @@ action_service() {
 		restart) daemonize "$EXODUS" restart ;;
 		hard_update) daemonize "$EXODUS" hard_update ;;
 		sync) daemonize "$EXODUS" sync ;;
+		apply) daemonize "$EXODUS" apply ;;
 		*) fail "400 Bad Request" "unknown operation" ;;
 	esac
 	echo '{"success": true}' | ok
@@ -189,86 +206,38 @@ action_subscription_update() {
 	echo '{"success": true}' | ok
 }
 
-# segments, wi-fi points and devices for the device selection
-# rci gives names, wi-fi points and parental control; without it only the neighbours of the router are shown
-# no regex in jq: jq of entware is built without oniguruma, test() and sub() fail there
+# segments, wi-fi points and devices for the device selection, all of them come from routeros
 action_hosts() {
-	local dir file iface
-	dir="$RUN_TMP/hosts.$$"
-	mkdir -p "$dir"
-	rci_get "show/ip/hotspot" > "$dir/hotspot.json"
-	rci_get "show/interface" > "$dir/interface.json"
-	rci_get "show/associations" > "$dir/associations.json"
-	for file in "$dir"/*.json; do
-		jq -e . "$file" > /dev/null 2>&1 || echo 'null' > "$file"
-	done
-	ip -4 neigh show 2> /dev/null | awk '{ for (i = 1; i <= NF; i++) { if ($i == "dev") dev = $(i + 1); if ($i == "lladdr") mac = $(i + 1) } if (mac != "") print $1 "\t" dev "\t" mac; mac = "" }' \
-		| jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {ip: .[0], dev: .[1], mac: (.[2] | ascii_upcase)})' > "$dir/neigh.json"
-	for iface in /sys/class/net/br*; do
-		[ -e "$iface" ] || continue
-		iface="${iface##*/}"
-		printf '%s\t%s\n' "$iface" "$(ip -o -4 addr show dev "$iface" 2> /dev/null | awk '{ print $4; exit }')"
-	done | jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {ifname: .[0], address: .[1]})' > "$dir/segments.json"
-	jq -n \
-		--slurpfile hotspot "$dir/hotspot.json" \
-		--slurpfile interface "$dir/interface.json" \
-		--slurpfile associations "$dir/associations.json" \
-		--slurpfile neigh "$dir/neigh.json" \
-		--slurpfile segments "$dir/segments.json" '
-		def list: if type == "array" then . elif type == "object" then [.] else [] end;
-		def pick(k): if type == "object" and has(k) then .[k] else . end;
-		def digits: length > 0 and (explode | all(. >= 48 and . <= 57));
-		def bridge: startswith("Bridge") and (ltrimstr("Bridge") | digits);
-		def access_point: startswith("WifiMaster") and (index("/AccessPoint") != null);
-		($interface[0] // {}) as $if
-		| (if ($if | type) == "object" then [$if | to_entries[] | select(.value | type == "object") | .value + {id: (.value.id // .key)}]
-		   elif ($if | type) == "array" then $if else [] end) as $ifaces
-		| ($hotspot[0] | pick("host") | list) as $hosts
-		| ($associations[0] | pick("station") | list) as $stations
-		| ([$ifaces[] | select((.id // "") | bridge)]) as $bridges
-		| ($segments[0] + [$bridges[] | ("br" + (.id | ltrimstr("Bridge"))) as $ifname
-			| select($segments[0] | map(.ifname) | index($ifname) | not) | {ifname: $ifname, address: (.address // "")}]
-		  | map(
-			. as $s
-			| ($s.ifname | ltrimstr("br")) as $n
-			| ([$ifaces[] | select(.id == ("Bridge" + $n))][0] // {}) as $b
-			| $s + {name: ($b.description // $b["interface-name"] // ""), id: ($b.id // "")}
-		  ) | sort_by(.ifname)) as $segs
-		| ([$ifaces[] | select((.id // "") | access_point)
-			| {id, ssid: (.ssid // ""), description: (.description // ""), state: (.state // .link // ""),
-			   segment: (.group // ((.usedby // []) | if type == "array" then .[0] else . end) // "")}]) as $points
-		| ([$hosts[] | select((.ap // "") != "") | {id: .ap, ssid: (.ssid // ""), description: "", state: "", segment: ""}]
-			| map(select(.id as $id | $points | map(.id) | index($id) | not)) | unique_by(.id)) as $extra
-		| {
-			rci: (($hotspot[0] != null) or ($interface[0] != null)),
-			segments: $segs,
-			aps: (($points + $extra) | map(. + {
-				band: (if (.id | startswith("WifiMaster1/")) then "5 GHz" elif (.id | startswith("WifiMaster2/")) then "6 GHz" else "2.4 GHz" end),
-				clients: ((.id) as $id | [$stations[] | select(.ap == $id)] | length)
-			}) | sort_by(.id)),
-			hosts: (
-				[$hosts[] | select((.mac // "") != "") | {
-					mac: (.mac | ascii_upcase),
-					ip: (.ip // ""),
-					name: (.name // .hostname // ""),
-					hostname: (.hostname // ""),
-					active: (if .active == null then (.link == "up") else .active end),
-					ap: (.ap // ""),
-					ssid: (.ssid // ""),
-					segment: (.interface | if type == "object" then (.id // .name // "") else (. // "") end),
-					access: (.access // "")
-				}] as $known
-				| $known + [$neigh[0][] | select(.mac as $m | $known | map(.mac) | index($m) | not)
-					| {mac, ip, name: "", hostname: "", active: true, ap: "", ssid: "", segment: .dev, access: ""}]
-				| unique_by(.mac)
-			)
-		}' | ok
-	rm -rf "$dir"
+	local hosts
+	hosts=$(ros_hosts 2> /dev/null)
+	[ -n "$hosts" ] || hosts='{"router": false, "segments": [], "aps": [], "hosts": []}'
+	printf '%s\n' "$hosts" | ok
 }
 
-action_interfaces() {
-	ip -o link show 2> /dev/null | awk -F ': ' '{ split($2, a, "@"); print a[1] }' | grep -v -E '^(lo|ip6tnl0|sit0|gre0|gretap0|ifb[0-9]+|teql0|dummy[0-9]*)$' \
-		| jq -R -s '{interfaces: (split("\n") | map(select(length > 0)))}' | ok
+# the connection to routeros for the settings: the state, the interface lists, the veth and the addresses of the container
+# check asks the router now, otherwise the last state is given
+action_routeros() {
+	local iface lists
+	if [ "$(arg check)" = "true" ]; then
+		rm -f "$ROUTER_INFO_PATH"
+		ros_check > /dev/null
+	fi
+	[ -s "$ROUTEROS_STATE_PATH" ] || ros_check > /dev/null
+	iface=$(net_iface)
+	lists='[]'
+	jq -e '.ok == true' "$ROUTEROS_STATE_PATH" > /dev/null 2>&1 && lists=$(ros_lists)
+	jq -n \
+		--slurpfile state "$ROUTEROS_STATE_PATH" \
+		--argjson lists "$lists" \
+		--argjson router "$(router_info)" \
+		--arg gateway "$(net_gateway 4)" \
+		--arg iface "$iface" \
+		--arg ip4 "$(net_address 4 "$iface")" \
+		--arg ip6 "$(net_address 6 "$iface")" \
+		'($state[0] // {}) as $s
+		| {ok: ($s.ok // false), error: $s.error, url: $s.url, identity: $s.identity, version: $s.version, model: ($router.model // null),
+		   default_url: (if $gateway == "" then null else "http://\($gateway)" end), lists: $lists,
+		   container: {interface: $iface, ipv4: $ip4, ipv6: $ip6, gateway: $gateway}}' | ok
 }
 
 # groups and proxies of the running profile for the choices of the web ui, groups hidden in the profile are left out
@@ -385,11 +354,6 @@ gh_url() {
 	esac
 }
 
-# architecture of entware, the builds of the core and yq follow it
-entware_arch() {
-	opkg print-architecture 2> /dev/null | awk '$2 != "all" && $2 != "noarch" { arch = $2 } END { print arch }'
-}
-
 # the latest code of the installed branch: its archive is small, the hash of the code tells an update from a change of the readme
 # prints "version|commit|hash", nothing when github does not answer
 latest_code() {
@@ -400,8 +364,8 @@ latest_code() {
 	if curl -s -f -L --connect-timeout 15 -m 60 -o "$dir/app.tar.gz" "$(gh_url "https://github.com/$REPOSITORY/archive/$1.tar.gz")" \
 		&& tar -xzf "$dir/app.tar.gz" -C "$dir/src" 2> /dev/null; then
 		src=$(find "$dir/src" -mindepth 1 -maxdepth 1 -type d | head -n 1)
-		if [ -n "$src" ] && [ -f "$src/keenetic/opt/share/exodus/VERSION" ]; then
-			printf '%s|%s|%s' "$(head -n 1 "$src/keenetic/opt/share/exodus/VERSION" | tr -d '\r|')" "$(archive_commit "$dir/app.tar.gz")" "$(code_hash "$src")"
+		if [ -n "$src" ] && [ -f "$src/mikrotik/opt/share/exodus/VERSION" ]; then
+			printf '%s|%s|%s' "$(head -n 1 "$src/mikrotik/opt/share/exodus/VERSION" | tr -d '\r|')" "$(archive_commit "$dir/app.tar.gz")" "$(code_hash "$src")"
 		fi
 	fi
 	rm -rf "$dir"
@@ -448,7 +412,7 @@ action_check_update() {
 		--arg app "$(app_version)" \
 		--arg core_type "$core_type" \
 		--arg core "$(core_version)" \
-		--arg arch "$(entware_arch)" \
+		--arg arch "$(container_arch)" \
 		--arg free "$free" \
 		--arg core_size "$core_size" \
 		--arg gh_proxy "$proxy_host" \
@@ -472,17 +436,17 @@ action_about() {
 	printf '%s' "$build" | jq -e 'type == "object"' > /dev/null 2>&1 || build='{}'
 	jq -n \
 		--argjson build "$build" \
-		--argjson router "$(keenetic_version)" \
+		--argjson router "$(router_info)" \
 		--arg app "$(app_version)" \
 		--arg branch "$BRANCH" \
 		--arg repository "$REPOSITORY" \
 		--arg installed "$(date -r "$VERSION_PATH" '+%Y-%m-%d %H:%M:%S' 2> /dev/null)" \
 		--arg core "$(core_version)" \
 		--arg core_type "$(cfg_get .update.core)" \
-		--arg arch "$(entware_arch)" \
+		--arg arch "$(container_arch)" \
 		'{app: $app, ref: ($build.ref // $branch), commit: ($build.commit // ""), installed: ($build.installed // $installed),
 		  repository: $repository, core: $core, core_type: (if $core_type == "" then "meta" else $core_type end),
-		  model: ($router.model // $router.device // ""), firmware: ($router.title // $router.release // ""), arch: $arch}' | ok
+		  model: ($router.model // ""), firmware: ($router.version // ""), arch: $arch}' | ok
 }
 
 action_update() {
@@ -537,7 +501,7 @@ action=$(arg action)
 
 case "$action" in
 	login)
-		[ -f "$AUTH_PATH" ] || fail "403 Forbidden" "no password is set, run exodus passwd on the router"
+		[ -f "$AUTH_PATH" ] || fail "403 Forbidden" "no password is set, run exodus passwd in the shell of the container"
 		if ! password_valid password; then
 			sleep 2
 			fail "403 Forbidden" "wrong password"
@@ -565,7 +529,7 @@ case "$action" in
 	service) action_service ;;
 	subscription_update) action_subscription_update ;;
 	hosts) action_hosts ;;
-	interfaces) action_interfaces ;;
+	routeros) action_routeros ;;
 	proxies) action_proxies ;;
 	profile_upload) action_profile_upload ;;
 	profile_delete) action_profile_delete ;;

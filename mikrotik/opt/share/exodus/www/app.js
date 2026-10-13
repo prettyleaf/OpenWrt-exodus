@@ -1,6 +1,6 @@
 'use strict';
 
-// web ui of exodus for keenetic, built after shadcn/ui without any framework
+// web ui of exodus for mikrotik, built after shadcn/ui without any framework
 // the config is edited as a draft copy and saved as a whole
 
 (function () {
@@ -242,7 +242,7 @@ const state = {
     profiles: [],
     status: null,
     hosts: null,
-    interfaces: [],
+    routeros: {},
     groups: [],
     nodes: [],
     hwid: {},
@@ -982,7 +982,7 @@ async function loadHosts() {
     try {
         state.hosts = await api('hosts');
     } catch (e) {
-        state.hosts = { rci: false, segments: [], aps: [], hosts: [], error: e.message };
+        state.hosts = { router: false, segments: [], aps: [], hosts: [], error: e.message };
     }
 }
 
@@ -1046,9 +1046,9 @@ function devicePicker() {
             container.appendChild(loader());
             return;
         }
-        if (!hosts.rci) {
+        if (!hosts.router) {
             container.appendChild(alertBox('warning', _('The router did not give the list of devices'),
-                hosts.error ? `${_('Error')}: ${hosts.error}` : _('Names of devices, Wi-Fi points and parental control are not available: only devices from the ARP table of the router are listed.')));
+                hosts.error ? `${_('Error')}: ${hosts.error}` : _('The container takes the devices from RouterOS through the REST API, check the connection in Settings → RouterOS. Devices can still be added by address.')));
         }
 
         // segments, wi-fi points and the manual address on the left, devices on the right
@@ -1180,21 +1180,35 @@ function pageStatus() {
                     live(() => {
                         const s = status();
                         const core = s.core_version ? `${s.core_version} · ${CORE_TITLES[s.core_type] || s.core_type || 'Mihomo'}` : '—';
+                        const ros = s.routeros || {};
                         let proxy;
                         if (!state.config.proxy.enabled) {
                             proxy = badge(_('Off'), 'outline');
+                        } else if (s.running && s.hijack && ros.rules_error) {
+                            proxy = badge(_('Rules failed'), 'destructive');
+                            proxy.title = ros.rules_error;
                         } else if (s.running && s.hijack) {
                             proxy = badge(_('Active'), 'success');
                         } else {
                             proxy = badge(_('Inactive'), 'secondary');
                         }
+                        let router;
+                        if (ros.ok == null) {
+                            router = badge(_('Unknown'), 'outline');
+                        } else if (ros.ok) {
+                            router = E('span', {}, [badge(_('Connected'), 'success'), ' ', E('span', { class: 'muted' }, [ros.identity, ros.version].filter(Boolean).join(' · '))]);
+                        } else {
+                            router = badge(_('No connection'), 'destructive');
+                            router.title = ros.error || '';
+                        }
                         return infoList([
                             [_('Exodus'), E('span', { class: 'mono' }, s.app_version || '—')],
                             [_('Core'), E('span', { class: 'mono' }, core)],
                             [_('Profile'), profileTitle(state.config.config.profile) || '—'],
-                            [_('Proxy'), proxy]
+                            [_('Proxy'), proxy],
+                            ['RouterOS', router]
                         ]);
-                    }, () => [status().app_version, status().core_version, status().core_type, status().running, status().hijack]),
+                    }, () => [status().app_version, status().core_version, status().core_type, status().running, status().hijack, status().routeros]),
                     E('div', { class: 'row' }, live(() => (status().running
                         ? [
                             btn(_('Restart'), { icon: 'rotate-cw', onClick: () => serviceOp('restart') }),
@@ -1205,7 +1219,7 @@ function pageStatus() {
                     ), () => [status().running]))
                 ]),
                 E('div', { class: 'stack' }, [
-                    switchField(_('Autostart'), _('Start the service when the router boots.'), ref('config.enabled')),
+                    switchField(_('Autostart'), _('Start the service when the container starts, with the router.'), ref('config.enabled')),
                     field(_('Profile'), select(ref('config.profile'), profileChoices(), { optional: true, placeholder: _('Not selected') }), null, null, [
                         _('A subscription or an uploaded file, they are managed on the Profiles page.'),
                         _('On every start the profile is merged with the settings of Exodus and the mixin file, a subscription is downloaded again unless its update is manual.'),
@@ -1575,7 +1589,7 @@ function hwidCard() {
         info: [_('Panels with a device limit tell the router from other devices by these headers.')],
         content: [
             field(_('Device ID'), input(ref('config.hwid'), { empty: '', placeholder: hwid.generated || _('Automatic') }),
-                _('Made from the hardware of the router, it stays the same after a reinstall.')),
+                _('Made from the serial number of the router, it stays the same after a reinstall.')),
             infoList([
                 [E('span', { class: 'mono' }, 'x-device-os'), detected(headers['x-device-os'])],
                 [E('span', { class: 'mono' }, 'x-ver-os'), detected(headers['x-ver-os'])],
@@ -1585,10 +1599,54 @@ function hwidCard() {
     });
 }
 
+// the rest api of routeros: the container keeps its rules in the router with it
+function routerosCard() {
+    const info = state.routeros || {};
+    const lists = (info.lists || []).map((name) => [name, name]);
+    const statusView = E('div', { class: 'contents' });
+    const renderStatus = (data) => {
+        clear(statusView);
+        append(statusView, data.ok
+            ? alertBox('default', _('Connected'), [data.identity, data.model, data.version ? `RouterOS ${data.version}` : null, data.url].filter(Boolean).join(' · '))
+            : alertBox('destructive', _('No connection to RouterOS'), data.error || _('The container did not check the connection yet.')));
+    };
+    renderStatus(info);
+    const container = info.container || {};
+    return card({
+        title: 'RouterOS',
+        info: [
+            _('Exodus keeps its rules in RouterOS through the REST API: the route of the proxied devices to the container, their DNS, the forwarding of the web UI. Every rule has a comment starting with <code>exodus:</code>, the rules are checked every 30 seconds.'),
+            _('The installer creates the user exodus that logs in only from the container and passes it in /container/envs, the container writes it here on every start.'),
+            _('When the container does not answer, netwatch of the router turns the rules off and the devices go directly.')
+        ],
+        action: btn(_('Check'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: async () => {
+            if (isDirty()) {
+                toast(_('Save the settings first, the check uses the saved ones.'), 'warning');
+            }
+            const data = await run(api('routeros', { check: true }));
+            state.routeros = data;
+            renderStatus(data);
+        } }),
+        content: [
+            statusView,
+            E('div', { class: 'grid-3' }, [
+                field(_('REST API address'), input(ref('routeros.url'), { empty: '', placeholder: info.default_url || 'http://172.31.255.1' }),
+                    _('The router as the container sees it. Empty: the gateway of the container over HTTP.')),
+                field(_('User'), input(ref('routeros.username'), { empty: '' })),
+                field(_('Password'), input(ref('routeros.password'), { password: true, empty: '' }))
+            ]),
+            field(_('Interface list of the local network'), select(ref('routeros.lan_list'), lists, { optional: true, placeholder: _('Any interface but the container'), empty: '' }),
+                _('Only the traffic from these interfaces goes to the container, the web UI is forwarded from the addresses of the router on them. LAN in the default configuration.')),
+            infoList([
+                [_('Container'), E('span', { class: 'mono' }, [container.interface, container.ipv4, container.ipv6].filter(Boolean).join(' · ') || '—')]
+            ])
+        ]
+    });
+}
+
 function pageSettings() {
     const d = () => state.draft;
     const proxyOn = () => d().proxy.enabled === true;
-    const interfaces = (state.interfaces || []).map((i) => [i, i]);
     const choices = (list) => list.map((name) => [name, name]);
 
     const proxyTab = [
@@ -1597,15 +1655,14 @@ function pageSettings() {
             content: [
                 switchField(_('Enable'), _('Intercept the traffic of the devices chosen on the Status page. When off, only the core runs: its proxy port and the dashboard.'), ref('proxy.enabled')),
                 dependOn(E('div', { class: 'grid-2' }, [
-                    field('TCP', select(ref('proxy.tcp_mode'), [['redirect', 'Redirect'], ['tproxy', 'TPROXY']], { optional: true, placeholder: _('Off'), empty: '' }),
-                        _('Redirect works everywhere. TPROXY for TCP needs port 443 of the router free: move the web interface of the router to another port.')),
+                    field('TCP', select(ref('proxy.tcp_mode'), [['tproxy', 'TPROXY'], ['redirect', 'Redirect']], { optional: true, placeholder: _('Off'), empty: '' }),
+                        _('TPROXY works in the containers of RouterOS 7.20 and newer. Redirect needs NAT of nftables in the kernel of the router.')),
                     field('UDP', select(ref('proxy.udp_mode'), [['tproxy', 'TPROXY']], { optional: true, placeholder: _('Off'), empty: '' }),
-                        _('For QUIC, games and calls. Needs the Netfilter kernel modules component of the router.'))
+                        _('For QUIC, games and calls.'))
                 ]), proxyOn),
-                dependOn(E('div', { class: 'grid-3' }, [
+                dependOn(E('div', { class: 'grid-2' }, [
                     switchField(_('DNS through the core'), _('DNS queries of the proxied devices go to the core, whatever DNS the router uses. Required for Fake-IP and domain rules.'), ref('proxy.dns_hijack')),
-                    switchField(_('Traffic of the router'), _('Proxy the connections of the router itself, for example of Entware applications. DNS of the router is not intercepted.'), ref('proxy.router_proxy')),
-                    switchField(_('Respect parental control'), _('Devices blocked in the router (no internet access, schedules) are not proxied, otherwise they would get internet through the core.'), ref('proxy.respect_parental_control'))
+                    switchField(_('Traffic of the router'), _('Proxy the connections of RouterOS itself. DNS of the router is not intercepted.'), ref('proxy.router_proxy'))
                 ]), proxyOn)
             ]
         }),
@@ -1634,18 +1691,18 @@ function pageSettings() {
         card({
             title: _('DSCP marks'),
             info: [
-                _('A device can mark its traffic with DSCP to choose the route per application. The marks are the same as in XKeen.'),
+                _('A device can mark its traffic with DSCP to choose the route per application. The marks are the same as in XKeen on Keenetic.'),
                 E('p', {}, E('strong', {}, _('How to mark traffic on Windows'))),
                 _('gpedit.msc → Computer Configuration → Windows Settings → Policy-based QoS → Create new policy: choose the DSCP value and the application. Outside of a domain also set <code>HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\QoS</code> "Do not use NLA" = "1" and reboot.')
             ],
             content: [
                 E('div', { class: 'grid-2' }, [
-                    field(_('Direct'), tags(ref('proxy.dscp_bypass'), { type: 'dscp', number: true, placeholder: '62' }), _('Traffic with these marks goes directly (62 in XKeen).')),
-                    field(_('Proxy'), tags(ref('proxy.dscp_proxy'), { type: 'dscp', number: true, placeholder: '63' }), _('Traffic with these marks goes through the proxy even from excluded devices and on any port (63 in XKeen).'))
+                    field(_('Direct'), tags(ref('proxy.dscp_bypass'), { type: 'dscp', number: true, placeholder: '62' }), _('Traffic with these marks goes directly (62 by default).')),
+                    field(_('Proxy'), tags(ref('proxy.dscp_proxy'), { type: 'dscp', number: true, placeholder: '63' }), _('Traffic with these marks goes through the proxy even from excluded devices and on any port (63 by default).'))
                 ]),
                 E('div', { class: 'grid-2' }, [
                     field(_('Mark of the chosen proxy'), input(ref('proxy.dscp_force'), { number: true, type: 'dscp', placeholder: _('Off') }),
-                        _('Traffic with this mark goes to one proxy, past the rules of the profile (61 in XKeen).')),
+                        _('Traffic with this mark goes to one proxy, past the rules of the profile (61 by default).')),
                     field(_('Chosen proxy'), select(ref('proxy.force_proxy'), [
                         { group: _('Groups'), options: choices(state.groups) },
                         { group: _('Proxies'), options: choices(state.nodes) }
@@ -1660,12 +1717,10 @@ function pageSettings() {
         card({
             title: 'Mihomo',
             info: [_('Options merged over the profile. Mode, DNS mode and IPv6 always come from the profile.')],
-            content: E('div', { class: 'grid-3' }, [
+            content: E('div', { class: 'grid-2' }, [
                 field(_('Log level'), select(ref('mixin.log_level'), ['silent', 'error', 'warning', 'info', 'debug'].map((v) => [v, v]), { optional: true })),
-                field(_('Outbound interface'), select(ref('mixin.outbound_interface'), interfaces, { optional: true, placeholder: _('Automatic') }),
-                    _('Linux name of the interface for the connections of the core: ppp0, eth3, nwg0 and so on.')),
                 field(_('Memory limit'), input(ref('core.gomemlimit'), { empty: '', placeholder: _('Half of RAM') }),
-                    _('For example <code>128MiB</code>, <code>off</code> removes the limit. Without a limit the router may kill the core when memory runs out.'))
+                    _('For example <code>128MiB</code>, <code>off</code> removes the limit. Half of the RAM of the router or of the memory limit of the container by default.'))
             ])
         }),
         card({
@@ -1722,7 +1777,7 @@ function pageSettings() {
             content: [
                 E('div', { class: 'grid-2 align-end' }, [
                     field(_('Start delay, seconds'), input(ref('config.start_delay'), { number: true, type: 'uinteger', empty: 0, placeholder: '0' }), null, null,
-                        [_('Wait after the router boots, for example until the USB drive or the internet is ready.')]),
+                        [_('Wait after the container starts, for example until the internet of the router is ready.')]),
                     switchField(_('Scheduled restart'), _('Restart the service on a schedule, for example every night.'), ref('config.scheduled_restart'))
                 ]),
                 field(_('Schedule'), input(ref('config.scheduled_restart_cron'), { type: 'cron', empty: '', placeholder: '0 3 * * *' }),
@@ -1740,7 +1795,7 @@ function pageSettings() {
         }),
         card({
             title: _('Web UI'),
-            info: [_('The web UI moves to the new port after saving.'), _('The password can also be reset with exodus passwd over SSH.')],
+            info: [_('The web UI moves to the new port after saving.'), _('The password can also be reset in the terminal of the router: <code>/container shell exodus cmd="exodus passwd"</code>.')],
             content: E('div', { class: 'grid-4' }, [
                 field(_('Port'), input(ref('web.port'), { number: true, type: 'port', empty: 9099, placeholder: '9099' })),
                 field(_('Current password'), passwordOld),
@@ -1769,6 +1824,7 @@ function pageSettings() {
             ['dscp', 'DSCP', dscpTab],
             ['core', 'Mihomo', coreTab],
             ['rules', _('Rules'), rulesTab],
+            ['routeros', 'RouterOS', [routerosCard()]],
             ['service', _('Service'), serviceTab]
         ])
     ];
@@ -1953,9 +2009,10 @@ function pageUpdates() {
         append(container, card({
             title: _('Versions'),
             info: [
-                _('Exodus and the core are downloaded from GitHub into Entware. Settings, profiles and subscriptions are kept.'),
+                _('Exodus and the core are downloaded from GitHub into the container. Settings, profiles and subscriptions are kept.'),
+                _('The packages of the container come with its image: the installer of RouterOS takes a new image, the code and the core stay updated here.'),
                 _('Exodus has the version of the releases of the project, the same on every router. An update is offered when the code of its branch changes, a change of the readme does not count. The core is compared by its version.'),
-                _('The core and the gh-proxy chosen in the installer are kept, run the installer again to change them.'),
+                _('The core and the gh-proxy are kept, the installer in the shell of the container changes them: <code>/container shell exodus cmd="sh /opt/share/exodus/install.sh"</code>.'),
                 _('GitHub is asked at most every 6 hours, Check again asks now.')
             ],
             action: btn(_('Check again'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: async () => {
@@ -2092,7 +2149,7 @@ async function openAbout() {
     }
     const repo = `https://github.com/${info.repository}`;
     const core = CORE_TITLES[info.core_type] || info.core_type;
-    const firmware = info.firmware ? `KeeneticOS ${info.firmware}` : '';
+    const firmware = info.firmware ? `RouterOS ${info.firmware}` : '';
     const text = [
         `Exodus ${info.app} (${[info.ref, info.commit.substring(0, 12)].filter(Boolean).join(', ')})`,
         `${_('Installed')}: ${info.installed || '—'}`,
@@ -2146,7 +2203,7 @@ async function openAbout() {
             ])) : null,
             E('div', { class: 'build-links' }, [
                 E('a', { class: 'btn btn-outline', href: `${repo}/issues`, target: '_blank', rel: 'noopener' }, [icon('bug'), _('Issues')]),
-                E('a', { class: 'btn btn-outline', href: `${repo}/tree/${info.ref || 'keenetic'}`, target: '_blank', rel: 'noopener' }, [icon('github'), 'GitHub'])
+                E('a', { class: 'btn btn-outline', href: `${repo}/tree/${info.ref || 'mikrotik'}`, target: '_blank', rel: 'noopener' }, [icon('github'), 'GitHub'])
             ])
         ]
     });
@@ -2163,12 +2220,12 @@ const pages = [
         state.dirs = files.dirs || {};
     }],
     ['settings', _('Settings'), pageSettings, async () => {
-        const [interfaces, proxies, hwid] = await Promise.all([
-            api('interfaces').catch(() => ({ interfaces: [] })),
+        const [routeros, proxies, hwid] = await Promise.all([
+            api('routeros').catch((e) => ({ ok: false, error: e.message })),
             api('proxies').catch(() => ({})),
             api('hwid').catch(() => ({}))
         ]);
-        state.interfaces = interfaces.interfaces || [];
+        state.routeros = routeros;
         state.groups = proxies.groups || [];
         state.nodes = proxies.proxies || [];
         state.hwid = hwid;
@@ -2279,7 +2336,7 @@ function showLogin() {
         E('div', { class: 'card-header' }, [
             E('span', { class: 'logo-tile large' }, logo()),
             E('div', { class: 'card-title' }, 'Exodus'),
-            E('div', { class: 'card-description' }, _('Enter the password of the web UI. It is set by the installer, reset it with exodus passwd over SSH.'))
+            E('div', { class: 'card-description' }, _('Enter the password of the web UI. The installer of RouterOS shows it, reset it with /container shell exodus cmd="exodus passwd".'))
         ]),
         E('div', { class: 'card-content' }, field(_('Password'), password)),
         E('div', { class: 'card-footer' }, E('button', { class: 'btn btn-default', type: 'submit', style: { width: '100%' } }, _('Sign in')))

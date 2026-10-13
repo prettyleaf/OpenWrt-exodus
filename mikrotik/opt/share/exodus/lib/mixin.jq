@@ -1,7 +1,7 @@
 # mihomo options from config.json, merged over the profile on start
 # null keeps the value of the profile; the ports, dns and api the transparent proxy relies on are always set
 # ipv6, mode and the dns mode always come from the profile
-# no regex here: jq of entware is built without oniguruma
+# no regex here, the same file runs on keenetic where jq has none
 
 def int_or_null: if . == null or . == "" then null else (tonumber? // null) end;
 
@@ -14,10 +14,8 @@ def drop_nulls:
 	else . end;
 
 .mixin as $m
-| .proxy as $p
 | {
 	"log-level": $m.log_level,
-	"interface-name": $m.outbound_interface,
 	"allow-lan": true,
 
 	"mixed-port": ($m.mixed_port | int_or_null),
@@ -43,9 +41,6 @@ def drop_nulls:
 		"enable": true,
 		"listen": "[::]:1053"
 	},
-
-	# the core marks its own connections, the router proxy lets them out
-	"routing-mark": (if $p.enabled == true and $p.router_proxy == true then 255 else null end),
 
 	# a rule needs a type and a target, and a value unless it is MATCH
 	"nikki-rules": (
