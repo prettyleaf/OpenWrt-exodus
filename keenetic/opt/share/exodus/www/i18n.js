@@ -2,6 +2,7 @@
 window.I18N_RU = {
     "%s is uploaded.": "%s загружен.",
     "<code>{version}</code> is replaced with the version of Exodus.": "<code>{version}</code> заменяется версией Exodus.",
+    // from 1.29.0: "<code>{version}</code> is replaced with the version of Exodus, <code>{platform}</code> with the OS of the router.": "<code>{version}</code> заменяется версией Exodus, <code>{platform}</code> — ОС роутера.",
     "<strong>No resolve</strong> is for rules by IP (IP-CIDR, IP-ASN, GEOIP): the domain is not resolved to check the rule, it matches only connections to an IP address.": "<strong>Без резолва</strong> — для правил по IP (IP-CIDR, IP-ASN, GEOIP): домен не резолвится ради проверки правила, оно срабатывает только на соединения к IP-адресу.",
     "A device can mark its traffic with DSCP to choose the route per application. The marks are the same as in XKeen.": "Устройство может помечать свой трафик DSCP, чтобы выбирать маршрут для отдельных приложений. Метки те же, что в XKeen.",
     "A group or a proxy of the running profile, hidden groups are not offered. The list fills after the first start.": "Группа или прокси из запущенного профиля, скрытые группы не предлагаются. Список заполняется после первого запуска.",

@@ -38,6 +38,10 @@ ensure_config() {
 		cfg_update '.mixin.api_secret = $secret | .mixin.password = $password | .config.hwid = $hwid' \
 			--arg secret "$secret" --arg password "$password" --arg hwid "$hwid"
 	fi
+	# from 1.29.0: subscriptions with the old default user agent get the new one, the defaults of config.json and app.js change with it
+	# if jq -e '(.subscriptions // []) | any(.user_agent == "Mihomo/Exodus v{version}")' "$CONFIG_PATH" > /dev/null 2>&1; then
+	# 	cfg_update '.subscriptions |= map(if .user_agent == "Mihomo/Exodus v{version}" then .user_agent = "Exodus/{version} {platform}" else . end)'
+	# fi
 }
 
 core_env() {
@@ -131,6 +135,8 @@ start_locked() {
 	fi
 	ensure_config
 	cfg_load
+	# wi-fi points and parental control are read from the rci
+	rci_token_ensure
 	rm -f "$STOP_FLAG_PATH" "$STARTED_FLAG_PATH" "$FIREWALL_ENV_PATH"
 	if ! prepare_profile; then
 		log "App" "Exit."
@@ -491,6 +497,7 @@ debug() {
 	echo '```'
 	echo "service: $(status)"
 	echo "web ui: $(web status)"
+	echo "rci token: $([ -s "$RCI_TOKEN_PATH" ] && echo yes || echo no)"
 	grep -v -E '^fw_items_(mac|ip4|ip6)=' "$FIREWALL_ENV_PATH" 2> /dev/null
 	echo '```'
 	echo "## ip rule"
@@ -559,6 +566,7 @@ case "$cmd" in
 	debug) debug ;;
 	web) web "$@" ;;
 	passwd) set_password ;;
-	init) prepare_files; ensure_config ;;
+	init) prepare_files; ensure_config; rci_token_ensure ;;
+	revoke_token) prepare_files; rci_token_revoke ;;
 	*) usage; exit 1 ;;
 esac

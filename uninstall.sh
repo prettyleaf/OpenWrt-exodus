@@ -10,6 +10,8 @@ export PATH="/opt/bin:/opt/sbin:/sbin:/bin:/usr/sbin:/usr/bin"
 if [ -x /opt/share/exodus/exodus ]; then
 	/opt/share/exodus/exodus stop
 	/opt/share/exodus/exodus web stop
+	# the rci token of exodus on keeneticos 5.2
+	/opt/share/exodus/exodus revoke_token > /dev/null 2>&1
 fi
 
 rm -f /opt/etc/init.d/S99exodus

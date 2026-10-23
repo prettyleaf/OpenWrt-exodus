@@ -91,6 +91,7 @@ The **Dashboard** button opens Zashboard, the core downloads it on the first sta
 2. Mihomo starts and is restarted if it crashes. The memory limit is set on Settings → Mihomo: `GOMEMLIMIT` is half of the RAM by default, the file limit is 40000 on arm64 and 10000 on mips.
 3. When the core listens on its ports, the iptables and ipset rules and the TPROXY route are turned on.
 4. NDM rebuilds iptables on many events. The rules are restored by the hook `/opt/etc/ndm/netfilter.d/50-exodus.sh`, and every 15 seconds they are checked by the watcher (`watch`), which also updates the subscription, runs the scheduled restart and clears the logs over the size limit.
+5. Names of devices, Wi-Fi points and parental control come from the RCI of the router. KeeneticOS 5.2 asks for an access token there: Exodus issues its own one through `ndmc` (the token `exodus` in **Users and access**) and issues a new one when it is deleted. The uninstaller deletes it.
 
 ## Uninstall
 
@@ -119,6 +120,7 @@ exodus passwd          # change the password of the web UI
 | `/opt/etc/exodus/mixin.yaml` | mixin file, merged into the profile on every start |
 | `/opt/etc/exodus/profiles/` | uploaded profiles |
 | `/opt/etc/exodus/subscriptions/` | subscriptions and what the provider told about them |
+| `/opt/etc/exodus/rci.token` | the access token of the RCI on KeeneticOS 5.2 |
 | `/opt/etc/exodus/run/` | working directory of the core: profile for startup, providers, dashboard |
 | `/opt/share/exodus/` | scripts and the web UI |
 | `/opt/libexec/exodus/` | `mihomo` and `yq` |

@@ -61,8 +61,13 @@ API_JSON_PATH="$RUN_TMP/api.json"
 SESSIONS_DIR="$RUN_TMP/sessions"
 KEENETIC_VERSION_PATH="$RUN_TMP/keenetic_version.json"
 
-# keenetic rci on localhost, it answers without authorization on keeneticos 4 and 5
+# keenetic rci on localhost, it answers without authorization up to keeneticos 5.1
+# 5.2 wants a token in X-Ndma-Tkn: a request without it is logged as obsoleted, the access is going to be removed
 RCI_URL="${EXODUS_RCI_URL:-http://127.0.0.1:79/rci}"
+# the token of exodus is issued through ndmc, it belongs to admin and does not expire, the uninstaller deletes it
+RCI_TOKEN_PATH="$HOME_DIR/rci.token"
+RCI_TOKEN_NAME="exodus"
+RCI_TOKEN_STAMP_PATH="$RUN_TMP/rci_token.stamp"
 
 # listeners of dscp 61, the mark and the route table of tproxy like in xkeen
 # the core marks its own connections with 255 (routing-mark in mixin.jq), the router proxy lets them out
@@ -187,9 +192,125 @@ core_version() {
 	echo "$version"
 }
 
+# the answer with the http code on the last line, $2 is the token
+# --noproxy: http_proxy of the environment must not take the requests to the loopback
+rci_request() {
+	if [ -n "$2" ]; then
+		curl -s -m 5 --connect-timeout 2 --noproxy '*' -w '\n%{http_code}' -H "X-Ndma-Tkn: $2" "$RCI_URL/$1" 2> /dev/null
+	else
+		curl -s -m 5 --connect-timeout 2 --noproxy '*' -w '\n%{http_code}' "$RCI_URL/$1" 2> /dev/null
+	fi
+}
+
 # keenetic rci, the path follows the cli: show/ip/hotspot is "show ip hotspot"
+# 401 and 403 mean a missing or revoked token: a new one is issued and the request is repeated once
 rci_get() {
-	curl -s -f -m 5 --connect-timeout 2 "$RCI_URL/$1" 2> /dev/null
+	local token out code
+	token=$(cat "$RCI_TOKEN_PATH" 2> /dev/null)
+	out=$(rci_request "$1" "$token")
+	code="${out##*[!0-9]}"
+	if [ "$code" = 401 ] || [ "$code" = 403 ]; then
+		token=$(rci_token_issue "$token") || return 1
+		out=$(rci_request "$1" "$token")
+		code="${out##*[!0-9]}"
+	fi
+	[ "$code" = 200 ] || return 1
+	printf '%s\n' "${out%?"$code"}"
+}
+
+# tokens came with keeneticos 5.2, ndmc of older firmware logs an error on their commands
+rci_token_supported() {
+	local release major minor
+	command -v ndmc > /dev/null 2>&1 || return 1
+	release=$(keenetic_version | jq -r '.release // .title // empty' 2> /dev/null)
+	major="${release%%.*}"
+	minor="${release#*.}"
+	minor="${minor%%.*}"
+	minor="${minor#0}"
+	[ "$major" -gt 5 ] 2> /dev/null && return 0
+	[ "$major" = 5 ] && [ "${minor:-0}" -ge 2 ] 2> /dev/null
+}
+
+# the token before the first request on 5.2, the router does not log the requests without it
+rci_token_ensure() {
+	[ -s "$RCI_TOKEN_PATH" ] && return 0
+	rci_token_supported || return 0
+	rci_token_issue "" > /dev/null
+}
+
+# prints a working token, $1 is the refused one: another process may have issued a new one meanwhile
+# one try a minute, a failed issue must not run ndmc on every request
+rci_token_issue() {
+	local token now last
+	command -v ndmc > /dev/null 2>&1 || return 1
+	lock_acquire rci_token 50 || return 1
+	token=$(cat "$RCI_TOKEN_PATH" 2> /dev/null)
+	if [ -z "$token" ] || [ "$token" = "$1" ]; then
+		token=
+		now=$(date +%s)
+		last=$(cat "$RCI_TOKEN_STAMP_PATH" 2> /dev/null)
+		if [ $((now - ${last:-0})) -ge 60 ]; then
+			echo "$now" > "$RCI_TOKEN_STAMP_PATH"
+			token=$(rci_token_generate)
+		fi
+	fi
+	lock_release rci_token
+	[ -n "$token" ] && echo "$token"
+}
+
+# ndmc talks to ndm over a unix socket without authorization
+# the answer has "id: 3", "value:" and the token on the next lines (a long value is wrapped), with ^[[K around
+# the new token is saved first and the old ones of exodus are deleted after it
+rci_token_generate() {
+	local out id token
+	out=$(ndmc -c "authentication token generate $RCI_TOKEN_NAME" 2> /dev/null | tr -d '\033' | awk '
+		{ gsub(/\[K/, ""); sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") }
+		in_value { if ($0 == "" || index($0, ":")) exit; token = token $0; next }
+		/^id:/ { id = $2 }
+		/^value:/ { in_value = 1; token = substr($0, 7); sub(/^[ \t]+/, "", token) }
+		END { if (in_value) print id " " token }')
+	# no value: the token is not issued at all
+	[ -n "$out" ] || return 1
+	id="${out%% *}"
+	token="${out#* }"
+	case "$token" in
+		*[!A-Za-z0-9]*) token= ;;
+	esac
+	if [ "${#token}" -lt 32 ]; then
+		# issued but not read: every try would leave one more admin token on the router
+		rci_token_delete
+		return 1
+	fi
+	if ! (umask 077; printf '%s\n' "$token" > "$RCI_TOKEN_PATH.new") || ! mv -f "$RCI_TOKEN_PATH.new" "$RCI_TOKEN_PATH"; then
+		rm -f "$RCI_TOKEN_PATH.new"
+		return 1
+	fi
+	# without the id the new token is not told from the old ones, they go with the next issue
+	[ -n "$id" ] && rci_token_delete "$id"
+	log "App" "RCI token is issued."
+	echo "$token"
+}
+
+# deletes the tokens of exodus except the id $1, they are found by the name: the ids change after a reboot
+rci_token_delete() {
+	local id
+	for id in $(ndmc -c "show authentication token" 2> /dev/null | tr -d '\033' | awk -v name="$RCI_TOKEN_NAME" '
+		{ gsub(/\[K/, ""); sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") }
+		/^id:/ { id = $2 }
+		/^user-data:/ { sub(/^user-data:[ \t]*/, ""); if ($0 == name && id != "") print id }'); do
+		case "$id" in
+			*[!0-9]*) continue ;;
+		esac
+		[ "$id" = "$1" ] || ndmc -c "authentication token delete $id" > /dev/null 2>&1
+	done
+}
+
+# an admin token without expiry must not outlive exodus
+rci_token_revoke() {
+	if [ -f "$RCI_TOKEN_PATH" ] || rci_token_supported; then
+		rci_token_delete
+	fi
+	rm -f "$RCI_TOKEN_PATH"
 }
 
 # "show version" through ndmc, it talks to ndm over a unix socket and works when the rci does not
