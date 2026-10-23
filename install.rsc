@@ -22,7 +22,8 @@
 :global exodusFile
 :global exodusGhProxy
 
-:local name "exodus"
+# not "name": in [find where name=$name] routeros takes $name for the property of the item, and every item matches
+:local appName "exodus"
 :local veth "veth-exodus"
 :local setup "exodus setup"
 :local image "prettyleaf/exodus-mikrotik:latest"
@@ -102,15 +103,12 @@
 
 # ---------- the container is stopped and removed, its data stays ----------
 
+# the state of the container by its flags: 7.24 has no status property
 :local isRunning do={
-	:local r false
-	:do { :set r ([/container get $1 status] = "running") } on-error={
-		:do { :set r ([/container get $1 running] = true) } on-error={}
-	}
-	:return $r
+	:return ([:len [/container find where name=$1 and running]] > 0)
 }
 
-:local existing [/container find where name=$name]
+:local existing [/container find where name=$appName]
 :local firstInstall true
 :if ([:len [/file find where name=($dataDir . "/web.auth")]] > 0) do={ :set firstInstall false }
 :if ([:len $existing] > 0) do={
@@ -118,14 +116,14 @@
 	:put "stop the container"
 	:do { /container stop $existing } on-error={}
 	:local n 0
-	:while ([$isRunning $existing] && $n < 60) do={
+	:while ([$isRunning $appName] && $n < 60) do={
 		:delay 1s
 		:set n ($n + 1)
 	}
 	:put "remove the container, the settings are kept"
 	/container remove $existing
 	:set n 0
-	:while ([:len [/container find where name=$name]] > 0 && $n < 60) do={
+	:while ([:len [/container find where name=$appName]] > 0 && $n < 60) do={
 		:delay 1s
 		:set n ($n + 1)
 	}
@@ -182,8 +180,8 @@
 }
 
 # the routing table of the proxied traffic, the container fills it
-:if ([:len [/routing table find where name=$name]] = 0) do={
-	/routing table add name=$name fib comment=$setup
+:if ([:len [/routing table find where name=$appName]] = 0) do={
+	/routing table add name=$appName fib comment=$setup
 }
 
 # ---------- the rest api ----------
@@ -220,15 +218,15 @@
 
 # the user of the container: rules, routes and the lists of devices; it logs in only from the container
 :local password [:rndstr length=24 from="abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"]
-:if ([:len [/user group find where name=$name]] = 0) do={
-	/user group add name=$name policy=read,write,api,rest-api comment=$setup
+:if ([:len [/user group find where name=$appName]] = 0) do={
+	/user group add name=$appName policy=read,write,api,rest-api comment=$setup
 } else={
-	/user group set [find where name=$name] policy=read,write,api,rest-api
+	/user group set [find where name=$appName] policy=read,write,api,rest-api
 }
-:if ([:len [/user find where name=$name]] = 0) do={
-	/user add name=$name group=$name password=$password address=($cip . "/32") comment=$setup
+:if ([:len [/user find where name=$appName]] = 0) do={
+	/user add name=$appName group=$appName password=$password address=($cip . "/32") comment=$setup
 } else={
-	/user set [find where name=$name] group=$name password=$password address=($cip . "/32")
+	/user set [find where name=$appName] group=$appName password=$password address=($cip . "/32")
 }
 
 # ---------- the container ----------
@@ -244,29 +242,29 @@
 :local addEnv do={
 	:do { /container envs add list=$1 key=$2 value=$3 } on-error={ /container envs add name=$1 key=$2 value=$3 }
 }
-:do { /container envs remove [find where list=$name] } on-error={
-	:do { /container envs remove [find where name=$name] } on-error={}
+:do { /container envs remove [find where list=$appName] } on-error={
+	:do { /container envs remove [find where name=$appName] } on-error={}
 }
-$addEnv $name "ROS_URL" $url
-$addEnv $name "ROS_USER" $name
-$addEnv $name "ROS_PASSWORD" $password
-$addEnv $name "ROS_LAN_LIST" $lan
+$addEnv $appName "ROS_URL" $url
+$addEnv $appName "ROS_USER" $appName
+$addEnv $appName "ROS_PASSWORD" $password
+$addEnv $appName "ROS_LAN_LIST" $lan
 :local tz ""
 :do { :set tz [/system clock get time-zone-name] } on-error={}
-:if ([:len $tz] > 0 && $tz != "manual") do={ $addEnv $name "TZ" $tz }
-:if ([:len $exodusGhProxy] > 0) do={ $addEnv $name "GH_PROXY" $exodusGhProxy }
+:if ([:len $tz] > 0 && $tz != "manual") do={ $addEnv $appName "TZ" $tz }
+:if ([:len $exodusGhProxy] > 0) do={ $addEnv $appName "GH_PROXY" $exodusGhProxy }
 :local webPassword ""
 :if ($firstInstall) do={
 	:set webPassword $exodusPassword
 	:if ([:len $webPassword] < 4) do={ :set webPassword [:rndstr length=12 from="abcdefghijkmnopqrstuvwxyz23456789"] }
-	$addEnv $name "PASSWORD" $webPassword
+	$addEnv $appName "PASSWORD" $webPassword
 }
 
-:do { /container mounts remove [find where list=$name] } on-error={
-	:do { /container mounts remove [find where name=$name] } on-error={}
+:do { /container mounts remove [find where list=$appName] } on-error={
+	:do { /container mounts remove [find where name=$appName] } on-error={}
 }
-:do { /container mounts add list=$name src=$dataDir dst="/opt/etc/exodus" } on-error={
-	/container mounts add name=$name src=$dataDir dst="/opt/etc/exodus"
+:do { /container mounts add list=$appName src=$dataDir dst="/opt/etc/exodus" } on-error={
+	/container mounts add name=$appName src=$dataDir dst="/opt/etc/exodus"
 }
 
 # the image file for the architecture of the router from the releases of github
@@ -286,41 +284,48 @@ $addEnv $name "ROS_LAN_LIST" $lan
 :put "add the container"
 :if ([:len $file] > 0) do={
 	:do {
-		/container add file=$file interface=$veth root-dir=$rootDir mountlists=$name envlists=$name start-on-boot=yes logging=yes name=$name
+		/container add file=$file interface=$veth root-dir=$rootDir mountlists=$appName envlists=$appName start-on-boot=yes logging=yes name=$appName
 	} on-error={
-		/container add file=$file interface=$veth root-dir=$rootDir mounts=$name envlist=$name start-on-boot=yes logging=yes name=$name
+		/container add file=$file interface=$veth root-dir=$rootDir mounts=$appName envlist=$appName start-on-boot=yes logging=yes name=$appName
 	}
 } else={
 	:do {
-		/container add remote-image=$image interface=$veth root-dir=$rootDir mountlists=$name envlists=$name start-on-boot=yes logging=yes name=$name
+		/container add remote-image=$image interface=$veth root-dir=$rootDir mountlists=$appName envlists=$appName start-on-boot=yes logging=yes name=$appName
 	} on-error={
-		/container add remote-image=$image interface=$veth root-dir=$rootDir mounts=$name envlist=$name start-on-boot=yes logging=yes name=$name
+		/container add remote-image=$image interface=$veth root-dir=$rootDir mounts=$appName envlist=$appName start-on-boot=yes logging=yes name=$appName
 	}
 }
 
-# the image is pulled and extracted, then the container is stopped; newer versions show it with flags
-:local container [/container find where name=$name]
-:local status ""
+# the image is pulled and extracted, then the container is stopped
+# the state is read by the flags, 7.24 has no status property; before it the status tells an error of the extraction
+:local container [/container find where name=$appName]
+:local ready false
+:local failed false
 :local n 0
-:while ($n < 900) do={
-	:set status ""
-	:do { :set status [/container get $container status] } on-error={
-		:do { :if ([/container get $container stopped] = true) do={ :set status "stopped" } } on-error={}
-		:do { :if ([/container get $container extracting] = true) do={ :set status "extracting" } } on-error={}
-	}
-	:if ($status = "stopped" || $status = "error" || ($status = "" && $n >= 120)) do={ :set n 900 } else={
-		:if (($n % 15) = 0) do={ :put ("waiting for the image: " . $status) }
+:while (!$ready && !$failed && $n < 900) do={
+	:if ([:len [/container find where name=$appName and stopped]] > 0) do={ :set ready true }
+	:do { :if ([/container get $container status] = "error") do={ :set failed true } } on-error={}
+	:if (!$ready && !$failed) do={
+		:if (($n % 15) = 0) do={ :put "waiting for the image" }
 		:delay 1s
 		:set n ($n + 1)
 	}
 }
-:if ($status = "error") do={
+:if (!$ready) do={
 	:error "error: the image is not extracted, see /log print where topics~\"container\""
 }
 :if ([:len $file] > 0 && $exodusFile = "github") do={ /file remove [find where name=$file] }
 
 :put "start the container"
 /container start $container
+:set n 0
+:while (![$isRunning $appName] && $n < 30) do={
+	:delay 1s
+	:set n ($n + 1)
+}
+:if (![$isRunning $appName]) do={
+	:put "warning: the container is not running, see /log print where topics~\"container\""
+}
 
 :put ""
 :put "Exodus is installed"

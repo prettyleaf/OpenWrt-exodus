@@ -78,6 +78,10 @@ update_subscription() {
 	case "$user_agent" in
 		*"{version}"*) user_agent=$(echo "$user_agent" | sed "s|{version}|$(app_version)|g") ;;
 	esac
+	# from 1.29.0: {platform} is the os of the router, the same as x-device-os
+	# case "$user_agent" in
+	# 	*"{platform}"*) user_agent=$(echo "$user_agent" | sed "s|{platform}|RouterOS|g") ;;
+	# esac
 	# hwid headers, positional parameters are used as extra curl arguments
 	set --
 	if [ "$send_hwid" != "false" ]; then

@@ -1275,6 +1275,8 @@ function subscriptionDialog(subscription, onSave) {
         field(_('URL'), input(objRef(draft, 'url'), { empty: '', placeholder: 'https://' })),
         field(_('Info URL'), input(objRef(draft, 'info_url'), { empty: '', placeholder: _('Optional') }), _('Only when traffic and expiry come from another address.')),
         field(_('User agent'), input(objRef(draft, 'user_agent'), { empty: '', values: ['Mihomo/Exodus v{version}', 'clash.meta', 'mihomo', 'clash'] }), _('<code>{version}</code> is replaced with the version of Exodus.')),
+        // from 1.29.0 the user agent of exodus, {platform} is the os of the router:
+        // field(_('User agent'), input(objRef(draft, 'user_agent'), { empty: '', values: ['Exodus/{version} {platform}', 'clash.meta', 'mihomo', 'clash'] }), _('<code>{version}</code> is replaced with the version of Exodus, <code>{platform}</code> with the OS of the router.')),
         field(_('Update interval, hours'), input(objRef(draft, 'update_interval'), { number: true, type: 'uinteger',
             placeholder: st.interval ? _('Automatically: every %s h, as the provider says', st.interval) : _('Automatically: as the provider says, otherwise every hour') }),
             _('Empty: the interval of the provider (profile-update-interval), otherwise every hour. 0: only by the Update button. The running core gets a changed subscription without a restart.')),
@@ -1386,6 +1388,7 @@ function pageProfiles() {
     const subscriptionsCard = card({
         title: _('Subscriptions'),
         action: btn(_('Add'), { variant: 'outline', size: 'sm', icon: 'plus', onClick: () => subscriptionDialog(
+            // from 1.29.0: user_agent: 'Exodus/{version} {platform}'
             { id: newId(), name: '', url: '', info_url: '', user_agent: 'Mihomo/Exodus v{version}', send_hwid: true, update_interval: null },
             (created) => {
                 state.draft.subscriptions = (state.draft.subscriptions || []).concat([created]);

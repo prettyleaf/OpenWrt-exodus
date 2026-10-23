@@ -67,6 +67,10 @@ ensure_config() {
 		cfg_update '.mixin.api_secret = $secret | .mixin.password = $password | .config.hwid = $hwid' \
 			--arg secret "$secret" --arg password "$password" --arg hwid "$hwid"
 	fi
+	# from 1.29.0: subscriptions with the old default user agent get the new one, the defaults of config.json and app.js change with it
+	# if jq -e '(.subscriptions // []) | any(.user_agent == "Mihomo/Exodus v{version}")' "$CONFIG_PATH" > /dev/null 2>&1; then
+	# 	cfg_update '.subscriptions |= map(if .user_agent == "Mihomo/Exodus v{version}" then .user_agent = "Exodus/{version} {platform}" else . end)'
+	# fi
 }
 
 # the environment of the container from /container/envs: the rest api of routeros, the gh-proxy, the password of the web ui
@@ -320,7 +324,10 @@ watch() {
 				fw_nft_start
 			fi
 			if [ $((tick % 2)) = 0 ]; then
-				if ! fw_ros_intact && core_listening; then
+				if ! fw_nft_ready; then
+					# the rules of the container failed, a core that does not listen yet gets no rules anyway
+					core_listening && fw_ros_hold
+				elif ! fw_ros_intact && core_listening; then
 					[ -f "$RUN_TMP/routeros_rules.err" ] || log "Proxy" "Rules of RouterOS are missing or changed, apply them."
 					fw_ros_start
 				else

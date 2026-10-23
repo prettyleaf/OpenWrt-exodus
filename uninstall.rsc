@@ -6,32 +6,29 @@
 {
 :global exodusKeepData
 
-:local name "exodus"
+# not "name": in [find where name=$name] routeros takes $name for the property of the item, and every item matches
+:local appName "exodus"
 :local veth "veth-exodus"
 :local setup "exodus setup"
 
 :put "Exodus for MikroTik: uninstall"
 
 # the container removes its rules on stop, the rest is removed below anyway
-:local container [/container find where name=$name]
+:local container [/container find where name=$appName]
 :local rootDir ""
 :if ([:len $container] > 0) do={
 	:do { :set rootDir [/container get $container root-dir] } on-error={}
 	:put "stop the container"
 	:do { /container stop $container } on-error={}
+	# the state by the flags: 7.24 has no status property
 	:local n 0
-	:local running true
-	:while ($running && $n < 60) do={
-		:set running false
-		:do { :set running ([/container get $container status] = "running") } on-error={
-			:do { :set running ([/container get $container running] = true) } on-error={}
-		}
-		:if ($running) do={ :delay 1s }
+	:while ([:len [/container find where name=$appName and running]] > 0 && $n < 60) do={
+		:delay 1s
 		:set n ($n + 1)
 	}
 	/container remove $container
 	:set n 0
-	:while ([:len [/container find where name=$name]] > 0 && $n < 60) do={
+	:while ([:len [/container find where name=$appName]] > 0 && $n < 60) do={
 		:delay 1s
 		:set n ($n + 1)
 	}
@@ -50,17 +47,17 @@
 /ipv6 firewall address-list remove [find where comment~"^exodus:"]
 /ipv6 route remove [find where comment~"^exodus:"]
 /tool netwatch remove [find where comment~"^exodus:"]
-:do { /routing table remove [find where name=$name] } on-error={ :put "warning: the routing table exodus is still in use, remove it later" }
+:do { /routing table remove [find where name=$appName] } on-error={ :put "warning: the routing table exodus is still in use, remove it later" }
 
 :put "remove the container settings, the user and the veth"
-:do { /container envs remove [find where list=$name] } on-error={
-	:do { /container envs remove [find where name=$name] } on-error={}
+:do { /container envs remove [find where list=$appName] } on-error={
+	:do { /container envs remove [find where name=$appName] } on-error={}
 }
-:do { /container mounts remove [find where list=$name] } on-error={
-	:do { /container mounts remove [find where name=$name] } on-error={}
+:do { /container mounts remove [find where list=$appName] } on-error={
+	:do { /container mounts remove [find where name=$appName] } on-error={}
 }
-/user remove [find where name=$name]
-/user group remove [find where name=$name]
+/user remove [find where name=$appName]
+/user group remove [find where name=$appName]
 /ip address remove [find where comment=$setup]
 /ipv6 address remove [find where comment=$setup]
 /interface veth remove [find where name=$veth]

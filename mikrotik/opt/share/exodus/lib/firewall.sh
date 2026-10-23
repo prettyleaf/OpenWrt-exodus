@@ -300,6 +300,16 @@ fw_nft_intact() {
 	return 0
 }
 
+# the container takes what the router sends: the tproxy table, and the nat table when tcp goes by redirect
+# the ping of fake-ip does not count, a kernel without nat of nftables still proxies with tproxy
+fw_nft_ready() {
+	nft list table inet exodus > /dev/null 2>&1 || return 1
+	if [ "$fw_tcp_mode" = "redirect" ] && [ -n "$fw_redir_port" ]; then
+		nft list table inet exodus_nat > /dev/null 2>&1 || return 1
+	fi
+	return 0
+}
+
 fw_nft_clean() {
 	local family
 	nft delete table inet exodus > /dev/null 2>&1
@@ -748,13 +758,31 @@ fw_ap_clean() {
 
 # ---------- start and stop ----------
 
+# the rules of the proxy in routeros are removed, an unreachable router is not waited for: its netwatch turns them off
+fw_ros_stop() {
+	ros_check > /dev/null || return 1
+	fw_ros_clean proxy "$ROS_PROXY_PATHS4 $ROS_PROXY_PATHS6"
+	fw_ap_clean
+}
+
+# the router must not send the traffic to a container that does not take it, the devices go directly then
+fw_ros_hold() {
+	fw_ros_report "The rules are not applied, the container does not take the traffic: see the error of nftables above."
+	fw_ros_stop
+}
+
 # the container and the router; the rules of the router go last, the container must take the traffic first
 fw_start() {
 	local failed
 	fw_env || return 1
 	failed=0
 	fw_nft_start || failed=1
-	fw_ros_start || failed=1
+	if fw_nft_ready; then
+		fw_ros_start || failed=1
+	else
+		fw_ros_hold
+		failed=1
+	fi
 	return "$failed"
 }
 
@@ -763,11 +791,7 @@ fw_intact() {
 }
 
 # the rules of the router go first, the traffic must not wait for a stopped core
-# an unreachable router is not waited for, its netwatch turns the rules off
 fw_clean() {
-	if ros_check > /dev/null; then
-		fw_ros_clean proxy "$ROS_PROXY_PATHS4 $ROS_PROXY_PATHS6"
-		fw_ap_clean
-	fi
+	fw_ros_stop
 	fw_nft_clean
 }

@@ -13,7 +13,7 @@ The container holds the Mihomo core, the web UI and the dashboard. RouterOS send
 1. **mangle prerouting**: TCP and UDP of the chosen devices get the routing mark `exodus`, the routing table `exodus` leads to the container. The router itself, local and reserved networks stay direct.
 2. **nat dstnat**: DNS of the chosen devices goes to the core (Fake-IP and the rules by domain need it).
 3. **filter forward**: two `accept` rules before fasttrack, a fasttracked connection would skip the routing mark.
-4. Inside the container nftables takes the traffic to the TPROXY port of the core (Redirect for TCP is an option).
+4. Inside the container nftables takes the traffic to the TPROXY port of the core (Redirect for TCP is an option). When the kernel of the router does not take these rules, the rules of RouterOS are not applied: the devices go directly, the log tells the error of nftables.
 5. The rules are checked every 30 seconds and applied again when they are missing, changed or turned off. When the container does not answer, the route `check-gateway=ping` becomes inactive and **netwatch** turns the rules off: the devices go directly, without a proxy, until the container is back.
 
 Every rule of the container has a comment starting with `exodus:`, the installer marks its part with `exodus setup`.
