@@ -671,6 +671,12 @@ update_subscription() {
 			subscription_user_agent=$(echo "$subscription_user_agent" | sed "s|{version}|$(get_app_version)|g")
 			;;
 	esac
+	# from 1.29.0: {platform} is the os of the router, the same as x-device-os
+	# case "$subscription_user_agent" in
+	# 	*"{platform}"*)
+	# 		subscription_user_agent=$(echo "$subscription_user_agent" | sed "s|{platform}|OpenWrt|g")
+	# 		;;
+	# esac
 	# prepare hwid headers, positional parameters are used as extra curl arguments
 	set --
 	if [ "$subscription_send_hwid" = 1 ]; then

@@ -243,6 +243,12 @@ uci show nikki | grep -o -E '^nikki\.[^.=]+=subscription$' | cut -d '=' -f 1 | w
 	}
 done
 
+# since v1.29.0: subscriptions with the old default user agent get the new one
+
+# uci show nikki | grep -o -E '^nikki\.[^.=]+=subscription$' | cut -d '=' -f 1 | while read -r subscription; do
+# 	[ "$(uci -q get "$subscription.user_agent")" = "Mihomo/Exodus v{version}" ] && uci set "$subscription.user_agent=Exodus/{version} {platform}"
+# done
+
 # commit
 uci commit nikki
 

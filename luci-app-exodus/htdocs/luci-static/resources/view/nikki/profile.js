@@ -116,9 +116,13 @@ return view.extend({
 
         o = s.option(form.Value, 'user_agent', _('User Agent'), _('{version} is replaced with the installed app version.'));
         o.default = 'Mihomo/Exodus v{version}';
+        // from 1.29.0 the user agent of exodus, {platform} is the os of the router:
+        // o = s.option(form.Value, 'user_agent', _('User Agent'), _('{version} is replaced with the installed app version, {platform} with the OS of the router.'));
+        // o.default = 'Exodus/{version} {platform}';
         o.modalonly = true;
         o.rmempty = false;
         o.value('Mihomo/Exodus v{version}');
+        // from 1.29.0: o.value('Exodus/{version} {platform}');
         o.value('clash');
         o.value('clash.meta');
         o.value('mihomo');
