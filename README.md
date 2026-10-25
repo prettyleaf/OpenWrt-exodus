@@ -78,7 +78,7 @@ Options are global variables set before the import:
 - **The code of Exodus and the core** are updated on the **Updates** page of the web UI, inside the running container, like on Keenetic. The version of Exodus is the version of the [releases](https://github.com/prettyleaf/openwrt-exodus/releases), the same on every router; an update is offered when the code of the `mikrotik` branch changes.
 - **The image** (Alpine and its packages) is updated by the installer: run it again. It recreates the container from the new image, settings, profiles and subscriptions in `<disk>/exodus/data` are kept.
 
-The core is changed in the shell of the container:
+The core is changed on the **Updates** page too: choose Prizrak-Core, Mihomo Meta or Mihomo Alpha and press **Change core**, its latest build is installed and the next updates follow it. The installer in the shell of the container changes it as well:
 
 ```routeros
 /container shell exodus cmd="sh /opt/share/exodus/install.sh"

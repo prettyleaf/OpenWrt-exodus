@@ -904,7 +904,7 @@ function expireText(st) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-const CORE_TITLES = { meta: 'Mihomo Meta', alpha: 'Mihomo Alpha', prizrak: 'Prizrak-Core' };
+const CORE_TITLES = { prizrak: 'Prizrak-Core', meta: 'Mihomo Meta', alpha: 'Mihomo Alpha' };
 
 function profileTitle(profile) {
     if (!profile) {
@@ -1274,9 +1274,8 @@ function subscriptionDialog(subscription, onSave) {
         field(_('Name'), input(objRef(draft, 'name'), { empty: '' }), _('Replaced with the title of the provider when it sends one.')),
         field(_('URL'), input(objRef(draft, 'url'), { empty: '', placeholder: 'https://' })),
         field(_('Info URL'), input(objRef(draft, 'info_url'), { empty: '', placeholder: _('Optional') }), _('Only when traffic and expiry come from another address.')),
-        field(_('User agent'), input(objRef(draft, 'user_agent'), { empty: '', values: ['Mihomo/Exodus v{version}', 'clash.meta', 'mihomo', 'clash'] }), _('<code>{version}</code> is replaced with the version of Exodus.')),
-        // from 1.29.0 the user agent of exodus, {platform} is the os of the router:
-        // field(_('User agent'), input(objRef(draft, 'user_agent'), { empty: '', values: ['Exodus/{version} {platform}', 'clash.meta', 'mihomo', 'clash'] }), _('<code>{version}</code> is replaced with the version of Exodus, <code>{platform}</code> with the OS of the router.')),
+        // the user agent of exodus, the previous one stays for providers whose response rules do not know exodus yet
+        field(_('User agent'), input(objRef(draft, 'user_agent'), { empty: '', values: ['Exodus/{version} {platform}', 'Mihomo/Exodus v{version}', 'clash.meta', 'mihomo', 'clash'] }), _('<code>{version}</code> is replaced with the version of Exodus, <code>{platform}</code> with the OS of the router. When the provider does not give the subscription to <code>Exodus/{version} {platform}</code>, <code>Mihomo/Exodus v{version}</code> is tried.')),
         field(_('Update interval, hours'), input(objRef(draft, 'update_interval'), { number: true, type: 'uinteger',
             placeholder: st.interval ? _('Automatically: every %s h, as the provider says', st.interval) : _('Automatically: as the provider says, otherwise every hour') }),
             _('Empty: the interval of the provider (profile-update-interval), otherwise every hour. 0: only by the Update button. The running core gets a changed subscription without a restart.')),
@@ -1388,8 +1387,7 @@ function pageProfiles() {
     const subscriptionsCard = card({
         title: _('Subscriptions'),
         action: btn(_('Add'), { variant: 'outline', size: 'sm', icon: 'plus', onClick: () => subscriptionDialog(
-            // from 1.29.0: user_agent: 'Exodus/{version} {platform}'
-            { id: newId(), name: '', url: '', info_url: '', user_agent: 'Mihomo/Exodus v{version}', send_hwid: true, update_interval: null },
+            { id: newId(), name: '', url: '', info_url: '', user_agent: 'Exodus/{version} {platform}', send_hwid: true, update_interval: null },
             (created) => {
                 state.draft.subscriptions = (state.draft.subscriptions || []).concat([created]);
                 renderSubscriptions();
@@ -1988,14 +1986,21 @@ function pageUpdates() {
             ])))
         ]));
         const lowSpace = { value: info.free_space != null && info.core_size != null && info.free_space < info.core_size * 1.2 };
+        // another core is installed by the update: the latest build of it, the next updates follow it
+        const currentCore = CORE_TITLES[info.core_type] ? info.core_type : 'meta';
+        const core = { value: currentCore };
+        const coreChanged = () => core.value !== currentCore;
         const updateButton = btn(_('Update'), { icon: 'download', disabled: !available, onClick: async () => {
-            const message = lowSpace.value
+            let message = lowSpace.value
                 ? _('The current core is removed before the new one is installed. If the update fails, the proxy does not work until the update is done again.')
                 : _('The proxy restarts during the update.');
-            if (!await confirmDialog(_('Update now?'), message, { confirm: _('Update') })) {
+            if (coreChanged()) {
+                message = `${_('%s is installed instead of %s.', CORE_TITLES[core.value], CORE_TITLES[currentCore])} ${message}`;
+            }
+            if (!await confirmDialog(coreChanged() ? _('Change the core?') : _('Update now?'), message, { confirm: coreChanged() ? _('Change core') : _('Update') })) {
                 return;
             }
-            await run(api('update', { low_space: lowSpace.value }));
+            await run(api('update', { low_space: lowSpace.value, core: coreChanged() ? core.value : '' }));
             logView.value = '';
             const timer = setInterval(async () => {
                 try {
@@ -2009,13 +2014,18 @@ function pageUpdates() {
             }, 2000);
             state.timers.push(timer);
         } });
+        const coreSelect = select({ get: () => core.value, set: (value) => {
+            core.value = value;
+            updateButton.disabled = !available && !coreChanged();
+            updateButton.querySelector('span').textContent = coreChanged() ? _('Change core') : _('Update');
+        } }, Object.keys(CORE_TITLES).map((type) => [type, CORE_TITLES[type]]));
         append(container, card({
             title: _('Versions'),
             info: [
                 _('Exodus and the core are downloaded from GitHub into the container. Settings, profiles and subscriptions are kept.'),
                 _('The packages of the container come with its image: the installer of RouterOS takes a new image, the code and the core stay updated here.'),
                 _('Exodus has the version of the releases of the project, the same on every router. An update is offered when the code of its branch changes, a change of the readme does not count. The core is compared by its version.'),
-                _('The core and the gh-proxy are kept, the installer in the shell of the container changes them: <code>/container shell exodus cmd="sh /opt/share/exodus/install.sh"</code>.'),
+                _('The gh-proxy is kept, the installer in the shell of the container changes it: <code>/container shell exodus cmd="sh /opt/share/exodus/install.sh"</code>.'),
                 _('GitHub is asked at most every 6 hours, Check again asks now.')
             ],
             action: btn(_('Check again'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: async () => {
@@ -2028,6 +2038,7 @@ function pageUpdates() {
                     [_('Architecture'), E('span', { class: 'mono' }, info.arch || '—')],
                     [_('Free space'), `${formatSize(info.free_space)} · ${_('core')} ${formatSize(info.core_size)}`]
                 ]),
+                field(_('Core'), coreSelect, _('Choose another core and press Change core to install its latest build, settings and profiles are kept. The updates follow the chosen core.')),
                 switchField(_('Low flash space mode'), _('Remove the current core before installing the new one, when the update fails for lack of space. The proxy does not work until the new core is installed.'), objRef(lowSpace, 'value'))
             ],
             footer: E('div', { class: 'row end', style: { width: '100%' } }, updateButton)

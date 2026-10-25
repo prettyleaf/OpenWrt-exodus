@@ -62,8 +62,41 @@ provider_meta() {
 		| with_entries(select(.value != "" and .value != null))'
 }
 
+# {version} is the version of exodus, {platform} the os of the router, the same as x-device-os
+expand_user_agent() {
+	case "$1" in
+		*"{version}"*|*"{platform}"*) echo "$1" | sed "s|{version}|$(app_version)|g; s|{platform}|RouterOS|g" ;;
+		*) echo "$1" ;;
+	esac
+}
+
+# download the subscription of update_subscription with the user agent $1, the other arguments go to curl
+# succeeds when the download is a profile, sets info_file when its headers carry the subscription info
+download_subscription() {
+	local agent
+	agent="$1"
+	shift
+	if ! curl -s -f -m 120 --connect-timeout 15 --retry 3 -L -X GET -A "$agent" "$@" -D "$header_tmp" -o "$file_tmp" "$url" > /dev/null 2>&1; then
+		log "Profile" "Subscription download failed."
+		if grep -q -i "x-hwid-not-supported: true" "$header_tmp" 2> /dev/null; then
+			log "Profile" "Subscription requires HWID, enable Send HWID for this subscription."
+		fi
+		if grep -q -i "x-hwid-max-devices-reached: true" "$header_tmp" 2> /dev/null; then
+			log "Profile" "HWID device limit reached, remove an old device in the subscription panel."
+		fi
+		return 1
+	fi
+	log "Profile" "Subscription download successful."
+	[ -z "$info_file" ] && grep -q -i "subscription-userinfo:" "$header_tmp" && info_file="$header_tmp"
+	if ! "$YQ" -M -p yaml -o yaml -e 'has("proxies") or has("proxy-providers")' "$file_tmp" > /dev/null 2>&1; then
+		log "Profile" "Subscription is not valid."
+		return 1
+	fi
+	log "Profile" "Subscription is valid."
+}
+
 update_subscription() {
-	local id name info_url url user_agent send_hwid header state now meta title
+	local id name info_url url user_agent fallback_user_agent send_hwid header state now meta title
 	id="$1"
 	case "$id" in
 		""|*/*|.*) return 1 ;;
@@ -74,14 +107,13 @@ update_subscription() {
 	info_url=$(sub_get "$id" info_url)
 	user_agent=$(sub_get "$id" user_agent)
 	send_hwid=$(sub_get "$id" send_hwid)
-	# replace {version} placeholder in user agent with the app version
-	case "$user_agent" in
-		*"{version}"*) user_agent=$(echo "$user_agent" | sed "s|{version}|$(app_version)|g") ;;
-	esac
-	# from 1.29.0: {platform} is the os of the router, the same as x-device-os
-	# case "$user_agent" in
-	# 	*"{platform}"*) user_agent=$(echo "$user_agent" | sed "s|{platform}|RouterOS|g") ;;
-	# esac
+	# the response rules of a provider may not know the user agent of exodus yet, then the previous one is tried
+	fallback_user_agent=
+	if [ "$user_agent" = "Exodus/{version} {platform}" ]; then
+		fallback_user_agent="Mihomo/Exodus v{version}"
+	fi
+	user_agent=$(expand_user_agent "$user_agent")
+	fallback_user_agent=$(expand_user_agent "$fallback_user_agent")
 	# hwid headers, positional parameters are used as extra curl arguments
 	set --
 	if [ "$send_hwid" != "false" ]; then
@@ -107,25 +139,15 @@ update_subscription() {
 	fi
 	# download subscription
 	log "Profile" "Download subscription."
-	if curl -s -f -m 120 --connect-timeout 15 --retry 3 -L -X GET -A "$user_agent" "$@" -D "$header_tmp" -o "$file_tmp" "$url" > /dev/null 2>&1; then
-		log "Profile" "Subscription download successful."
-		[ -z "$info_file" ] && grep -q -i "subscription-userinfo:" "$header_tmp" && info_file="$header_tmp"
-		if "$YQ" -M -p yaml -o yaml -e 'has("proxies") or has("proxy-providers")' "$file_tmp" > /dev/null 2>&1; then
-			log "Profile" "Subscription is valid."
-			success=1
-		else
-			log "Profile" "Subscription is not valid."
-			success=0
-		fi
-	else
-		log "Profile" "Subscription download failed."
-		if grep -q -i "x-hwid-not-supported: true" "$header_tmp" 2> /dev/null; then
-			log "Profile" "Subscription requires HWID, enable Send HWID for this subscription."
-		fi
-		if grep -q -i "x-hwid-max-devices-reached: true" "$header_tmp" 2> /dev/null; then
-			log "Profile" "HWID device limit reached, remove an old device in the subscription panel."
-		fi
-		success=0
+	rm -f "$header_tmp"
+	success=0
+	if download_subscription "$user_agent" "$@"; then
+		success=1
+	elif [ -n "$fallback_user_agent" ] && [ -s "$header_tmp" ]; then
+		# the provider answered, but not with a profile: its response rules do not know the user agent of exodus yet
+		log "Profile" "The provider does not answer to $user_agent, try $fallback_user_agent."
+		rm -f "$header_tmp"
+		download_subscription "$fallback_user_agent" "$@" && success=1
 	fi
 	state=$(sub_state_path "$id")
 	now=$(date +%s)

@@ -67,10 +67,11 @@ ensure_config() {
 		cfg_update '.mixin.api_secret = $secret | .mixin.password = $password | .config.hwid = $hwid' \
 			--arg secret "$secret" --arg password "$password" --arg hwid "$hwid"
 	fi
-	# from 1.29.0: subscriptions with the old default user agent get the new one, the defaults of config.json and app.js change with it
-	# if jq -e '(.subscriptions // []) | any(.user_agent == "Mihomo/Exodus v{version}")' "$CONFIG_PATH" > /dev/null 2>&1; then
-	# 	cfg_update '.subscriptions |= map(if .user_agent == "Mihomo/Exodus v{version}" then .user_agent = "Exodus/{version} {platform}" else . end)'
-	# fi
+	# since 1.29.0: subscriptions with the old default user agent get the user agent of exodus
+	# once, the old one stays a choice for providers whose response rules do not know exodus yet
+	if [ "$(cfg_get .config.user_agent_migrated)" != "true" ]; then
+		cfg_update '.subscriptions |= map(if .user_agent == "Mihomo/Exodus v{version}" then .user_agent = "Exodus/{version} {platform}" else . end) | .config.user_agent_migrated = true'
+	fi
 }
 
 # the environment of the container from /container/envs: the rest api of routeros, the gh-proxy, the password of the web ui
