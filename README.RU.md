@@ -48,7 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/keenetic/
 
 ### Версии
 
-У Exodus одна версия для всех роутеров — версия [релизов](https://github.com/prettyleaf/openwrt-exodus/releases) проекта: она в `/opt/share/exodus/VERSION`, на странице **«Обновления»** и в информации о сборке. Страница **«Обновления»** предлагает обновление, когда меняется код ветки `keenetic`, изменения README не считаются.
+У Exodus одна версия для всех роутеров — версия [релизов](https://github.com/prettyleaf/openwrt-exodus/releases) проекта: она в `/opt/share/exodus/VERSION`, на странице **«Обновления»** и в информации о сборке. Страница **«Обновления»** предлагает обновление, когда меняется код ветки `keenetic`, изменения README не считаются. Там же меняется ядро: выберите Prizrak-Core, Mihomo Meta или Mihomo Alpha и нажмите **«Сменить ядро»** — поставится его последняя сборка, дальше обновляется оно.
 
 ## Переход с XKeen
 

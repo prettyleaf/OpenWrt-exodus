@@ -5,7 +5,8 @@
     "start_delay": 0,
     "scheduled_restart": false,
     "scheduled_restart_cron": "0 3 * * *",
-    "hwid": ""
+    "hwid": "",
+    "user_agent_migrated": false
   },
   "subscriptions": [
     {
@@ -13,7 +14,7 @@
       "name": "default",
       "url": "http://example.com/default.yaml",
       "info_url": "",
-      "user_agent": "Mihomo/Exodus v{version}",
+      "user_agent": "Exodus/{version} {platform}",
       "send_hwid": true,
       "update_interval": null
     }

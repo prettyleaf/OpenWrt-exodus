@@ -48,7 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/keenetic/
 
 ### Versions
 
-Exodus has one version for all routers, the version of the [releases](https://github.com/prettyleaf/openwrt-exodus/releases) of the project: it is in `/opt/share/exodus/VERSION`, on the **Updates** page and in the build info. The **Updates** page offers an update when the code of the `keenetic` branch changes, a change of the readme does not count.
+Exodus has one version for all routers, the version of the [releases](https://github.com/prettyleaf/openwrt-exodus/releases) of the project: it is in `/opt/share/exodus/VERSION`, on the **Updates** page and in the build info. The **Updates** page offers an update when the code of the `keenetic` branch changes, a change of the readme does not count. The core is changed there too: choose Prizrak-Core, Mihomo Meta or Mihomo Alpha and press **Change core**, its latest build is installed and the next updates follow it.
 
 ## Migrating from XKeen
 

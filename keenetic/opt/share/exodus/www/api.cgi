@@ -486,12 +486,18 @@ action_about() {
 }
 
 action_update() {
-	local low_space
+	local low_space core
 	low_space=0
 	[ "$(arg low_space)" = "true" ] && low_space=1
+	# another core than the saved one is installed instead of it, empty keeps the saved one
+	core=$(arg core)
+	case "$core" in
+		""|prizrak|meta|alpha) ;;
+		*) fail "400 Bad Request" "unknown core" ;;
+	esac
 	cp -f "$SHARE_DIR/install.sh" "$RUN_TMP/exodus-update.sh" || fail "500 Internal Server Error" "installer not found"
 	: > "$UPDATE_LOG_PATH"
-	export LOW_SPACE="$low_space"
+	export LOW_SPACE="$low_space" CORE="$core"
 	daemonize sh -c "exec sh '$RUN_TMP/exodus-update.sh' >> '$UPDATE_LOG_PATH' 2>&1"
 	echo '{"success": true}' | ok
 }

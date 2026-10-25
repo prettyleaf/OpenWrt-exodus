@@ -21,10 +21,40 @@ config="$home_dir/config.json"
 core_path="$libexec_dir/mihomo"
 yq_path="$libexec_dir/yq"
 
+# colors only on a terminal, the update page reads the log as plain text; NO_COLOR turns them off
+c_reset='' c_bold='' c_dim='' c_step='' c_info='' c_ask='' c_warn='' c_error=''
+if [ -t 1 ] && [ "${TERM:-dumb}" != "dumb" ] && [ -z "${NO_COLOR+set}" ]; then
+	esc=$(printf '\033')
+	c_reset="${esc}[0m" c_bold="${esc}[1m" c_dim="${esc}[90m" c_step="${esc}[1;34m" c_info="${esc}[1;32m" c_ask="${esc}[1;33m" c_warn="${esc}[1;33m" c_error="${esc}[1;31m"
+fi
+
+# ==> a stage of the install
+step() {
+	printf '%s==>%s %s%s%s\n' "$c_step" "$c_reset" "$c_bold" "$1" "$c_reset"
+}
+
+# -> what the stage does or finds
+info() {
+	printf '  %s->%s %s\n' "$c_info" "$c_reset" "$1"
+}
+
+# a detail of the stage, dimmed
+note() {
+	printf '    %s%s%s\n' "$c_dim" "$1" "$c_reset"
+}
+
+warn() {
+	printf '%swarning:%s %s\n' "$c_warn" "$c_reset" "$1"
+}
+
 # the last line is "success" or starts with "error:", the update page relies on it
 fail() {
-	echo "error: $1"
+	printf '%serror:%s %s\n' "$c_error" "$c_reset" "$1"
 	exit 1
+}
+
+success() {
+	printf '%ssuccess%s\n' "$c_info" "$c_reset"
 }
 
 # the installer is usually piped into the shell, so questions are asked on the terminal
@@ -33,8 +63,9 @@ interactive() {
 	( exec < /dev/tty ) 2> /dev/null
 }
 
+# :: a question, $1 is the question and $2 the hint of the answer
 ask() {
-	printf '%s' "$1" > /dev/tty
+	printf '%s::%s %s%s%s %s> ' "$c_ask" "$c_reset" "$c_bold" "$1" "$c_reset" "${2:+[$2] }" > /dev/tty
 	answer=
 	read -r answer < /dev/tty
 }
@@ -79,10 +110,29 @@ core_binary_version() {
 
 core_title() {
 	case "$1" in
+		prizrak) echo "Prizrak-Core" ;;
 		meta) echo "Mihomo Meta" ;;
 		alpha) echo "Mihomo Alpha" ;;
-		prizrak) echo "Prizrak-Core" ;;
 	esac
+}
+
+core_description() {
+	case "$1" in
+		prizrak) echo "mihomo fork by legiz-ru" ;;
+		meta) echo "latest stable release of MetaCubeX/mihomo" ;;
+		alpha) echo "development build of MetaCubeX/mihomo" ;;
+	esac
+}
+
+# the choices of the core, numbered in the order of the list
+core_menu() {
+	local number=0 type
+	for type in prizrak meta alpha; do
+		number=$((number + 1))
+		printf '    %s%s)%s %-14s %s' "$c_bold" "$number" "$c_reset" "$(core_title "$type")" "$(core_description "$type")"
+		[ "$type" = "$current_core" ] && printf '  %s[%s]%s' "$c_info" "$current_core_tag" "$c_reset"
+		printf '\n'
+	done
 }
 
 config_get() {
@@ -92,13 +142,13 @@ config_get() {
 # $1 url of the gzipped binary
 install_core() {
 	local file="$temp_dir/core.gz"
-	echo "download $1"
+	info "download ${1##*/}"
 	if ! download "$1" "$file" || ! gzip -t "$file" 2> /dev/null; then
 		fail "core download failed"
 	fi
 	mkdir -p "$libexec_dir"
 	if [ "$LOW_SPACE" = 1 ]; then
-		echo "low space mode: remove current core"
+		warn "low space mode: remove current core"
 		# the running core keeps its file allocated, stop it first
 		[ -x "$share_dir/exodus" ] && "$share_dir/exodus" stop
 		rm -f "$core_path"
@@ -119,11 +169,12 @@ install_core() {
 		mv -f "$core_path.new" "$core_path"
 	fi
 	rm -f "$file"
+	info "$(core_title "$core") $(core_binary_version "$core_path") runs on this router"
 }
 
 install_yq() {
 	local file="$temp_dir/yq.tar.gz"
-	echo "download yq"
+	info "download yq"
 	if ! download "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_$yq_arch.tar.gz" "$file" || ! gzip -t "$file" 2> /dev/null; then
 		fail "yq download failed"
 	fi
@@ -137,18 +188,20 @@ install_yq() {
 	rm -rf "$temp_dir/yq"
 }
 
+step "Exodus for Keenetic installer"
+
 # check env
 if [ ! -x "/opt/bin/opkg" ]; then
 	fail "Entware is not installed: install the OPKG component of the router and Entware first"
 fi
 if [ ! -x "/bin/ndmc" ] && [ ! -d "/proc/ndm" ]; then
-	echo "warning: this does not look like a Keenetic router, continue anyway"
+	warn "this does not look like a Keenetic router, continue anyway"
 fi
 if [ -x "/opt/sbin/xkeen" ] || [ -f "/opt/etc/init.d/S05xkeen" ]; then
 	if pidof xray > /dev/null 2>&1 || pidof mihomo > /dev/null 2>&1; then
 		fail "XKeen is running, both can not intercept the traffic: stop it (xkeen -stop) and disable its autostart (xkeen -auto off) or remove it (xkeen -remove)"
 	fi
-	echo "warning: XKeen is installed, keep it stopped and its autostart disabled"
+	warn "XKeen is installed, keep it stopped and its autostart disabled"
 fi
 
 # architecture of entware and names of builds for it, keenetic has no fpu on mips
@@ -161,7 +214,7 @@ case "$arch" in
 	x86_64*) core_arch="amd64-compatible"; yq_arch="amd64" ;;
 	*) fail "unsupported architecture: $arch" ;;
 esac
-echo "architecture: $arch"
+info "architecture: $arch"
 
 # temp dir
 temp_dir="/opt/tmp/exodus-install"
@@ -170,8 +223,8 @@ mkdir -p "$temp_dir" || fail "can not create $temp_dir"
 trap 'rm -rf "$temp_dir"' EXIT
 
 # dependencies from entware, curl and jq are needed by the installer itself
-echo "install packages"
-opkg update > /dev/null 2>&1 || echo "warning: opkg update failed"
+step "Installing packages"
+opkg update > /dev/null 2>&1 || warn "opkg update failed"
 opkg install curl jq ca-bundle ipset iptables ip-full lighttpd lighttpd-mod-cgi || fail "package install failed"
 
 # access to github: through the given or the saved gh-proxy, then directly
@@ -187,7 +240,7 @@ if [ "${GH_PROXY+set}" = "set" ]; then
 else
 	routes="$saved_gh_proxy direct"
 fi
-echo "check access to github"
+step "Checking access to GitHub"
 github_status=1
 for route in $routes; do
 	gh_proxy="${route%/}"
@@ -205,23 +258,23 @@ if [ "$github_status" = 22 ]; then
 fi
 if [ "$github_status" != 0 ]; then
 	[ -n "$GH_PROXY" ] && fail "gh-proxy does not work: check the address and the token"
-	[ -n "$saved_gh_proxy" ] && echo "the saved gh-proxy does not work"
+	[ -n "$saved_gh_proxy" ] && warn "the saved gh-proxy does not work"
 	# jsDelivr tells a blocked github from a router without internet, it does not serve release files, so it can not replace github
 	if curl -s -f -m 15 -o /dev/null "https://cdn.jsdelivr.net/gh/$repository@$ref/install.sh" 2> /dev/null; then
-		echo "github.com is unreachable, but cdn.jsdelivr.net is reachable: GitHub is blocked by the provider"
+		warn "github.com is unreachable, but cdn.jsdelivr.net is reachable: GitHub is blocked by the provider"
 	else
-		echo "github.com and cdn.jsdelivr.net are unreachable: check the internet connection and DNS of the router, or the provider blocks both"
+		warn "github.com and cdn.jsdelivr.net are unreachable: check the internet connection and DNS of the router, or the provider blocks both"
 	fi
-	echo "the core and yq are published only in GitHub releases, jsDelivr does not serve them"
-	echo "deploy gh-proxy on a server with access to GitHub and install through it: https://github.com/prettyleaf/gh-proxy"
+	note "the core and yq are published only in GitHub releases, jsDelivr does not serve them"
+	note "deploy gh-proxy on a server with access to GitHub and install through it: https://github.com/prettyleaf/gh-proxy"
 	interactive || fail "github is unreachable, run the installer with GH_PROXY=https://<gh-proxy address>/<token>, see README"
 	for _ in 1 2 3; do
-		ask "gh-proxy address with the token, e.g. https://example.com/ghproxy/TOKEN (empty to exit): "
+		ask "gh-proxy address with the token" "https://example.com/ghproxy/TOKEN, empty to exit"
 		[ -z "$answer" ] && break
 		case "$answer" in
 			http://*|https://*) ;;
 			*)
-				echo "the address must start with https://"
+				warn "the address must start with https://"
 				continue
 				;;
 		esac
@@ -231,44 +284,49 @@ if [ "$github_status" != 0 ]; then
 			save_gh_proxy=1
 			break
 		fi
-		echo "gh-proxy does not work: check the address and the token"
+		warn "gh-proxy does not work: check the address and the token"
 	done
 	[ "$github_status" = 0 ] || fail "github is unreachable"
 fi
 if [ -n "$gh_proxy" ]; then
 	# the token is a part of the address, only the host is shown
 	gh_proxy_host="${gh_proxy#*://}"
-	echo "download through gh-proxy at ${gh_proxy_host%%/*}"
+	info "through gh-proxy at ${gh_proxy_host%%/*}"
+else
+	info "directly"
 fi
 
 # choose the core, the current one is saved in the config
+step "Choosing the core"
 current_core=$(config_get .update.core)
+current_core_tag="current"
 if [ -z "$current_core" ]; then
 	case "$(core_binary_version "$core_path")" in
 		alpha-*) current_core="alpha" ;;
+		"") current_core="meta"; current_core_tag="default" ;;
 		*) current_core="meta" ;;
 	esac
 fi
 core="$CORE"
 if [ -z "$core" ] && interactive; then
-	{
-		echo "choose the core:"
-		echo "  1) Mihomo Meta   latest stable release of MetaCubeX/mihomo"
-		echo "  2) Mihomo Alpha  development build of MetaCubeX/mihomo"
-		echo "  3) Prizrak-Core  mihomo fork by legiz-ru"
-	} > /dev/tty
+	core_menu > /dev/tty
 	while [ -z "$core" ]; do
-		ask "core [1-3], Enter keeps $(core_title "$current_core"): "
+		ask "Core" "1-3, Enter keeps $(core_title "$current_core")"
 		case "$answer" in
 			"") core="$current_core" ;;
-			1|meta) core="meta" ;;
-			2|alpha) core="alpha" ;;
-			3|prizrak) core="prizrak" ;;
+			1|prizrak) core="prizrak" ;;
+			2|meta) core="meta" ;;
+			3|alpha) core="alpha" ;;
+			*) warn "choose 1, 2 or 3" ;;
 		esac
 	done
 fi
 core="${core:-$current_core}"
 case "$core" in
+	prizrak)
+		core_release="https://github.com/legiz-ru/Prizrak-Core/releases/latest/download"
+		core_asset="prizrak-core-linux-$core_arch"
+		;;
 	meta)
 		core_release="https://github.com/MetaCubeX/mihomo/releases/latest/download"
 		core_asset="mihomo-linux-$core_arch"
@@ -277,27 +335,22 @@ case "$core" in
 		core_release="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha"
 		core_asset="mihomo-linux-$core_arch"
 		;;
-	prizrak)
-		core_release="https://github.com/legiz-ru/Prizrak-Core/releases/latest/download"
-		core_asset="prizrak-core-linux-$core_arch"
-		;;
-	*) fail "unknown core: $core, use meta, alpha or prizrak" ;;
+	*) fail "unknown core: $core, use prizrak, meta or alpha" ;;
 esac
-echo "core: $(core_title "$core")"
 
 # the releases publish their version in version.txt, it is a part of the file names
 core_latest=$(curl -s -f -L -m 30 "$(gh_url "$core_release/version.txt")" 2> /dev/null | head -n 1 | tr -d '\r')
 if ! echo "$core_latest" | grep -q -E '^[A-Za-z0-9._-]+$'; then
 	fail "failed to get the latest version of $(core_title "$core") from $core_release"
 fi
-echo "latest $(core_title "$core"): $core_latest"
+info "$(core_title "$core") $core_latest"
 if [ "$core" = "meta" ]; then
 	# stable releases are in their own tag, the latest redirect does not serve the versioned file names through every gh-proxy
 	core_release="https://github.com/MetaCubeX/mihomo/releases/download/$core_latest"
 fi
 
 # download the app, the archive is small and the temp dir is on the storage of entware
-echo "download exodus ($ref)"
+step "Downloading Exodus ($ref)"
 mkdir -p "$temp_dir/app"
 download "https://github.com/$repository/archive/$ref.tar.gz" "$temp_dir/app.tar.gz" 300 && tar -xzf "$temp_dir/app.tar.gz" -C "$temp_dir/app" 2> /dev/null
 commit=$(archive_commit "$temp_dir/app.tar.gz")
@@ -306,7 +359,7 @@ src=$(find "$temp_dir/app" -mindepth 1 -maxdepth 1 -type d | head -n 1)
 if [ -z "$src" ] || [ ! -f "$src/keenetic/opt/share/exodus/exodus" ]; then
 	fail "download failed, if the provider slows down GitHub, install through gh-proxy, see README"
 fi
-echo "exodus $(cat "$src/keenetic/opt/share/exodus/VERSION")${commit:+ ($(echo "$commit" | cut -c 1-7))}"
+info "exodus $(cat "$src/keenetic/opt/share/exodus/VERSION")${commit:+ ($(echo "$commit" | cut -c 1-7))}"
 code=$(code_hash "$src")
 
 was_running=0
@@ -319,7 +372,7 @@ if [ -f "$config" ] && ! jq -e '.code // empty' "$share_dir/BUILD" > /dev/null 2
 fi
 
 # code is replaced, settings and profiles are kept
-echo "install exodus"
+step "Installing Exodus"
 rm -rf "$share_dir.new"
 mkdir -p "$share_dir.new" || fail "can not create $share_dir"
 cp -R "$src/keenetic/opt/share/exodus/." "$share_dir.new/" || fail "install failed, not enough free space?"
@@ -370,7 +423,7 @@ if [ -f "$config" ]; then
 		mv -f "$config.new" "$config"
 	else
 		rm -f "$config.new"
-		echo "warning: the config is not valid json, it is kept as is"
+		warn "the config is not valid json, it is kept as is"
 	fi
 else
 	cp -f "$src/keenetic/opt/etc/exodus/config.json" "$config"
@@ -384,10 +437,11 @@ if [ -z "$("$yq_path" --version 2> /dev/null)" ]; then
 fi
 
 # the core
+step "Installing the core"
 if [ "$current_core" != "$core" ] || [ "$(core_binary_version "$core_path")" != "$core_latest" ]; then
 	install_core "$core_release/$core_asset-$core_latest.gz"
 else
-	echo "$(core_title "$core") $core_latest is already installed"
+	info "$(core_title "$core") $core_latest is already installed"
 fi
 
 # remember the core and the gh-proxy for the next runs and the update page
@@ -402,11 +456,12 @@ fi
 
 # password of the web ui
 if [ ! -f "$home_dir/web.auth" ]; then
+	step "Setting the password of the web ui"
 	password="$PASSWORD"
 	if [ -z "$password" ] && interactive; then
 		while [ -z "$password" ]; do
 			stty -echo < /dev/tty 2> /dev/null
-			ask "password of the web ui (at least 4 characters, empty to generate): "
+			ask "password of the web ui" "at least 4 characters, empty to generate"
 			stty echo < /dev/tty 2> /dev/null
 			echo > /dev/tty
 			[ -z "$answer" ] && break
@@ -415,20 +470,21 @@ if [ ! -f "$home_dir/web.auth" ]; then
 	fi
 	if [ -z "$password" ]; then
 		password=$(head -c 32 /dev/urandom | sha256sum | cut -c 1-12)
-		echo "generated password of the web ui: $password"
+		info "generated password of the web ui: $password"
 	fi
 	printf '%s\n' "$password" | "$share_dir/exodus" passwd > /dev/null || fail "failed to set the password"
 fi
 
 # the web ui and the service run the new code
-echo "restart web ui"
+step "Restarting"
+info "web ui"
 "$share_dir/exodus" web restart
 if [ "$was_running" = 1 ] || [ "$(config_get .config.enabled)" = "true" ]; then
-	echo "restart service"
+	info "service"
 	"$share_dir/exodus" restart
 fi
 
 port=$(config_get .web.port)
 address=$(ip -o -4 addr show dev br0 2> /dev/null | awk '{ split($4, a, "/"); print a[1]; exit }')
-echo "web ui: http://${address:-<router address>}:${port:-9099}/"
-echo "success"
+step "Web UI: http://${address:-<router address>}:${port:-9099}/"
+success
