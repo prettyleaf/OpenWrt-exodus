@@ -414,6 +414,8 @@ return view.extend({
         o.value('system', 'System');
         o.value('gvisor', 'gVisor');
         o.value('mixed', 'Mixed');
+        // the ip stack of mihomo, not the architecture: the default of the core since v1.19.32
+        o.value('mips', 'Mips');
 
         o = s.taboption('tun', form.Value, 'tun_mtu', _('MTU'));
         o.datatype = 'uinteger';

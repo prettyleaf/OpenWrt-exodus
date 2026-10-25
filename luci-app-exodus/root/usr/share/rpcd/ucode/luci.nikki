@@ -287,12 +287,14 @@ const methods = {
 		}
 	},
 	update: {
-		args: { low_space: false },
+		args: { low_space: false, core: 'core' },
 		call: function(req) {
 			const low_space = req.args?.low_space ? '1' : '0';
+			// another core than the saved one is installed instead of it, empty keeps the saved one
+			const core = index(['meta', 'alpha', 'prizrak'], req.args?.core) >= 0 ? req.args.core : '';
 			// run a copy of the installer detached from rpcd, the package upgrade replaces the original
 			const command = `mkdir -p /var/log/nikki && cp -f /etc/nikki/scripts/install.sh /tmp/exodus-update.sh && ` +
-				`(LOW_SPACE=${low_space} sh -c 'echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null; exec sh /tmp/exodus-update.sh' > /var/log/nikki/update.log 2>&1 &)`;
+				`(LOW_SPACE=${low_space} CORE=${core} sh -c 'echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null; exec sh /tmp/exodus-update.sh' > /var/log/nikki/update.log 2>&1 &)`;
 			const success = system(command) == 0;
 			return { success: success };
 		}

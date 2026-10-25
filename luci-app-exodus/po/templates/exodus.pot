@@ -1,6 +1,10 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=UTF-8"
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:112
+msgid "%s will be installed instead of %s."
+msgstr ""
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:111
 msgid "API Listen"
 msgstr ""
@@ -133,6 +137,10 @@ msgstr ""
 msgid "CGroup"
 msgstr ""
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:126
+msgid "Change Core"
+msgstr ""
+
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:127
 msgid "Check for Updates"
 msgstr ""
@@ -143,6 +151,10 @@ msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:99
 msgid "Choose Profile"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:152
+msgid "Choose another core and press Change Core to install its latest build, settings and profiles are kept. The updates follow the chosen core."
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/log.js:29
@@ -1133,12 +1145,12 @@ msgstr ""
 msgid "Test Profile"
 msgstr ""
 
-#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:119
-msgid "The core and the gh-proxy chosen in the installer are kept, run the installer again to change them."
-msgstr ""
-
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:98
 msgid "The current core will be removed before the new one is installed. If the update fails, the proxy will not work until the update is done again. Continue?"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:135
+msgid "The gh-proxy chosen in the installer is kept, run the installer again to change it."
 msgstr ""
 
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/profile.js:33
@@ -1355,6 +1367,6 @@ msgstr ""
 msgid "through gh-proxy at %s"
 msgstr ""
 
-#: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/profile.js:76
-msgid "{version} is replaced with the installed app version."
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/profile.js:119
+msgid "{version} is replaced with the installed app version, {platform} with the OS of the router. When the provider does not give the subscription to Exodus/{version} {platform}, Mihomo/Exodus v{version} is tried."
 msgstr ""

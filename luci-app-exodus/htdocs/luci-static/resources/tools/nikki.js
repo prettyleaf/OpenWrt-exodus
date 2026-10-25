@@ -91,7 +91,7 @@ const callNikkiCheckUpdate = rpc.declare({
 const callNikkiUpdate = rpc.declare({
     object: 'luci.nikki',
     method: 'update',
-    params: ['low_space'],
+    params: ['low_space', 'core'],
     expect: { '': {} }
 });
 
@@ -291,8 +291,8 @@ return baseclass.extend({
         return callNikkiCheckUpdate();
     },
 
-    update: function (lowSpace) {
-        return callNikkiUpdate(lowSpace);
+    update: function (lowSpace, core) {
+        return callNikkiUpdate(lowSpace, core);
     },
 
     getUpdateLog: function () {

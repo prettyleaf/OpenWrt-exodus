@@ -22,7 +22,7 @@ Other routers have their own branches: [Keenetic / Netcraze](https://github.com/
 
 - Transparent Proxy (Redirect/TPROXY/TUN, IPv4 and/or IPv6), TCP Redirect + UDP TPROXY by default
 - Official Mihomo core: `mihomo-meta` packages the prebuilt binary from [MetaCubeX releases](https://github.com/MetaCubeX/mihomo/releases), verified by sha256
-- Choice of the core in the installer: stable Mihomo Meta, Mihomo Alpha or [Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core)
+- Choice of the core in the installer and on the update page: [Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core), stable Mihomo Meta or Mihomo Alpha
 - Installation through your own [gh-proxy](https://github.com/prettyleaf/gh-proxy) when GitHub is blocked by the provider
 - Per-device proxy selection: proxy everyone except the selected devices, or only the selected devices
 - HWID headers for subscriptions, enabled by default
@@ -46,7 +46,7 @@ The installer first checks that the router can download from GitHub, then asks w
 wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | VERSION=v1.26.1 CORE=alpha ash
 ```
 
-Installed packages can also be updated from LuCI: `Services → Exodus → Update`. It runs the same installer with the core and the gh-proxy chosen last time. On routers with little free flash enable the low flash space mode there, it removes the current core before installing the new one.
+Installed packages can also be updated from LuCI: `Services → Exodus → Update`. It runs the same installer with the core and the gh-proxy chosen last time, another core is chosen there too: `Change Core` installs its latest build. On routers with little free flash enable the low flash space mode there, it removes the current core before installing the new one.
 
 ### Versions
 

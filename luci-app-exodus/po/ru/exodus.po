@@ -8,6 +8,10 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:112
+msgid "%s will be installed instead of %s."
+msgstr "Ядро %s будет установлено вместо %s."
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:111
 msgid "API Listen"
 msgstr "Прослушивание API"
@@ -140,6 +144,10 @@ msgstr "Обход FWMark"
 msgid "CGroup"
 msgstr "CGroup"
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:126
+msgid "Change Core"
+msgstr "Сменить ядро"
+
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:127
 msgid "Check for Updates"
 msgstr "Проверить обновления"
@@ -151,6 +159,10 @@ msgstr "Выбрать файл"
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:99
 msgid "Choose Profile"
 msgstr "Выбрать профиль"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:152
+msgid "Choose another core and press Change Core to install its latest build, settings and profiles are kept. The updates follow the chosen core."
+msgstr "Выберите другое ядро и нажмите «Сменить ядро», чтобы установить его последнюю сборку. Настройки и профили сохраняются, дальше обновляется выбранное ядро."
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/log.js:29
 msgid "Clear At Stop"
@@ -1140,13 +1152,13 @@ msgstr "Тайм-аут TUN"
 msgid "Test Profile"
 msgstr "Проверить профиль"
 
-#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:119
-msgid "The core and the gh-proxy chosen in the installer are kept, run the installer again to change them."
-msgstr "Ядро и gh-proxy, выбранные в установщике, сохраняются. Чтобы изменить их, запустите установщик снова."
-
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:98
 msgid "The current core will be removed before the new one is installed. If the update fails, the proxy will not work until the update is done again. Continue?"
 msgstr "Текущее ядро будет удалено до установки нового. Если обновление не удастся, прокси не будет работать, пока обновление не выполнится заново. Продолжить?"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/update.js:135
+msgid "The gh-proxy chosen in the installer is kept, run the installer again to change it."
+msgstr "gh-proxy, выбранный в установщике, сохраняется. Чтобы изменить его, запустите установщик снова."
 
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/profile.js:33
 msgid "The proxy will be restarted and all providers will be downloaded again. Continue?"
@@ -1362,6 +1374,6 @@ msgstr "Настройки procd"
 msgid "through gh-proxy at %s"
 msgstr "через gh-proxy на %s"
 
-#: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/profile.js:76
-msgid "{version} is replaced with the installed app version."
-msgstr "{version} заменяется на установленную версию приложения."
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/profile.js:119
+msgid "{version} is replaced with the installed app version, {platform} with the OS of the router. When the provider does not give the subscription to Exodus/{version} {platform}, Mihomo/Exodus v{version} is tried."
+msgstr "{version} заменяется на установленную версию приложения, {platform} — на ОС роутера. Если провайдер не отдаёт подписку на Exodus/{version} {platform}, пробуется Mihomo/Exodus v{version}."

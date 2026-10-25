@@ -22,7 +22,7 @@
 
 - 透明代理 (Redirect/TPROXY/TUN, IPv4 和/或 IPv6)，默认 TCP Redirect + UDP TPROXY
 - 官方 Mihomo 内核：`mihomo-meta` 打包 [MetaCubeX 发行版](https://github.com/MetaCubeX/mihomo/releases) 中的预编译二进制文件，并校验 sha256
-- 安装时选择内核：稳定版 Mihomo Meta、Mihomo Alpha 或 [Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core)
+- 在安装脚本和更新页面中选择内核：[Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core)、稳定版 Mihomo Meta 或 Mihomo Alpha
 - 运营商屏蔽 GitHub 时，可通过自建的 [gh-proxy](https://github.com/prettyleaf/gh-proxy) 安装
 - 按设备选择代理：代理除所选设备外的所有设备，或仅代理所选设备
 - 订阅 HWID 请求头，默认启用
@@ -46,7 +46,7 @@ wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/insta
 wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | VERSION=v1.26.1 CORE=alpha ash
 ```
 
-已安装的软件包也可以在 LuCI 中更新：`服务 → Exodus → 更新`。该页面使用上次选择的内核和 gh-proxy 运行同一个安装脚本。闪存空间较小的路由器请在该页面启用低空间模式，它会在安装新内核之前删除当前内核。
+已安装的软件包也可以在 LuCI 中更新：`服务 → Exodus → 更新`。该页面使用上次选择的内核和 gh-proxy 运行同一个安装脚本，也可以在该页面选择其他内核：`Change Core` 会安装它的最新版本。闪存空间较小的路由器请在该页面启用低空间模式，它会在安装新内核之前删除当前内核。
 
 ### 版本
 

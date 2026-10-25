@@ -27,7 +27,8 @@ return view.extend({
         const installed = info.installed ?? {};
         const latest = info.latest ?? {};
         const core = info.core ?? {};
-        const coreTitles = { meta: 'Mihomo Meta', alpha: 'Mihomo Alpha', prizrak: 'Prizrak-Core' };
+        const coreTitles = { prizrak: 'Prizrak-Core', meta: 'Mihomo Meta', alpha: 'Mihomo Alpha' };
+        const currentCore = coreTitles[core.type] ? core.type : 'meta';
 
         let updateAvailable = false;
         const row = function (title, current, next) {
@@ -78,6 +79,11 @@ return view.extend({
         const lowSpaceSuggested = info.free_space != null && info.core_size != null && info.free_space < info.core_size * 1.2;
         const lowSpace = E('input', { type: 'checkbox', id: 'low_space', checked: lowSpaceSuggested ? '' : null });
 
+        // another core is installed by the update: the latest build of it, then the next updates follow it
+        const coreSelect = E('select', { class: 'cbi-input-select', id: 'core' }, Object.keys(coreTitles).map(function (type) {
+            return E('option', { value: type, selected: type === currentCore ? '' : null }, coreTitles[type]);
+        }));
+
         const logView = E('textarea', { class: 'cbi-input-textarea', style: 'width: 100%; font-family: monospace;', rows: 15, readonly: '', wrap: 'off' });
         logView.value = data[1] ?? '';
 
@@ -97,26 +103,36 @@ return view.extend({
 
         const updateButton = E('button', {
             class: 'btn cbi-button cbi-button-apply',
-            disabled: updateAvailable ? null : '',
             click: ui.createHandlerFn(this, function () {
-                const message = lowSpace.checked
+                const coreChanged = coreSelect.value !== currentCore;
+                let message = lowSpace.checked
                     ? _('The current core will be removed before the new one is installed. If the update fails, the proxy will not work until the update is done again. Continue?')
                     : _('The proxy will be restarted during the update. Continue?');
+                if (coreChanged) {
+                    message = `${_('%s will be installed instead of %s.').format(coreTitles[coreSelect.value], coreTitles[currentCore])} ${message}`;
+                }
                 if (!confirm(message)) {
                     return;
                 }
-                return nikki.update(lowSpace.checked).then(function () {
+                return nikki.update(lowSpace.checked, coreChanged ? coreSelect.value : '').then(function () {
                     logView.value = '';
                     poll.add(pollLog, 2);
                 });
             })
-        }, _('Update'));
+        });
+        const syncUpdateButton = function () {
+            const coreChanged = coreSelect.value !== currentCore;
+            updateButton.disabled = !updateAvailable && !coreChanged;
+            updateButton.textContent = coreChanged ? _('Change Core') : _('Update');
+        };
+        coreSelect.addEventListener('change', syncUpdateButton);
+        syncUpdateButton();
 
         return E([], [
             E('h2', {}, _('Update')),
             E('div', { class: 'cbi-map-descr' }, [
                 _('Packages are downloaded from GitHub releases of Exodus for this router and installed with the package manager. Settings, profiles and subscriptions are kept.'), ' ',
-                _('The core and the gh-proxy chosen in the installer are kept, run the installer again to change them.'), ' ',
+                _('The gh-proxy chosen in the installer is kept, run the installer again to change it.'), ' ',
                 E('a', { href: 'https://github.com/prettyleaf/openwrt-exodus#install--update', target: '_blank' }, _('How To Use'))
             ]),
             ...notes,
@@ -129,6 +145,13 @@ return view.extend({
                     `${_('Core size')}: ${formatSize(info.core_size)}`
                 ]),
                 table,
+                E('div', { class: 'cbi-value' }, [
+                    E('label', { class: 'cbi-value-title', for: 'core' }, _('Core')),
+                    E('div', { class: 'cbi-value-field' }, [
+                        coreSelect,
+                        E('div', { class: 'cbi-value-description' }, _('Choose another core and press Change Core to install its latest build, settings and profiles are kept. The updates follow the chosen core.'))
+                    ])
+                ]),
                 E('p', {}, [
                     E('label', {}, [lowSpace, ' ', _('Low flash space mode: remove the current core before installing the new one')])
                 ]),

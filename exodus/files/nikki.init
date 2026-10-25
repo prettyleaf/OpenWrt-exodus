@@ -241,7 +241,15 @@ start_service() {
 	# test profile
 	if [ "$test_profile" = 1 ]; then
 		log "Profile" "Testing..."
-		if $PROG -d "$RUN_DIR" -t >> "$CORE_LOG_PATH" 2>&1; then
+		if env \
+			GOMAXPROCS="$env_go_max_procs" \
+			GOMEMLIMIT="$env_go_mem_limit" \
+			SAFE_PATHS="$env_safe_paths" \
+			DISABLE_LOOPBACK_DETECTOR="$env_disable_loopback_detector" \
+			QUIC_GO_DISABLE_GSO="$env_disable_quic_go_gso" \
+			QUIC_GO_DISABLE_ECN="$env_disable_quic_go_ecn" \
+			SKIP_SYSTEM_IPV6_CHECK="$env_skip_system_ipv6_check" \
+			$PROG -d "$RUN_DIR" -t >> "$CORE_LOG_PATH" 2>&1; then
 			log "Profile" "Test passed."
 		else
 			log "Profile" "Test failed."
@@ -310,7 +318,7 @@ start_service() {
 	fi
 	## reload cron if needed
 	if [ "$reload_cron" = 1 ]; then
-		/etc/init.d/cron restart
+		notify_cron
 	fi
 	# set started flag
 	touch "$STARTED_FLAG_PATH"
@@ -523,8 +531,14 @@ cleanup() {
 	# delete cron
 	if grep -q "#nikki" "/etc/crontabs/root"; then
 		sed -i "/#nikki/d" "/etc/crontabs/root" > /dev/null 2>&1
-		/etc/init.d/cron restart
+		notify_cron
 	fi
+}
+
+# crond reads the crontab again when it is named in cron.update, as after crontab -e
+# a restart of cron would kill its running jobs: the scheduled restart and the subscription auto update run from cron
+notify_cron() {
+	echo "root" >> "/etc/crontabs/cron.update"
 }
 
 clear_logs() {
@@ -651,6 +665,40 @@ subscription_due() {
 	[ "$subscription_update_interval" != 0 ] && [ $((now - $(date -r "$subscription_file" +%s))) -ge $((subscription_update_interval * 3600)) ]
 }
 
+# {version} is the app version, {platform} the os of the router, the same as x-device-os
+expand_user_agent() {
+	case "$1" in
+		*"{version}"*|*"{platform}"*) echo "$1" | sed "s|{version}|$(get_app_version)|g; s|{platform}|OpenWrt|g" ;;
+		*) echo "$1" ;;
+	esac
+}
+
+# download the subscription of update_subscription with the user agent $1, the other arguments go to curl
+# succeeds when the download is a profile, sets subscription_info_file when its headers carry the subscription info
+download_subscription() {
+	local user_agent; user_agent="$1"
+	shift
+	if ! curl -s -f -m 120 --connect-timeout 15 --retry 3 -L -X GET -A "$user_agent" "$@" -D "$subscription_header_tmpfile" -o "$subscription_tmpfile" "$subscription_url" > /dev/null 2>&1; then
+		log "Profile" "Subscription download failed."
+		if grep -q -i "x-hwid-not-supported: true" "$subscription_header_tmpfile" 2>/dev/null; then
+			log "Profile" "Subscription requires HWID, enable Send HWID for this subscription."
+		fi
+		if grep -q -i "x-hwid-max-devices-reached: true" "$subscription_header_tmpfile" 2>/dev/null; then
+			log "Profile" "HWID device limit reached, remove an old device in the subscription panel."
+		fi
+		return 1
+	fi
+	log "Profile" "Subscription download successful."
+	if [ ! -f "$subscription_info_file" ] && grep -q -i "subscription-userinfo:" "$subscription_header_tmpfile"; then
+		subscription_info_file="$subscription_header_tmpfile"
+	fi
+	if ! yq -M -p yaml -o yaml -e 'has("proxies") or has("proxy-providers")' "$subscription_tmpfile" > /dev/null 2>&1; then
+		log "Profile" "Subscription is not valid."
+		return 1
+	fi
+	log "Profile" "Subscription is valid."
+}
+
 update_subscription() {
 	local subscription_section; subscription_section="$1"
 	if [ -z "$subscription_section" ]; then
@@ -659,24 +707,18 @@ update_subscription() {
 	# load config
 	config_load nikki
 	# get subscription config
-	local subscription_name subscription_info_url subscription_url subscription_user_agent subscription_send_hwid
+	local subscription_name subscription_info_url subscription_url subscription_user_agent subscription_fallback_user_agent subscription_send_hwid
 	config_get subscription_name "$subscription_section" "name"
 	config_get subscription_info_url "$subscription_section" "info_url"
 	config_get subscription_url "$subscription_section" "url"
 	config_get subscription_user_agent "$subscription_section" "user_agent"
 	config_get_bool subscription_send_hwid "$subscription_section" "send_hwid" 1
-	# replace {version} placeholder in user agent with the app version
-	case "$subscription_user_agent" in
-		*"{version}"*)
-			subscription_user_agent=$(echo "$subscription_user_agent" | sed "s|{version}|$(get_app_version)|g")
-			;;
-	esac
-	# from 1.29.0: {platform} is the os of the router, the same as x-device-os
-	# case "$subscription_user_agent" in
-	# 	*"{platform}"*)
-	# 		subscription_user_agent=$(echo "$subscription_user_agent" | sed "s|{platform}|OpenWrt|g")
-	# 		;;
-	# esac
+	# the response rules of a provider may not know the user agent of exodus yet, then the previous one is tried
+	if [ "$subscription_user_agent" = "Exodus/{version} {platform}" ]; then
+		subscription_fallback_user_agent="Mihomo/Exodus v{version}"
+	fi
+	subscription_user_agent=$(expand_user_agent "$subscription_user_agent")
+	subscription_fallback_user_agent=$(expand_user_agent "$subscription_fallback_user_agent")
 	# prepare hwid headers, positional parameters are used as extra curl arguments
 	set --
 	if [ "$subscription_send_hwid" = 1 ]; then
@@ -711,27 +753,14 @@ update_subscription() {
 	fi
 	# download subscription
 	log "Profile" "Download subscription."
-	if curl -s -f -m 120 --connect-timeout 15 --retry 3 -L -X GET -A "$subscription_user_agent" "$@" -D "$subscription_header_tmpfile" -o "$subscription_tmpfile" "$subscription_url" > /dev/null 2>&1; then
-		log "Profile" "Subscription download successful."
-		if [ ! -f "$subscription_info_file" ] && grep -q -i "subscription-userinfo:" "$subscription_header_tmpfile"; then
-			subscription_info_file="$subscription_header_tmpfile"
-		fi
-		if yq -M -p yaml -o yaml -e 'has("proxies") or has("proxy-providers")' "$subscription_tmpfile" > /dev/null 2>&1; then
-			log "Profile" "Subscription is valid."
-			success=1
-		else
-			log "Profile" "Subscription is not valid."
-			success=0
-		fi
-	else
-		log "Profile" "Subscription download failed."
-		if grep -q -i "x-hwid-not-supported: true" "$subscription_header_tmpfile" 2>/dev/null; then
-			log "Profile" "Subscription requires HWID, enable Send HWID for this subscription."
-		fi
-		if grep -q -i "x-hwid-max-devices-reached: true" "$subscription_header_tmpfile" 2>/dev/null; then
-			log "Profile" "HWID device limit reached, remove an old device in the subscription panel."
-		fi
-		success=0
+	success=0
+	if download_subscription "$subscription_user_agent" "$@"; then
+		success=1
+	elif [ -n "$subscription_fallback_user_agent" ] && [ -s "$subscription_header_tmpfile" ]; then
+		# the provider answered, but not with a profile: its response rules do not know the user agent of exodus yet
+		log "Profile" "The provider does not answer to $subscription_user_agent, try $subscription_fallback_user_agent."
+		rm -f "$subscription_header_tmpfile"
+		download_subscription "$subscription_fallback_user_agent" "$@" && success=1
 	fi
 	# check if success
 	if [ "$success" = 1 ]; then

@@ -4,16 +4,46 @@
 # downloads packages for this router directly from GitHub releases and installs them locally
 # VERSION=<tag>   install a specific release instead of the latest one
 # LOW_SPACE=1     remove the current core before installing the new one, for routers with little free flash
-# CORE=<core>     install this core without asking: meta (stable, packaged), alpha (Mihomo Alpha) or prizrak (Prizrak-Core)
+# CORE=<core>     install this core without asking: prizrak (Prizrak-Core), meta (stable, packaged) or alpha (Mihomo Alpha)
 # GH_PROXY=<url>  download from GitHub through gh-proxy (https://github.com/prettyleaf/gh-proxy), e.g. https://example.com/ghproxy/TOKEN, empty to download directly
 # the core and GH_PROXY are saved in /etc/config/nikki, the next runs and the update page use them
 
 repository="prettyleaf/openwrt-exodus"
 
+# colors only on a terminal, the update page reads the log as plain text; NO_COLOR turns them off
+c_reset='' c_bold='' c_dim='' c_step='' c_info='' c_ask='' c_warn='' c_error=''
+if [ -t 1 ] && [ "${TERM:-dumb}" != "dumb" ] && [ -z "${NO_COLOR+set}" ]; then
+	esc=$(printf '\033')
+	c_reset="${esc}[0m" c_bold="${esc}[1m" c_dim="${esc}[90m" c_step="${esc}[1;34m" c_info="${esc}[1;32m" c_ask="${esc}[1;33m" c_warn="${esc}[1;33m" c_error="${esc}[1;31m"
+fi
+
+# ==> a stage of the install
+step() {
+	printf '%s==>%s %s%s%s\n' "$c_step" "$c_reset" "$c_bold" "$1" "$c_reset"
+}
+
+# -> what the stage does or finds
+info() {
+	printf '  %s->%s %s\n' "$c_info" "$c_reset" "$1"
+}
+
+# a detail of the stage, dimmed
+note() {
+	printf '    %s%s%s\n' "$c_dim" "$1" "$c_reset"
+}
+
+warn() {
+	printf '%swarning:%s %s\n' "$c_warn" "$c_reset" "$1"
+}
+
 # the last line is "success" or starts with "error:", the update page relies on it
 fail() {
-	echo "error: $1"
+	printf '%serror:%s %s\n' "$c_error" "$c_reset" "$1"
 	exit 1
+}
+
+success() {
+	printf '%ssuccess%s\n' "$c_info" "$c_reset"
 }
 
 # the installer is usually piped into the shell, so questions are asked on the terminal
@@ -22,8 +52,9 @@ interactive() {
 	( exec < /dev/tty ) 2> /dev/null
 }
 
+# :: a question, $1 is the question and $2 the hint of the answer
 ask() {
-	printf '%s' "$1" > /dev/tty
+	printf '%s::%s %s%s%s %s> ' "$c_ask" "$c_reset" "$c_bold" "$1" "$c_reset" "${2:+[$2] }" > /dev/tty
 	answer=
 	read -r answer < /dev/tty
 }
@@ -43,6 +74,8 @@ check_github() {
 	if [ "$ret" = 0 ] && ! echo "$index" | grep -q '"packages"'; then
 		ret=1
 	fi
+	# older releases have no tag in the index
+	release_tag=$(echo "$index" | jsonfilter -q -e '@.tag' 2> /dev/null)
 	return "$ret"
 }
 
@@ -62,22 +95,41 @@ core_binary_version() {
 
 core_title() {
 	case "$1" in
+		prizrak) echo "Prizrak-Core" ;;
 		meta) echo "Mihomo Meta" ;;
 		alpha) echo "Mihomo Alpha" ;;
-		prizrak) echo "Prizrak-Core" ;;
 	esac
+}
+
+core_description() {
+	case "$1" in
+		prizrak) echo "mihomo fork by legiz-ru" ;;
+		meta) echo "latest stable release of MetaCubeX/mihomo, packaged with Exodus" ;;
+		alpha) echo "development build of MetaCubeX/mihomo" ;;
+	esac
+}
+
+# the choices of the core, numbered in the order of the list
+core_menu() {
+	local number=0 type
+	for type in prizrak meta alpha; do
+		number=$((number + 1))
+		printf '    %s%s)%s %-14s %s' "$c_bold" "$number" "$c_reset" "$(core_title "$type")" "$(core_description "$type")"
+		[ "$type" = "$current_core" ] && printf '  %s[%s]%s' "$c_info" "$current_core_tag" "$c_reset"
+		printf '\n'
+	done
 }
 
 # replace the binary of mihomo-meta with a core build from github releases
 # $1 url of the gzipped binary
 install_core() {
 	local file="$temp_dir/core.gz"
-	echo "download $1"
+	info "download ${1##*/}"
 	if ! wget -q -O "$file" "$(gh_url "$1")" || ! gzip -t "$file" 2> /dev/null; then
 		fail "core download failed"
 	fi
 	if [ "$LOW_SPACE" = 1 ]; then
-		echo "low space mode: remove current core"
+		warn "low space mode: remove current core"
 		# the running core keeps its file allocated, stop it first
 		[ -x "/etc/init.d/nikki" ] && /etc/init.d/nikki stop
 		rm -f "/usr/libexec/mihomo"
@@ -98,6 +150,7 @@ install_core() {
 		mv -f "/usr/libexec/mihomo.new" "/usr/libexec/mihomo"
 	fi
 	rm -f "$file"
+	info "$(core_title "$core") $(core_binary_version /usr/libexec/mihomo) runs on this router"
 }
 
 # check env
@@ -161,6 +214,9 @@ fi
 archive_url="$release_url/exodus_${arch}-${branch}.tar.gz"
 index_url="$release_url/exodus_${arch}-${branch}.json"
 
+step "Exodus installer"
+note "${DISTRIB_DESCRIPTION:-OpenWrt $DISTRIB_RELEASE}, $arch, $package_manager"
+
 # temp dir
 temp_dir="/tmp/exodus-install"
 rm -rf "$temp_dir"
@@ -179,7 +235,7 @@ if [ "${GH_PROXY+set}" = "set" ]; then
 else
 	routes="$saved_gh_proxy direct"
 fi
-echo "check access to github"
+step "Checking access to GitHub"
 github_status=1
 for route in $routes; do
 	gh_proxy="${route%/}"
@@ -197,23 +253,23 @@ if [ "$github_status" = 8 ]; then
 fi
 if [ "$github_status" != 0 ]; then
 	[ -n "$GH_PROXY" ] && fail "gh-proxy does not work: check the address and the token"
-	[ -n "$saved_gh_proxy" ] && echo "the saved gh-proxy does not work"
+	[ -n "$saved_gh_proxy" ] && warn "the saved gh-proxy does not work"
 	# jsDelivr tells a blocked github from a router without internet, it does not serve release files, so it can not replace github
 	if wget -q -T 15 -O /dev/null "https://cdn.jsdelivr.net/gh/$repository@main/install.sh" 2> /dev/null; then
-		echo "github.com is unreachable, but cdn.jsdelivr.net is reachable: GitHub is blocked by the provider"
+		warn "github.com is unreachable, but cdn.jsdelivr.net is reachable: GitHub is blocked by the provider"
 	else
-		echo "github.com and cdn.jsdelivr.net are unreachable: check the internet connection and DNS of the router, or the provider blocks both"
+		warn "github.com and cdn.jsdelivr.net are unreachable: check the internet connection and DNS of the router, or the provider blocks both"
 	fi
-	echo "packages and cores are published only in GitHub releases, jsDelivr does not serve them"
-	echo "deploy gh-proxy on a server with access to GitHub and install through it: https://github.com/prettyleaf/gh-proxy"
+	note "packages and cores are published only in GitHub releases, jsDelivr does not serve them"
+	note "deploy gh-proxy on a server with access to GitHub and install through it: https://github.com/prettyleaf/gh-proxy"
 	interactive || fail "github is unreachable, run the installer with GH_PROXY=https://<gh-proxy address>/<token>, see README"
 	for attempt in 1 2 3; do
-		ask "gh-proxy address with the token, e.g. https://example.com/ghproxy/TOKEN (empty to exit): "
+		ask "gh-proxy address with the token" "https://example.com/ghproxy/TOKEN, empty to exit"
 		[ -z "$answer" ] && break
 		case "$answer" in
 			http://*|https://*) ;;
 			*)
-				echo "the address must start with https://"
+				warn "the address must start with https://"
 				continue
 				;;
 		esac
@@ -223,49 +279,49 @@ if [ "$github_status" != 0 ]; then
 			save_gh_proxy=1
 			break
 		fi
-		echo "gh-proxy does not work: check the address and the token"
+		warn "gh-proxy does not work: check the address and the token"
 	done
 	[ "$github_status" = 0 ] || fail "github is unreachable"
 fi
 if [ -n "$gh_proxy" ]; then
 	# the token is a part of the address, only the host is shown
 	gh_proxy_host="${gh_proxy#*://}"
-	echo "download through gh-proxy at ${gh_proxy_host%%/*}"
+	info "through gh-proxy at ${gh_proxy_host%%/*}${release_tag:+, release $release_tag}"
+else
+	info "directly${release_tag:+, release $release_tag}"
 fi
 
 # choose the core: meta is the mihomo-meta package, alpha and prizrak replace its binary with a build from github releases
 # the current core is saved in the config, the alpha core installed by hand is detected by its version
+step "Choosing the core"
 current_core=$(uci -q get nikki.update.core)
+current_core_tag="current"
 if [ -z "$current_core" ]; then
 	case "$(core_binary_version /usr/libexec/mihomo)" in
 		alpha-*) current_core="alpha" ;;
+		"") current_core="meta"; current_core_tag="default" ;;
 		*) current_core="meta" ;;
 	esac
 fi
 core="$CORE"
 if [ -z "$core" ] && interactive; then
-	{
-		echo "choose the core:"
-		echo "  1) Mihomo Meta   latest stable release of MetaCubeX/mihomo, packaged with Exodus"
-		echo "  2) Mihomo Alpha  development build of MetaCubeX/mihomo"
-		echo "  3) Prizrak-Core  mihomo fork by legiz-ru"
-	} > /dev/tty
+	core_menu > /dev/tty
 	while [ -z "$core" ]; do
-		ask "core [1-3], Enter keeps $(core_title "$current_core"): "
+		ask "Core" "1-3, Enter keeps $(core_title "$current_core")"
 		case "$answer" in
 			"") core="$current_core" ;;
-			1|meta) core="meta" ;;
-			2|alpha) core="alpha" ;;
-			3|prizrak) core="prizrak" ;;
+			1|prizrak) core="prizrak" ;;
+			2|meta) core="meta" ;;
+			3|alpha) core="alpha" ;;
+			*) warn "choose 1, 2 or 3" ;;
 		esac
 	done
 fi
 core="${core:-$current_core}"
 case "$core" in
-	meta|alpha|prizrak) ;;
-	*) fail "unknown core: $core, use meta, alpha or prizrak" ;;
+	prizrak|meta|alpha) ;;
+	*) fail "unknown core: $core, use prizrak, meta or alpha" ;;
 esac
-echo "core: $(core_title "$core")"
 
 # find the latest build of an alternative core before anything is changed, the releases publish its version in version.txt
 if [ "$core" != "meta" ]; then
@@ -281,21 +337,24 @@ if [ "$core" != "meta" ]; then
 	if ! echo "$core_latest" | grep -q -E '^[A-Za-z0-9._-]+$'; then
 		fail "failed to get the latest version of $(core_title "$core") from $core_release"
 	fi
-	echo "latest $(core_title "$core"): $core_latest"
+	info "$(core_title "$core") $core_latest"
+else
+	info "$(core_title "$core"), the mihomo-meta package of the release"
 fi
 
 # remove legacy upstream feed, otherwise the package manager may replace these packages with upstream ones
+step "Downloading Exodus${release_tag:+ $release_tag}"
 if [ -f "/etc/opkg/customfeeds.conf" ] && grep -q "nikkinikki" "/etc/opkg/customfeeds.conf"; then
-	echo "remove legacy upstream feed"
+	info "remove legacy upstream feed"
 	sed -i '/nikkinikki/d' "/etc/opkg/customfeeds.conf"
 fi
 if [ -f "/etc/apk/repositories.d/customfeeds.list" ] && grep -q "nikkinikki" "/etc/apk/repositories.d/customfeeds.list"; then
-	echo "remove legacy upstream feed"
+	info "remove legacy upstream feed"
 	sed -i '/nikkinikki/d' "/etc/apk/repositories.d/customfeeds.list"
 fi
 
 # download and extract packages, streamed to avoid keeping the archive in ram
-echo "download $archive_url"
+info "download ${archive_url##*/}"
 wget -q -O - "$(gh_url "$archive_url")" | tar -x -z -f - -C "$temp_dir"
 if ! ls "$temp_dir"/exodus[_-][0-9]* > /dev/null 2>&1; then
 	fail "download failed, if the provider slows down GitHub, install through gh-proxy, see README"
@@ -309,7 +368,8 @@ if [ "$core" != "meta" ] && [ -n "$meta_version" ]; then
 fi
 
 # update feeds for dependencies, collect packages to install and legacy nikki packages to replace
-echo "update feeds"
+step "Installing packages"
+info "update feeds"
 if [ "$package_manager" = "opkg" ]; then
 	opkg update
 	languages=$(opkg list-installed 'luci-i18n-base-*' | cut -d ' ' -f 1 | cut -d '-' -f 4-)
@@ -338,7 +398,7 @@ fi
 # shellcheck disable=SC2086
 legacy_packages=$(echo $legacy_packages)
 if [ -n "$legacy_packages" ]; then
-	echo "replace legacy packages: $legacy_packages"
+	info "replace legacy packages: $legacy_packages"
 	[ -f "/etc/config/nikki" ] && cp -f "/etc/config/nikki" "$temp_dir/config.bak"
 	[ -f "/etc/nikki/mixin.yaml" ] && cp -f "/etc/nikki/mixin.yaml" "$temp_dir/mixin.yaml.bak"
 	if [ "$package_manager" = "opkg" ]; then
@@ -360,10 +420,10 @@ fi
 
 # mihomo-alpha is no longer shipped and conflicts with mihomo-meta, replace it
 if [ "$package_manager" = "opkg" ] && opkg list-installed mihomo-alpha | grep -q "^mihomo-alpha"; then
-	echo "replace mihomo-alpha with mihomo-meta"
+	info "replace mihomo-alpha with mihomo-meta"
 	opkg remove --force-depends mihomo-alpha
 elif [ "$package_manager" = "apk" ] && apk list -I mihomo-alpha 2>/dev/null | grep -q "^mihomo-alpha"; then
-	echo "replace mihomo-alpha with mihomo-meta"
+	info "replace mihomo-alpha with mihomo-meta"
 	apk del mihomo-alpha
 fi
 
@@ -379,7 +439,7 @@ if [ "$LOW_SPACE" = 1 ] && [ "$update_meta" = 1 ] && [ -f "/usr/libexec/mihomo" 
 		new_core_version=${new_core_version%.apk}
 	fi
 	if [ -n "$new_core_version" ] && [ "$meta_version" != "$new_core_version" ]; then
-		echo "low space mode: remove current core $meta_version"
+		warn "low space mode: remove current core $meta_version"
 		# the running core keeps its file allocated, stop it first
 		[ -x "/etc/init.d/nikki" ] && /etc/init.d/nikki stop
 		rm -f "/usr/libexec/mihomo"
@@ -390,7 +450,7 @@ fi
 # the packages of the release are installed whatever version is installed: VERSION may choose an older release,
 # and exodus had versions by date (2026.04.08) before it took the versions of the releases
 # apk installs the given files as they are, opkg needs --force-downgrade for it
-echo "install packages"
+info "install $(echo "$packages" | tr ' ' '\n' | sed -n 's|.*/||p' | tr '\n' ' ')"
 if [ "$package_manager" = "opkg" ]; then
 	# shellcheck disable=SC2086
 	opkg install --force-downgrade $packages || fail "install failed"
@@ -401,6 +461,7 @@ fi
 
 # install the chosen core, the packages are installed, free the ram for the core download
 rm -f "$temp_dir"/*.ipk "$temp_dir"/*.apk
+step "Installing the core"
 new_meta_version=$(package_version mihomo-meta)
 if [ "$core" = "meta" ]; then
 	# mihomo-meta writes its binary only when the package version changes, restore it after another core or a failed update
@@ -408,11 +469,13 @@ if [ "$core" = "meta" ]; then
 		[ -n "$core_arch" ] || fail "no Mihomo Meta build for $arch"
 		meta_release=${new_meta_version%-r*}
 		install_core "https://github.com/MetaCubeX/mihomo/releases/download/v$meta_release/mihomo-linux-$core_arch-v$meta_release.gz"
+	else
+		info "$(core_title "$core") $(core_binary_version /usr/libexec/mihomo) of the mihomo-meta package"
 	fi
 elif [ "$current_core" != "$core" ] || [ "$new_meta_version" != "$meta_version" ] || [ "$(core_binary_version /usr/libexec/mihomo)" != "$core_latest" ]; then
 	install_core "$core_release/$core_asset-$core_latest.gz"
 else
-	echo "$(core_title "$core") $core_latest is already installed"
+	info "$(core_title "$core") $core_latest is already installed"
 fi
 
 # remember the core and the gh-proxy for the next runs and the update page
@@ -429,8 +492,8 @@ uci -q commit nikki
 
 # restart to run the new core
 if [ -x "/etc/init.d/nikki" ]; then
-	echo "restart service"
+	step "Restarting the service"
 	/etc/init.d/nikki restart
 fi
 
-echo "success"
+success
