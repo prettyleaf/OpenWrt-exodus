@@ -151,16 +151,18 @@ action_load() {
 
 # the whole config is replaced by the one of the web ui, it keeps the keys it does not know
 action_config_set() {
-	local tmp apply hwid old_port new_port
+	local tmp apply hwid update old_port new_port
 	tmp="$CONFIG_PATH.web"
 	if ! jq -e '(.config | type == "object") and (.config.config | type == "object") and (.config.proxy | type == "object") and (.config.mixin | type == "object")' "$req" > /dev/null 2>&1; then
 		fail "400 Bad Request" "invalid config"
 	fi
 	old_port=$(cfg_get .web.port)
 	lock_acquire config || fail "503 Service Unavailable" "config is locked"
-	# the hwid is not changed from the web ui, the saved one stays
+	# the hwid is not changed from the web ui, the saved one stays; the updates section belongs to the installer and the updates page
 	hwid=$(cfg_get .config.hwid)
-	if jq --arg hwid "$hwid" '.config | .config.hwid = $hwid' "$req" > "$tmp" && [ -s "$tmp" ]; then
+	update=$(jq -c '.update // {}' "$CONFIG_PATH" 2> /dev/null)
+	[ -n "$update" ] || update='{}'
+	if jq --arg hwid "$hwid" --argjson update "$update" '.config | .config.hwid = $hwid | .update = $update' "$req" > "$tmp" && [ -s "$tmp" ]; then
 		mv -f "$tmp" "$CONFIG_PATH"
 	else
 		rm -f "$tmp"
@@ -415,16 +417,31 @@ latest_code() {
 	rm -rf "$dir"
 }
 
-# there is no versioning of the branch: exodus is up to date when its code equals the code of the branch
+# the version of the latest release of the project, like 1.30.0: version.txt of the release,
+# or the tag github redirects /releases/latest to, for releases without version.txt; gh-proxy answers only the first
+latest_release() {
+	local version
+	version=$(curl -s -f -L --connect-timeout 15 -m 30 "$(gh_url "https://github.com/$REPOSITORY/releases/latest/download/version.txt")" 2> /dev/null | head -n 1 | tr -d '\r')
+	if ! echo "$version" | grep -q -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' && [ -z "$(cfg_get .update.gh_proxy)" ]; then
+		version=$(curl -s -I -o /dev/null --connect-timeout 15 -m 30 -w '%{redirect_url}' "https://github.com/$REPOSITORY/releases/latest" 2> /dev/null)
+		version="${version##*/}"
+	fi
+	echo "$version" | grep -q -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' && echo "${version#v}"
+}
+
+# the channel of the updates of exodus: release (by default) offers a release of the project with a higher version,
+# dev offers every change of the code of the branch, exodus is up to date when its code equals the code of the branch
 # github is asked at most every 6 hours, force asks now; failed checks are not kept
 action_check_update() {
-	local core_type release build ref cache now latest app core_latest free core_size proxy_host
+	local core_type release build channel ref cache now latest app core_latest free core_size proxy_host
 	core_type=$(cfg_get .update.core)
 	case "$core_type" in
 		alpha) release="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha" ;;
 		prizrak) release="https://github.com/legiz-ru/Prizrak-Core/releases/latest/download" ;;
 		*) core_type=meta; release="https://github.com/MetaCubeX/mihomo/releases/latest/download" ;;
 	esac
+	channel=$(cfg_get .update.channel)
+	[ "$channel" = dev ] || channel=release
 	build=$(cat "$BUILD_PATH" 2> /dev/null)
 	printf '%s' "$build" | jq -e 'type == "object"' > /dev/null 2>&1 || build='{}'
 	ref=$(printf '%s' "$build" | jq -r '.ref // empty')
@@ -433,16 +450,22 @@ action_check_update() {
 	now=$(date +%s)
 	latest=
 	if [ "$(arg force)" != "true" ]; then
-		latest=$(jq -c --arg core "$core_type" --arg ref "$ref" --argjson now "$now" \
-			'select(.core_type == $core and .ref == $ref and ($now - .time) < 21600 and ($now - .time) >= 0)' "$cache" 2> /dev/null)
+		latest=$(jq -c --arg core "$core_type" --arg channel "$channel" --arg ref "$ref" --argjson now "$now" \
+			'select(.core_type == $core and .channel == $channel and .ref == $ref and ($now - .time) < 21600 and ($now - .time) >= 0)' "$cache" 2> /dev/null)
 	fi
 	if [ -z "$latest" ]; then
-		app=$(latest_code "$ref")
+		if [ "$channel" = release ]; then
+			# the version, no commit and no code: the release is compared by its version
+			app=$(latest_release)
+			[ -z "$app" ] || app="$app||"
+		else
+			app=$(latest_code "$ref")
+		fi
 		core_latest=$(curl -s -f -L -m 20 "$(gh_url "$release/version.txt")" 2> /dev/null | head -n 1 | tr -d '\r')
 		echo "$core_latest" | grep -q -E '^[A-Za-z0-9._-]+$' || core_latest=
-		latest=$(printf '%s' "$app" | jq -R -s -c --argjson time "$now" --arg core "$core_type" --arg ref "$ref" --arg core_latest "$core_latest" '
+		latest=$(printf '%s' "$app" | jq -R -s -c --argjson time "$now" --arg core "$core_type" --arg channel "$channel" --arg ref "$ref" --arg core_latest "$core_latest" '
 			split("|") as $a
-			| {time: $time, core_type: $core, ref: $ref, app_latest: ($a[0] // ""), app_latest_commit: ($a[1] // ""), app_latest_code: ($a[2] // ""), core_latest: $core_latest}')
+			| {time: $time, channel: $channel, core_type: $core, ref: $ref, app_latest: ($a[0] // ""), app_latest_commit: ($a[1] // ""), app_latest_code: ($a[2] // ""), core_latest: $core_latest}')
 		if [ -n "$app" ] && [ -n "$core_latest" ]; then
 			printf '%s\n' "$latest" > "$cache"
 		fi
@@ -455,15 +478,19 @@ action_check_update() {
 		--argjson build "$build" \
 		--arg app "$(app_version)" \
 		--arg core_type "$core_type" \
+		--arg channel "$channel" \
 		--arg core "$(core_version)" \
 		--arg arch "$(entware_arch)" \
 		--arg free "$free" \
 		--arg core_size "$core_size" \
 		--arg gh_proxy "$proxy_host" \
 		'def text: if . == null or . == "" then null else . end;
+		def ver: tostring | ltrimstr("v") | split(".") | map(tonumber? // 0);
 		{app: $app, app_commit: ($build.commit | text), app_latest: ($latest.app_latest | text), app_latest_commit: ($latest.app_latest_commit | text),
+		  channel: $channel,
 		  app_update: (
-			if ($latest.app_latest_code // "") == "" then null
+			if $channel == "release" then (if ($latest.app_latest // "") == "" then null else ($latest.app_latest | ver) > ($app | ver) end)
+			elif ($latest.app_latest_code // "") == "" then null
 			elif ($build.code // "") != "" then $build.code != $latest.app_latest_code
 			elif ($build.commit // "") != "" and ($latest.app_latest_commit // "") != "" then $build.commit != $latest.app_latest_commit
 			else true end),
@@ -491,6 +518,18 @@ action_about() {
 		'{app: $app, ref: ($build.ref // $branch), commit: ($build.commit // ""), installed: ($build.installed // $installed),
 		  repository: $repository, core: $core, core_type: (if $core_type == "" then "meta" else $core_type end),
 		  model: ($router.model // $router.device // ""), firmware: ($router.title // $router.release // ""), arch: $arch}' | ok
+}
+
+# the channel of the updates of exodus, saved at once from the updates page
+action_update_channel() {
+	local channel
+	channel=$(arg channel)
+	case "$channel" in
+		release|dev) ;;
+		*) fail "400 Bad Request" "unknown channel" ;;
+	esac
+	cfg_update '.update.channel = $channel' --arg channel "$channel" || fail "503 Service Unavailable" "config is locked"
+	echo '{"success": true}' | ok
 }
 
 action_update() {
@@ -610,6 +649,7 @@ case "$action" in
 	check_update) action_check_update ;;
 	about) action_about ;;
 	update) action_update ;;
+	update_channel) action_update_channel ;;
 	update_dashboard) action_update_dashboard ;;
 	password) action_password ;;
 	*) fail "400 Bad Request" "unknown action" ;;

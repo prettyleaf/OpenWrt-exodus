@@ -43,7 +43,7 @@ ensure_config() {
 	if [ "$(cfg_get .config.user_agent_migrated)" != "true" ]; then
 		cfg_update '.subscriptions |= map(if .user_agent == "Mihomo/Exodus v{version}" then .user_agent = "Exodus/{version} {platform}" else . end) | .config.user_agent_migrated = true'
 	fi
-	# the log level of the core became silent by default: existing configs get it once, another one can be chosen in Settings
+	# since 1.30.0: the log level of the core is silent by default, existing configs get it once, another one can be chosen in Settings
 	if [ "$(cfg_get .config.log_level_migrated)" != "true" ]; then
 		cfg_update '.mixin.log_level = "silent" | .config.log_level_migrated = true'
 	fi

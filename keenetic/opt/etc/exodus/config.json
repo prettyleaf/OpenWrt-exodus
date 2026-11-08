@@ -58,7 +58,8 @@
   },
   "update": {
     "core": "meta",
-    "gh_proxy": ""
+    "gh_proxy": "",
+    "channel": "release"
   },
   "log": {
     "clear_at_stop": true,

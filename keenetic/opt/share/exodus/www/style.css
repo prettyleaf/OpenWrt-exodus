@@ -2045,3 +2045,22 @@ body.dirty .toaster {
         transition-duration: 0.01ms !important;
     }
 }
+
+/* the updates page: where exodus comes from in one line, the channel, the core and the low space mode in a row */
+.update-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 20px;
+    font-size: 13px;
+}
+
+.update-controls {
+    align-items: end;
+}
+
+/* a switch as the control of a field, as high as a select */
+.control-line {
+    display: flex;
+    align-items: center;
+    min-height: 36px;
+}
