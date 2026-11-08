@@ -109,7 +109,8 @@ exodus update_subscription <id>   # download a subscription, the running core ge
 exodus hard_update     # remove downloaded providers, update the subscription and restart
 exodus debug           # report for an issue, server addresses and passwords are hidden
 exodus web restart     # restart the web UI
-exodus passwd          # change the password of the web UI, empty turns it off
+exodus passwd          # change the password of the web UI
+exodus passwd -d       # remove the password, the web UI opens without login
 ```
 
 ## Files
