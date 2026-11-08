@@ -3,7 +3,7 @@
 #   /tool fetch url="https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/mikrotik/install.rsc" dst-path=exodus-install.rsc; /import exodus-install.rsc
 # options are global variables set before the import, for example :global exodusDisk "usb1"
 #   exodusDisk      the disk of the container (usb1, nvme1, sata1...), the first ext4 disk by default
-#   exodusPassword  the password of the web ui on the first install, generated otherwise
+#   exodusPassword  the password of the web ui on the first install, at least 4 characters; without it the web ui opens without login
 #   exodusNetwork   the first three numbers of the /30 network of the container, 172.31.255 by default
 #   exodusIPv6      yes gives the container an IPv6 address (fd65:786f:6475::2), no by default
 #   exodusLanList   the interface list of the local network, LAN by default
@@ -38,6 +38,9 @@
 :if ([:len $exodusNetwork] > 0) do={ :set net $exodusNetwork }
 :if ([:len $exodusLanList] > 0) do={ :set lan $exodusLanList }
 :if ($exodusIPv6 = "yes" || $exodusIPv6 = true) do={ :set v6 true }
+:if ([:len $exodusPassword] > 0 && [:len $exodusPassword] < 4) do={
+	:error "error: exodusPassword needs at least 4 characters, leave it empty for no password"
+}
 :local rip ($net . ".1")
 :local cip ($net . ".2")
 
@@ -254,9 +257,9 @@ $addEnv $appName "ROS_LAN_LIST" $lan
 :if ([:len $tz] > 0 && $tz != "manual") do={ $addEnv $appName "TZ" $tz }
 :if ([:len $exodusGhProxy] > 0) do={ $addEnv $appName "GH_PROXY" $exodusGhProxy }
 :local webPassword ""
-:if ($firstInstall) do={
+# without a password the web ui opens without login
+:if ($firstInstall && [:len $exodusPassword] > 0) do={
 	:set webPassword $exodusPassword
-	:if ([:len $webPassword] < 4) do={ :set webPassword [:rndstr length=12 from="abcdefghijkmnopqrstuvwxyz23456789"] }
 	$addEnv $appName "PASSWORD" $webPassword
 }
 
@@ -333,7 +336,11 @@ $addEnv $appName "ROS_LAN_LIST" $lan
 :if ([:len $webPassword] > 0) do={
 	:put ("password of the web ui: " . $webPassword)
 } else={
-	:put "the password of the web ui is kept, reset it with: /container shell exodus cmd=\"exodus passwd\""
+	:if ($firstInstall) do={
+		:put "no password of the web ui, it opens without login: set the password in Settings or with /container shell exodus cmd=\"exodus passwd\""
+	} else={
+		:put "the password of the web ui is kept, reset it with: /container shell exodus cmd=\"exodus passwd\""
+	}
 }
 :put "logs: /log print where topics~\"container\""
 :put "success"

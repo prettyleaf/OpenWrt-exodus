@@ -190,6 +190,51 @@ install_yq() {
 	rm -rf "$temp_dir/yq"
 }
 
+# print a line as if it is typed, 12 characters at a time: each pause forks sleep, so the steps are few
+type_line() {
+	local rest="$1" chunk
+	while [ -n "$rest" ]; do
+		chunk="${rest%"${rest#????????????}"}"
+		[ -z "$chunk" ] && chunk="$rest"
+		rest="${rest#"$chunk"}"
+		printf '%s' "$chunk"
+		sleep 0.015
+	done
+	printf '\n'
+}
+
+# the welcome banner, only on a terminal: the update page shows the log as plain text
+banner() {
+	local line
+	step "Welcome to"
+	# typing needs fractional sleep, busybox may be built without it
+	if sleep 0.01 2> /dev/null; then
+		while IFS= read -r line; do
+			type_line "$line"
+		done
+	else
+		cat
+	fi << 'EOF'
+
+  :#@@@@@@@@@@@@@@@@@@@@@@#. #@@@@%-.         .-%@@@#:
+  :#@@@@@@@@@@@@@@@@@@@@@@%. #@@@@@@#:.     .:#@@@@@%:
+  .*@@@@@@@@@@@@@@@@@@@@@@%. #@@@@@@@@*:   .*@@@@@@@+.
+   .-%@@@@@@@@------------:. .=%@@@@@@@@+. .@@@@@@*:.
+     .=%@@@@@@@+::::::::::.    .+@@@@@@@@%=:@@@@#-.
+  .-===*@@@@@@@@@@@@@@@@@@%.    .:*@@@@@@@@@#--:.
+  :#@@@@#-*@@@@@@@@@@@@@@@%.      .-#@@@@@@@@%-.
+  :#@@@@#: :#@@@@@@@@@@@@@%.     ..::*@@@@@@@@@#:.
+  :#@@@@#:   ..............    ..+@@@@++%@@@@@@@@*:
+  .*%%%%%=:::::::::::::::::.  .=@@@@@@-..+@@@@@@@@@+.
+        =%@@@@@@@@@@@@@@@@%. -%@@@@@@%:   .#@@@@@@@@#:
+        -%@@@@@@@@@@@@@@@@%. #@@@@@%=.      :%@@@@@@%:
+        -%@@@@@@@@@@@@@@@@%. #@@@@+.         .-%@@@@#:
+
+EOF
+}
+
+[ -t 1 ] && banner
+
 step "Exodus for MikroTik installer"
 
 # check env

@@ -54,7 +54,7 @@ The installer:
 - sets `registry-url` of `/container/config` to `https://ghcr.io` and pulls `prettyleaf/exodus-mikrotik:latest`;
 - creates the container with the mount `<disk>/exodus/data` → `/opt/etc/exodus` and starts it, autostart with the router is on.
 
-At the end it prints the password of the web UI. The web UI is at `http://<router address>:9099/` (the container forwards the port from the addresses of the router on the interface list `LAN`) and at `http://172.31.255.2:9099/`.
+Without `exodusPassword` the web UI opens without login, the password can be set later in its Settings. The web UI is at `http://<router address>:9099/` (the container forwards the port from the addresses of the router on the interface list `LAN`) and at `http://172.31.255.2:9099/`.
 
 Options are global variables set before the import:
 
@@ -65,7 +65,7 @@ Options are global variables set before the import:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `exodusDisk` | the first ext4 disk | the disk of the container: `usb1`, `nvme1`, `sata1` |
-| `exodusPassword` | generated | the password of the web UI on the first install |
+| `exodusPassword` | none | the password of the web UI on the first install, at least 4 characters; without it the web UI opens without login |
 | `exodusLanList` | `LAN` | the interface list of the local network |
 | `exodusNetwork` | `172.31.255` | the /30 network of the container |
 | `exodusIPv6` | `no` | `yes` gives the container `fd65:786f:6475::2/64` and NAT66 for it, IPv6 is proxied then |
@@ -129,7 +129,7 @@ exodus update_subscription <id>   # download a subscription, the running core ge
 exodus hard_update     # remove downloaded providers, update the subscription and restart
 exodus debug           # report for an issue, server addresses and passwords are hidden
 exodus web restart     # restart the web UI
-exodus passwd          # change the password of the web UI
+exodus passwd          # change the password of the web UI, empty turns it off
 ```
 
 Logs of the container in RouterOS: `/log print where topics~"container"`.
