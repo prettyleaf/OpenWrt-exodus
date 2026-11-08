@@ -15,6 +15,8 @@ The profile for startup is built from three layers, each next one wins over the 
 2. **[Mixin file](#mixin-file)** — your Mihomo options.
 3. **Exodus settings** — the [Settings](/en/usage/settings/) page on Keenetic and Asus, [Advanced → Mixin Option](/en/usage/luci/#advanced) in LuCI on OpenWrt. An empty option keeps the value of the profile.
 
+The exception is the log level (`log-level`): by default the settings put `silent` over the profile, but a `log-level` in the mixin file wins. On OpenWrt when the mixin file is enabled (Mixin File Content → Enable).
+
 Then Exodus adds what the interception can not work without, see [what Exodus sets itself](#what-exodus-sets-itself). The result is the profile for startup `run/config.yaml`. It can be viewed on the Editor page, it is read only and rewritten on every start.
 
 How the layers are merged:
@@ -63,7 +65,7 @@ The mode (`mode`), `ipv6` and the DNS mode (`dns.enhanced-mode`) are not set by 
 </TabItem>
 <TabItem label="OpenWrt">
 
-The options of Advanced → Mixin Option win over the mixin file. An empty option keeps the value of the profile.
+The options of Advanced → Mixin Option win over the mixin file, except the log level: a `log-level` of the enabled mixin file wins. An empty option keeps the value of the profile.
 
 The Overwrite flags (Overwrite Hosts, Overwrite Nameserver, Overwrite Nameserver Policy, Overwrite Fake-IP Filter, Overwrite Authentication, Overwrite DNS Hijack and the flags of the sniffer): a flag that is on replaces the value of the profile with the list from LuCI, a flag that is off keeps the value of the profile as it is.
 

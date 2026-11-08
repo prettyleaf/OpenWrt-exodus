@@ -44,7 +44,7 @@ opkg update && opkg install curl
 curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/keenetic/install.sh | sh
 ```
 
-The installer installs Entware packages, checks access to GitHub, asks for the [core](/en/install/options/#core) and the password of the web UI, downloads Mihomo and yq into `/opt/libexec/exodus`. At the end it prints the address of the [web UI](/en/usage/web-ui/), `http://192.168.1.1:9099/` by default.
+The installer installs Entware packages, checks access to GitHub, asks for the [core](/en/install/options/#core) and the password of the web UI (optional: Enter without a password leaves the UI without a login), downloads Mihomo and yq into `/opt/libexec/exodus`. At the end it prints the address of the [web UI](/en/usage/web-ui/), `http://192.168.1.1:9099/` by default.
 
 To update, run the same command or use the **Updates** page of the web UI. Installer options (core, password, gh-proxy) are on the [Installer options](/en/install/options/) page.
 

@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/keenetic/
 <TabItem label="Asus">
 
 ```shell
-curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/asuswrt/install.sh | CORE=alpha PASSWORD=secret sh
+curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/asuswrt/install.sh | CORE=alpha sh
 ```
 
 </TabItem>
@@ -39,7 +39,7 @@ curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/asuswrt/i
 | `GH_PROXY` | all | address of [gh-proxy](#if-github-is-blocked) with the token, e.g. `https://example.com/ghproxy/TOKEN`; `GH_PROXY=` goes back to direct downloads |
 | `LOW_SPACE=1` | all | remove the current core before installing the new one when there is little free space |
 | `VERSION` | OpenWrt | a release instead of the latest one, e.g. `v1.26.1` |
-| `PASSWORD` | Keenetic, Asus | password of the web UI on the first install, otherwise it is asked or generated |
+| `PASSWORD` | Keenetic | password of the web UI on the first install, at least 4 characters. Without it the installer asks for one, Enter without a password leaves the web UI without a login |
 | `REF` | Keenetic, Asus | a branch or a tag instead of `keenetic` / `asuswrt` |
 
 The chosen core and gh-proxy are saved (`/etc/config/nikki` on OpenWrt, `/opt/etc/exodus/config.json` on Keenetic and Asus): the next runs of the installer and the update page use them.

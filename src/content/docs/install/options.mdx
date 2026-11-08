@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/keenetic/
 <TabItem label="Asus">
 
 ```shell
-curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/asuswrt/install.sh | CORE=alpha PASSWORD=secret sh
+curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/asuswrt/install.sh | CORE=alpha sh
 ```
 
 </TabItem>
@@ -39,7 +39,7 @@ curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/asuswrt/i
 | `GH_PROXY` | все | адрес [gh-proxy](#если-github-заблокирован) с токеном, например `https://example.com/ghproxy/TOKEN`; `GH_PROXY=` — снова скачивать напрямую |
 | `LOW_SPACE=1` | все | удалить текущее ядро перед установкой нового, если на накопителе мало места |
 | `VERSION` | OpenWrt | релиз вместо последнего, например `v1.26.1` |
-| `PASSWORD` | Keenetic, Asus | пароль веб-интерфейса при первой установке, иначе он спрашивается или генерируется |
+| `PASSWORD` | Keenetic | пароль веб-интерфейса при первой установке, не короче 4 символов. Без него установщик спрашивает пароль, Enter без пароля — веб-интерфейс без входа |
 | `REF` | Keenetic, Asus | ветка или тег вместо `keenetic` / `asuswrt` |
 
 Выбранные ядро и gh-proxy сохраняются (`/etc/config/nikki` на OpenWrt, `/opt/etc/exodus/config.json` на Keenetic и Asus): следующие запуски установщика и страница обновлений используют их.

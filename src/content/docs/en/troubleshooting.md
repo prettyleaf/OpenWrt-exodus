@@ -45,7 +45,7 @@ With Test Profile on, the core checks the profile before the start: the reason o
 
 ## The web UI does not open or the password is forgotten
 
-`exodus web restart` restarts the web UI, `exodus passwd` changes the password. The port of the web UI is on Settings → Service (9099 by default).
+`exodus web restart` restarts the web UI, `exodus passwd` changes the password, `exodus passwd -d` removes it and the UI opens without a login (Keenetic and MikroTik). The port of the web UI is on Settings → Service (9099 by default).
 
 ## A subscription is not updated
 

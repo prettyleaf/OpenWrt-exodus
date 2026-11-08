@@ -49,7 +49,7 @@ Options merged over the profile. Mode, DNS mode and IPv6 always come from the pr
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| Log level | from profile | `silent`, `error`, `warning`, `info`, `debug` |
+| Log level | `silent` | `silent`, `error`, `warning`, `info`, `debug`; empty takes it from the profile. A `log-level` in the [mixin file](/en/usage/overrides/#mixin-file) wins over this option. Since 1.30.0 an update switches the level to `silent` once, it can be changed after that |
 | Outbound interface | automatic | Linux name of the interface for the connections of the core: `ppp0`, `eth3`, `nwg0` and so on |
 | Memory limit | half of RAM | `GOMEMLIMIT`, e.g. `128MiB`; `off` removes the limit. Without a limit the router may kill the core when memory runs out |
 | Proxy port | from profile, otherwise 7890 | HTTP and SOCKS5 on one port, for devices and applications set up by hand |
@@ -103,8 +103,8 @@ Check asks the router at once and shows its name, model and RouterOS version, or
 | --- | --- | --- |
 | Start delay, seconds | 0 | wait after the router boots, for example until the USB drive or the internet is ready |
 | Scheduled restart | off | restart the service on a cron schedule: `minute hour day month weekday`. `0 3 * * *` is every day at 3:00 |
-| Device ID (HWID) | automatic | made from the hardware of the router, it stays the same after a reinstall. The `x-device-os`, `x-ver-os`, `x-device-model` headers are shown next to it, see [HWID](/en/usage/subscriptions/#hwid) |
+| HWID | automatic | view only: made from the hardware of the router, it stays the same after a reinstall. The `x-device-os`, `x-ver-os`, `x-device-model` headers are shown next to it, see [HWID](/en/usage/subscriptions/#hwid) |
 | Log size limit, MB | 1 | logs are kept in RAM, a log over the limit is cleared. Empty — no limit |
 | Clear logs at stop | on | |
 | Web UI: port | 9099 | the web UI moves to the new port after saving |
-| Web UI: password | — | change the password, at least 4 characters. It can also be reset with `exodus passwd` over SSH |
+| Web UI: password | — | Keenetic and MikroTik. Optional: set or change it (at least 4 characters), an empty new password removes it and the UI opens without a login. From the console: `exodus passwd`, remove it with `exodus passwd -d` |

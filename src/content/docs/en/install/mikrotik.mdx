@@ -51,7 +51,7 @@ The installer:
 - sets `registry-url` of `/container/config` to `https://ghcr.io` and pulls the image `prettyleaf/exodus-mikrotik:latest`;
 - creates the container with the mount `<disk>/exodus/data` → `/opt/etc/exodus` and starts it, autostart with the router is on.
 
-At the end it prints the password of the web UI. The address is `http://<router address>:9099/`: the container forwards the port from the addresses of the router on the interface list `LAN`. Directly: `http://172.31.255.2:9099/`.
+The password of the web UI is set only with the `exodusPassword` variable, then the installer prints it at the end; without it the web UI opens without a login, the password can be set later on Settings → Service. The address is `http://<router address>:9099/`: the container forwards the port from the addresses of the router on the interface list `LAN`. Directly: `http://172.31.255.2:9099/`.
 
 **Updates.** The code of Exodus and the core are updated on the **Updates** page inside the running container, like on Keenetic. The image (Alpine and its packages) is updated by running the installer again: it recreates the container from the new image, settings, profiles and subscriptions in `<disk>/exodus/data` are kept.
 
@@ -72,7 +72,7 @@ Global variables set before the import:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `exodusDisk` | the first ext4 disk | the disk of the container: `usb1`, `nvme1`, `sata1` |
-| `exodusPassword` | generated | the password of the web UI on the first install |
+| `exodusPassword` | none | the password of the web UI on the first install, at least 4 characters; without it the web UI opens without a login |
 | `exodusLanList` | `LAN` | the interface list of the local network |
 | `exodusNetwork` | `172.31.255` | the first three numbers of the /30 network of the container |
 | `exodusIPv6` | `no` | `yes` gives the container `fd65:786f:6475::2/64` and NAT66, IPv6 is proxied then |
@@ -130,9 +130,10 @@ exodus routeros        # check the connection to the REST API of RouterOS
 exodus apply           # apply the rules of the container and of RouterOS again
 exodus debug           # report for an issue, server addresses and passwords are hidden
 exodus passwd          # change the password of the web UI
+exodus passwd -d       # remove the password, the web UI opens without a login
 ```
 
-Reset the password without the shell: `/container shell exodus cmd="exodus passwd"`. Logs of the container in RouterOS: `/log print where topics~"container"`, the logs of Exodus and the core are on the **Logs** page. Other commands are on the [Command line and files](/en/usage/cli/) page.
+Reset the password without the shell: `/container shell exodus cmd="exodus passwd"`, remove it: `/container shell exodus cmd="exodus passwd -d"`. Logs of the container in RouterOS: `/log print where topics~"container"`, the logs of Exodus and the core are on the **Logs** page. Other commands are on the [Command line and files](/en/usage/cli/) page.
 
 | Path in the container | Purpose |
 | --- | --- |

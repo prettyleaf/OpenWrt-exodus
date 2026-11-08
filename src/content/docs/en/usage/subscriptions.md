@@ -35,4 +35,4 @@ A profile is a Mihomo config: a subscription (downloaded by its URL) or an uploa
 
 Panels with a device limit (Remnawave, for example) tell the router from other devices by the `x-hwid`, `x-device-os`, `x-ver-os` and `x-device-model` headers. Exodus sends them by default, turn off Send HWID for a subscription that does not need them.
 
-`x-hwid` is made from the model and the MAC of the router and stays the same after a reinstall or a reset of the settings. It can be set by hand, the other headers are read from the firmware. Where to see the values: Settings → Service → HWID on Keenetic and Asus, Advanced → Proxy Config → Misc on OpenWrt.
+`x-hwid` is made from the model and the MAC of the router (on MikroTik from its serial number) and stays the same after a reinstall or a reset of the settings. It can not be changed in the UI: with another HWID the panel would count the router as a new device. The other headers are read from the firmware. Where to see the values: Settings → Service → HWID on Keenetic, Asus and MikroTik, Advanced → Proxy Config → Misc on OpenWrt.
