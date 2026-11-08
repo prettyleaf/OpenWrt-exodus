@@ -253,6 +253,13 @@ if [ "$(uci -q get nikki.config.user_agent_migrated)" != 1 ]; then
 	uci set nikki.config.user_agent_migrated=1
 fi
 
+# the log level of the core became silent by default: existing configs get it once, another one can be chosen on the Advanced page
+
+if [ "$(uci -q get nikki.config.log_level_migrated)" != 1 ]; then
+	uci set nikki.mixin.log_level=silent
+	uci set nikki.config.log_level_migrated=1
+fi
+
 # commit
 uci commit nikki
 

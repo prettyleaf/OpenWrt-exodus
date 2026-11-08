@@ -37,6 +37,10 @@ msgstr "API TLS 监听"
 msgid "Access Control"
 msgstr "访问控制"
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Active"
+msgstr "已生效"
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:240
 msgid "Adaptive Replacement Cache (ARC)"
 msgstr "自适应替换缓存（ARC）"
@@ -82,6 +86,10 @@ msgstr "追加规则"
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:461
 msgid "Append Rule Provider"
 msgstr "追加规则提供者"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Autostart"
+msgstr "开机自启"
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:517
 msgid "Behavior"
@@ -532,6 +540,10 @@ msgstr "IPv6 代理"
 msgid "Ignore Sniff Domain Name"
 msgstr "忽略嗅探的域名"
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Inactive"
+msgstr "未生效"
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:138
 msgid "Inbound Config"
 msgstr "入站配置"
@@ -646,6 +658,10 @@ msgstr "进程数硬限制"
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:137
 msgid "Number of Processes Soft Limit"
 msgstr "进程数软限制"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Off"
+msgstr "已禁用"
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:89
 msgid "Open Dashboard"
@@ -963,6 +979,30 @@ msgstr "总量"
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:38
 msgid "Transparent Proxy with Mihomo on OpenWrt."
 msgstr "在 OpenWrt 上使用 Mihomo 进行透明代理。"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turn off the service"
+msgstr "关闭服务"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turn on the service"
+msgstr "开启服务"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turned off"
+msgstr "已关闭"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turned on"
+msgstr "已开启"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turning off…"
+msgstr "正在关闭…"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turning on…"
+msgstr "正在开启…"
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:347
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:481

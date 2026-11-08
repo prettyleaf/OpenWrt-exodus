@@ -195,6 +195,20 @@ const methods = {
 			return { headers: headers, generated: generated };
 		}
 	},
+	// the power of the service on the status page: the enabled flag of the config and the service follow it
+	power: {
+		args: { on: false },
+		call: function(req) {
+			const on = req.args?.on ? true : false;
+			const uci = cursor();
+			uci.load('nikki');
+			uci.set('nikki', 'config', 'enabled', on ? '1' : '0');
+			uci.commit('nikki');
+			// runs in background, a start may download the subscription and take longer than the rpc timeout
+			const success = system(`/etc/init.d/nikki ${on ? 'restart' : 'stop'} > /dev/null 2>&1 &`) == 0;
+			return { success: success };
+		}
+	},
 	hard_update: {
 		call: function() {
 			// runs in background, restart may take longer than the rpc timeout

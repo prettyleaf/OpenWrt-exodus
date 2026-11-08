@@ -95,6 +95,13 @@ const callNikkiUpdate = rpc.declare({
     expect: { '': {} }
 });
 
+const callNikkiPower = rpc.declare({
+    object: 'luci.nikki',
+    method: 'power',
+    params: ['on'],
+    expect: { '': {} }
+});
+
 const homeDir = '/etc/nikki';
 const profilesDir = `${homeDir}/profiles`;
 const subscriptionsDir = `${homeDir}/subscriptions`;
@@ -135,6 +142,21 @@ return baseclass.extend({
 
     restart: function () {
         return callRCInit('nikki', 'restart');
+    },
+
+    // running: the service runs now, enabled: its init script starts it at boot
+    serviceState: async function () {
+        const service = (await callRCList('nikki'))?.nikki ?? {};
+        return { running: service.running === true, enabled: service.enabled === true };
+    },
+
+    // turns the service on or off and keeps it so in the config
+    power: function (on) {
+        return callNikkiPower(on);
+    },
+
+    setAutostart: function (on) {
+        return callRCInit('nikki', on ? 'enable' : 'disable');
     },
 
     writefile: function (path, data, mode) {

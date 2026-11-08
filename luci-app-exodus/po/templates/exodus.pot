@@ -34,6 +34,10 @@ msgstr ""
 msgid "Access Control"
 msgstr ""
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Active"
+msgstr ""
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:240
 msgid "Adaptive Replacement Cache (ARC)"
 msgstr ""
@@ -103,6 +107,10 @@ msgstr ""
 
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/profile.js
 msgid "Automatically: every %d h, as the provider says"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Autostart"
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:517
@@ -257,7 +265,7 @@ msgid "Device OS"
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/profile.js:28
-msgid "Device identifier sent to subscriptions with HWID enabled (device limit). Generated from the router hardware when empty."
+msgid "Device identifier sent to subscriptions with HWID enabled (device limit). Made from the router hardware, it stays the same after a reinstall."
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:111
@@ -633,6 +641,10 @@ msgstr ""
 msgid "In hours. Empty: the interval of the provider (profile-update-interval), otherwise every hour. 0: only by the Update button. A changed subscription in use is applied by reloading the service."
 msgstr ""
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Inactive"
+msgstr ""
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:138
 msgid "Inbound Config"
 msgstr ""
@@ -782,6 +794,10 @@ msgstr ""
 
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/advanced.js:218
 msgid "OS Version"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Off"
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:89
@@ -1171,6 +1187,30 @@ msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:38
 msgid "Transparent Proxy with Mihomo on OpenWrt."
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turn off the service"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turn on the service"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turned off"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turned on"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turning off…"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turning on…"
 msgstr ""
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:347

@@ -210,10 +210,11 @@ return view.extend({
         o.datatype = 'uinteger';
         o.rmempty = false;
 
-        // hwid is an option of the app config, the other headers are read from the router
-        o = s.taboption('misc', form.Value, 'hwid', _('HWID'), _('Device identifier sent to subscriptions with HWID enabled (device limit). Generated from the router hardware when empty.'));
-        o.ucisection = 'config';
-        o.placeholder = generatedHwid ?? _('Auto');
+        // the hwid is shown, not edited: a changed one would count as another device in the panel; the other headers are read from the router
+        o = s.taboption('misc', form.DummyValue, '_hwid', _('HWID'), _('Device identifier sent to subscriptions with HWID enabled (device limit). Made from the router hardware, it stays the same after a reinstall.'));
+        o.cfgvalue = function () {
+            return hwidHeaders['x-hwid'] || uci.get('nikki', 'config', 'hwid') || generatedHwid || '-';
+        };
 
         for (const [header, title] of [['x-device-os', _('Device OS')], ['x-ver-os', _('OS Version')], ['x-device-model', _('Device Model')]]) {
             o = s.taboption('misc', form.DummyValue, `_${header.replaceAll('-', '_')}`, title, _('Sent in the %s header, read from the router.').format(header));

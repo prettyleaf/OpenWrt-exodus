@@ -41,6 +41,10 @@ msgstr "Прослушивание TLS API"
 msgid "Access Control"
 msgstr "Контроль доступа"
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Active"
+msgstr "Активен"
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:240
 msgid "Adaptive Replacement Cache (ARC)"
 msgstr "Адаптивный кэш замещения (ARC)"
@@ -111,6 +115,10 @@ msgstr "Автоматически: как укажет провайдер, ин
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/profile.js
 msgid "Automatically: every %d h, as the provider says"
 msgstr "Автоматически: каждые %d ч, как указал провайдер"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Autostart"
+msgstr "Автозапуск"
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:517
 msgid "Behavior"
@@ -264,8 +272,8 @@ msgid "Device OS"
 msgstr "ОС устройства"
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/profile.js:28
-msgid "Device identifier sent to subscriptions with HWID enabled (device limit). Generated from the router hardware when empty."
-msgstr "Идентификатор устройства, передаваемый подпискам с включённым HWID (лимит устройств). Если пусто, генерируется на основе оборудования роутера."
+msgid "Device identifier sent to subscriptions with HWID enabled (device limit). Made from the router hardware, it stays the same after a reinstall."
+msgstr "Идентификатор устройства, передаваемый подпискам с включённым HWID (лимит устройств). Создаётся на основе оборудования роутера и не меняется при переустановке."
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:111
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:130
@@ -640,6 +648,10 @@ msgstr "Игнорировать определение доменов"
 msgid "In hours. Empty: the interval of the provider (profile-update-interval), otherwise every hour. 0: only by the Update button. A changed subscription in use is applied by reloading the service."
 msgstr "В часах. Пусто — интервал провайдера (profile-update-interval), иначе каждый час. 0 — только кнопкой «Обновить». Изменившаяся используемая подписка применяется перезагрузкой сервиса."
 
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Inactive"
+msgstr "Не активен"
+
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:138
 msgid "Inbound Config"
 msgstr "Настройки входящих"
@@ -790,6 +802,10 @@ msgstr ""
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/advanced.js:218
 msgid "OS Version"
 msgstr "Версия ОС"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Off"
+msgstr "Выключен"
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:89
 msgid "Open Dashboard"
@@ -1179,6 +1195,30 @@ msgstr "Всего"
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/app.js:38
 msgid "Transparent Proxy with Mihomo on OpenWrt."
 msgstr "Прозрачный прокси Mihomo для OpenWrt."
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turn off the service"
+msgstr "Выключить сервис"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turn on the service"
+msgstr "Включить сервис"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turned off"
+msgstr "Выключено"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turned on"
+msgstr "Включено"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turning off…"
+msgstr "Выключается…"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js:1
+msgid "Turning on…"
+msgstr "Включается…"
 
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:347
 #: applications/luci-app-nikki/htdocs/luci-static/resources/view/nikki/mixin.js:481
