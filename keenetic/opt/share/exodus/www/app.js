@@ -252,6 +252,7 @@ const state = {
     timers: [],
     statusTimer: null,
     loginShown: false,
+    password: true,
     editorFile: null
 };
 
@@ -312,6 +313,9 @@ async function loadAll() {
     state.subscriptionStates = data.subscription_states || {};
     state.profiles = data.profiles || [];
     state.invalid.clear();
+    // the password of the web ui may be turned off, then there is nothing to log out of
+    state.password = data.password !== false;
+    document.getElementById('logout').hidden = !state.password;
     updateDirty();
 }
 
@@ -1741,24 +1745,37 @@ function pageSettings() {
         }),
         card({
             title: _('Web UI'),
-            info: [_('The web UI moves to the new port after saving.'), _('The password can also be reset with exodus passwd over SSH.')],
+            info: [_('The web UI moves to the new port after saving.'), _('The password can also be reset with exodus passwd over SSH.'),
+                state.password ? _('Leave the new password empty to turn it off.') : _('The password is turned off, the web UI opens without login.')],
             content: E('div', { class: 'grid-4' }, [
                 field(_('Port'), input(ref('web.port'), { number: true, type: 'port', empty: 9099, placeholder: '9099' })),
-                field(_('Current password'), passwordOld),
+                state.password ? field(_('Current password'), passwordOld) : null,
                 field(_('New password'), passwordNew),
                 field(_('Repeat'), passwordRepeat)
             ]),
-            footer: btn(_('Change password'), { variant: 'outline', onClick: async () => {
+            footer: btn(state.password ? _('Change password') : _('Set password'), { variant: 'outline', onClick: async () => {
                 if (passwordNew.value !== passwordRepeat.value) {
                     toast(_('Passwords do not match.'), 'error');
                     return;
                 }
-                if (passwordNew.value.length < 4) {
+                if (passwordNew.value === '') {
+                    if (!state.password) {
+                        toast(_('Enter the new password.'), 'error');
+                        return;
+                    }
+                    if (!await confirmDialog(_('Turn off the password?'), _('The web UI will open without a password for anyone in the local network.'), { confirm: _('Turn off'), destructive: true })) {
+                        return;
+                    }
+                } else if (passwordNew.value.length < 4) {
                     toast(_('The password is too short, at least 4 characters.'), 'error');
                     return;
                 }
-                await run(api('password', { old: passwordOld.value, new: passwordNew.value }), _('The password is changed.'));
+                const turnOff = passwordNew.value === '';
+                await run(api('password', { old: passwordOld.value, new: passwordNew.value }), turnOff ? _('The password is turned off.') : _('The password is changed.'));
+                state.password = !turnOff;
+                document.getElementById('logout').hidden = !state.password;
                 passwordOld.value = passwordNew.value = passwordRepeat.value = '';
+                render();
             } })
         })
     ];
@@ -2317,7 +2334,6 @@ function showLogin() {
 async function start() {
     state.loginShown = false;
     document.getElementById('menu').hidden = false;
-    document.getElementById('logout').hidden = false;
     state.config = null;
     state.hosts = null;
     await render();

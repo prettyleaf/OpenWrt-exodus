@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # backend of the web ui: POST json {"action": "...", ...}, answers json
-# a session cookie is required for everything except login, the X-Exodus header keeps other sites out
+# a session cookie is required for everything except login, unless the password is turned off; the X-Exodus header keeps other sites out
 
 # lighttpd runs cgi with a clean environment, the tree is found from the path of the script
 case "$SCRIPT_FILENAME" in
@@ -63,6 +63,11 @@ password_valid() {
 	salt="${stored%%:*}"
 	hash="${stored#*:}"
 	[ "$( { printf '%s' "$salt"; jq -j ".$1 // \"\"" "$req"; } | sha256sum | cut -d ' ' -f 1)" = "$hash" ]
+}
+
+# an empty password file: the password is turned off, the web ui opens without login
+auth_off() {
+	[ -f "$AUTH_PATH" ] && [ ! -s "$AUTH_PATH" ]
 }
 
 # files the editor may read and write: profiles, subscriptions, providers, the mixin file and the profile for startup
@@ -140,7 +145,8 @@ action_load() {
 		--slurpfile config "$CONFIG_PATH" \
 		--argjson states "$states" \
 		--argjson profiles "$(file_list "$PROFILES_DIR")" \
-		'{config: $config[0], subscription_states: $states, profiles: $profiles}' | ok
+		--argjson password "$(auth_off && echo false || echo true)" \
+		'{config: $config[0], subscription_states: $states, profiles: $profiles, password: $password}' | ok
 }
 
 # the whole config is replaced by the one of the web ui, it keeps the keys it does not know
@@ -518,15 +524,28 @@ action_update_dashboard() {
 	echo '{"success": true}' | ok
 }
 
+# an empty new password turns the password off
 action_password() {
-	local salt
-	password_valid old || { sleep 2; fail "403 Forbidden" "wrong password"; }
-	[ "$(jq -r '.new // "" | length' "$req")" -ge 4 ] || fail "400 Bad Request" "the password is too short"
+	local salt length
+	auth_off || password_valid old || { sleep 2; fail "403 Forbidden" "wrong password"; }
+	length=$(jq -r '.new // "" | length' "$req")
+	if [ "$length" = 0 ]; then
+		: > "$AUTH_PATH"
+		rm -f "$SESSIONS_DIR"/* 2> /dev/null
+		echo '{"success": true}' | ok
+		return
+	fi
+	[ "$length" -ge 4 ] || fail "400 Bad Request" "the password is too short"
 	salt=$(random_hex 8)
 	umask 077
 	echo "$salt:$( { printf '%s' "$salt"; jq -j '.new' "$req"; } | sha256sum | cut -d ' ' -f 1)" > "$AUTH_PATH"
-	# other sessions end, this one stays
+	# other sessions end, this one stays; a password set when it was turned off starts a session for this browser
 	token=$(session_token)
+	if [ -z "$token" ] || [ ! -f "$SESSIONS_DIR/$token" ]; then
+		token=$(random_hex 16)
+		echo "$(($(date +%s) + SESSION_TTL))" > "$SESSIONS_DIR/$token"
+		cookie="exodus_session=$token"
+	fi
 	find "$SESSIONS_DIR" -type f ! -name "$token" -exec rm -f {} + 2> /dev/null
 	echo '{"success": true}' | ok
 }
@@ -543,6 +562,10 @@ action=$(arg action)
 
 case "$action" in
 	login)
+		if auth_off; then
+			echo '{"success": true}' | ok
+			exit 0
+		fi
 		[ -f "$AUTH_PATH" ] || fail "403 Forbidden" "no password is set, run exodus passwd on the router"
 		if ! password_valid password; then
 			sleep 2
@@ -556,7 +579,7 @@ case "$action" in
 		;;
 esac
 
-session_valid || fail "401 Unauthorized" "unauthorized"
+auth_off || session_valid || fail "401 Unauthorized" "unauthorized"
 
 case "$action" in
 	logout)

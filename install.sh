@@ -188,6 +188,51 @@ install_yq() {
 	rm -rf "$temp_dir/yq"
 }
 
+# print a line as if it is typed, 12 characters at a time: each pause forks sleep, so the steps are few
+type_line() {
+	local rest="$1" chunk
+	while [ -n "$rest" ]; do
+		chunk="${rest%"${rest#????????????}"}"
+		[ -z "$chunk" ] && chunk="$rest"
+		rest="${rest#"$chunk"}"
+		printf '%s' "$chunk"
+		sleep 0.015
+	done
+	printf '\n'
+}
+
+# the welcome banner, only on a terminal: the update page shows the log as plain text
+banner() {
+	local line
+	step "Welcome to"
+	# typing needs fractional sleep, busybox may be built without it
+	if sleep 0.01 2> /dev/null; then
+		while IFS= read -r line; do
+			type_line "$line"
+		done
+	else
+		cat
+	fi << 'EOF'
+
+  :#@@@@@@@@@@@@@@@@@@@@@@#. #@@@@%-.         .-%@@@#:
+  :#@@@@@@@@@@@@@@@@@@@@@@%. #@@@@@@#:.     .:#@@@@@%:
+  .*@@@@@@@@@@@@@@@@@@@@@@%. #@@@@@@@@*:   .*@@@@@@@+.
+   .-%@@@@@@@@------------:. .=%@@@@@@@@+. .@@@@@@*:.
+     .=%@@@@@@@+::::::::::.    .+@@@@@@@@%=:@@@@#-.
+  .-===*@@@@@@@@@@@@@@@@@@%.    .:*@@@@@@@@@#--:.
+  :#@@@@#-*@@@@@@@@@@@@@@@%.      .-#@@@@@@@@%-.
+  :#@@@@#: :#@@@@@@@@@@@@@%.     ..::*@@@@@@@@@#:.
+  :#@@@@#:   ..............    ..+@@@@++%@@@@@@@@*:
+  .*%%%%%=:::::::::::::::::.  .=@@@@@@-..+@@@@@@@@@+.
+        =%@@@@@@@@@@@@@@@@%. -%@@@@@@%:   .#@@@@@@@@#:
+        -%@@@@@@@@@@@@@@@@%. #@@@@@%=.      :%@@@@@@%:
+        -%@@@@@@@@@@@@@@@@%. #@@@@+.         .-%@@@@#:
+
+EOF
+}
+
+[ -t 1 ] && banner
+
 step "Exodus for Keenetic installer"
 
 # check env
@@ -454,25 +499,30 @@ fi
 # secrets of the core api and the proxy ports, the hwid
 "$share_dir/exodus" init
 
-# password of the web ui
+# password of the web ui, asked once: an empty one turns it off and is kept as an empty web.auth
 if [ ! -f "$home_dir/web.auth" ]; then
 	step "Setting the password of the web ui"
 	password="$PASSWORD"
 	if [ -z "$password" ] && interactive; then
-		while [ -z "$password" ]; do
+		while :; do
 			stty -echo < /dev/tty 2> /dev/null
-			ask "password of the web ui" "at least 4 characters, empty to generate"
+			ask "password of the web ui" "at least 4 characters, empty for no password"
 			stty echo < /dev/tty 2> /dev/null
 			echo > /dev/tty
-			[ -z "$answer" ] && break
-			[ "${#answer}" -ge 4 ] && password="$answer"
+			if [ -z "$answer" ] || [ "${#answer}" -ge 4 ]; then
+				break
+			fi
+			warn "the password is too short, at least 4 characters"
 		done
-	fi
-	if [ -z "$password" ]; then
-		password=$(head -c 32 /dev/urandom | sha256sum | cut -c 1-12)
-		info "generated password of the web ui: $password"
+		password="$answer"
 	fi
 	printf '%s\n' "$password" | "$share_dir/exodus" passwd > /dev/null || fail "failed to set the password"
+	if [ -z "$password" ]; then
+		info "no password, the web ui opens without login"
+		note "set it in Settings of the web ui or with: exodus passwd"
+	else
+		info "password is set"
+	fi
 fi
 
 # the web ui and the service run the new code

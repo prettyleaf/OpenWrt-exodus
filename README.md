@@ -38,7 +38,7 @@ opkg update && opkg install curl
 curl -fsSL https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/keenetic/install.sh | sh
 ```
 
-At the end it prints the address of the web UI, `http://192.168.1.1:9099/` by default.
+On the first install it asks for the password of the web UI, Enter without a password leaves the web UI without login. At the end it prints the address of the web UI, `http://192.168.1.1:9099/` by default.
 
 Options can be passed as environment variables before `sh`:
 
@@ -109,7 +109,7 @@ exodus update_subscription <id>   # download a subscription, the running core ge
 exodus hard_update     # remove downloaded providers, update the subscription and restart
 exodus debug           # report for an issue, server addresses and passwords are hidden
 exodus web restart     # restart the web UI
-exodus passwd          # change the password of the web UI
+exodus passwd          # change the password of the web UI, empty turns it off
 ```
 
 ## Files

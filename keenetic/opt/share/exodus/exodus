@@ -20,7 +20,7 @@ usage() {
 		  clear_logs                        clear logs exceeding the size limit
 		  debug                             print the debug report
 		  web start|stop|restart            control the web ui
-		  passwd                            set the password of the web ui
+		  passwd                            set the password of the web ui, empty turns it off
 	EOF
 }
 
@@ -433,7 +433,7 @@ set_password() {
 	local password confirm salt
 	if [ -t 0 ]; then
 		stty -echo 2> /dev/null
-		printf 'New password of the web ui: '
+		printf 'New password of the web ui, empty to turn it off: '
 		read -r password
 		printf '\nRepeat: '
 		read -r confirm
@@ -445,6 +445,14 @@ set_password() {
 		fi
 	else
 		read -r password
+	fi
+	# an empty password file turns the password off, the web ui opens without login
+	if [ -z "$password" ]; then
+		mkdir -p "$HOME_DIR"
+		: > "$AUTH_PATH"
+		rm -f "$SESSIONS_DIR"/* 2> /dev/null
+		echo "password is turned off"
+		return 0
 	fi
 	if [ "${#password}" -lt 4 ]; then
 		echo "the password is too short"
