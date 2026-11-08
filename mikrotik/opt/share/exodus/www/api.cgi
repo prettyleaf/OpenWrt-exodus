@@ -158,7 +158,7 @@ action_load() {
 
 # the whole config is replaced by the one of the web ui, it keeps the keys it does not know
 action_config_set() {
-	local tmp apply old_port new_port old_routeros
+	local tmp apply hwid old_port new_port old_routeros
 	tmp="$CONFIG_PATH.web"
 	if ! jq -e '(.config | type == "object") and (.config.config | type == "object") and (.config.proxy | type == "object") and (.config.mixin | type == "object")' "$req" > /dev/null 2>&1; then
 		fail "400 Bad Request" "invalid config"
@@ -166,7 +166,9 @@ action_config_set() {
 	old_port=$(cfg_get .web.port)
 	old_routeros=$(jq -c '.routeros' "$CONFIG_PATH" 2> /dev/null)
 	lock_acquire config || fail "503 Service Unavailable" "config is locked"
-	if jq '.config' "$req" > "$tmp" && [ -s "$tmp" ]; then
+	# the hwid is not changed from the web ui, the saved one stays
+	hwid=$(cfg_get .config.hwid)
+	if jq --arg hwid "$hwid" '.config | .config.hwid = $hwid' "$req" > "$tmp" && [ -s "$tmp" ]; then
 		chmod 600 "$tmp"
 		mv -f "$tmp" "$CONFIG_PATH"
 	else

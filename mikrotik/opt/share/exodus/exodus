@@ -22,7 +22,7 @@ usage() {
 		  clear_logs                        clear logs exceeding the size limit
 		  debug                             print the debug report
 		  web start|stop|restart            control the web ui
-		  passwd                            set the password of the web ui, empty turns it off
+		  passwd [-d]                       set the password of the web ui, -d or an empty one removes it
 		  container                         the entrypoint of the container
 	EOF
 }
@@ -71,6 +71,10 @@ ensure_config() {
 	# once, the old one stays a choice for providers whose response rules do not know exodus yet
 	if [ "$(cfg_get .config.user_agent_migrated)" != "true" ]; then
 		cfg_update '.subscriptions |= map(if .user_agent == "Mihomo/Exodus v{version}" then .user_agent = "Exodus/{version} {platform}" else . end) | .config.user_agent_migrated = true'
+	fi
+	# the log level of the core became silent by default: existing configs get it once, another one can be chosen in Settings
+	if [ "$(cfg_get .config.log_level_migrated)" != "true" ]; then
+		cfg_update '.mixin.log_level = "silent" | .config.log_level_migrated = true'
 	fi
 }
 
@@ -455,8 +459,29 @@ web() {
 	esac
 }
 
+# an empty password file: the web ui opens without login, the installer does not ask for a password again
+remove_password() {
+	mkdir -p "$HOME_DIR"
+	: > "$AUTH_PATH"
+	# sessions of the old password end
+	rm -f "$SESSIONS_DIR"/* 2> /dev/null
+	echo "password is removed, the web ui opens without login"
+}
+
+# $1 -d removes the password, otherwise it is read from the terminal or a line of stdin
 set_password() {
 	local password confirm salt
+	case "$1" in
+		-d|--delete)
+			remove_password
+			return
+			;;
+		"") ;;
+		*)
+			usage
+			return 1
+			;;
+	esac
 	if [ -t 0 ]; then
 		stty -echo 2> /dev/null
 		printf 'New password of the web ui, empty to turn it off: '
@@ -472,13 +497,9 @@ set_password() {
 	else
 		read -r password
 	fi
-	# an empty password file turns the password off, the web ui opens without login
 	if [ -z "$password" ]; then
-		mkdir -p "$HOME_DIR"
-		: > "$AUTH_PATH"
-		rm -f "$SESSIONS_DIR"/* 2> /dev/null
-		echo "password is turned off"
-		return 0
+		remove_password
+		return
 	fi
 	if [ "${#password}" -lt 4 ]; then
 		echo "the password is too short"
@@ -672,7 +693,7 @@ case "$cmd" in
 	clear_logs) prepare_files; cfg_load; clear_logs ;;
 	debug) debug ;;
 	web) web "$@" ;;
-	passwd) set_password ;;
+	passwd) set_password "$@" ;;
 	init) prepare_files; init_config; ensure_config ;;
 	container) container ;;
 	*) usage; exit 1 ;;

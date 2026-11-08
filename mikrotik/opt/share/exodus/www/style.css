@@ -347,6 +347,157 @@ main.container {
     align-content: start;
 }
 
+/* both columns end together: the rows of the state spread, the power button goes down */
+.service-grid > .stack:first-child {
+    grid-template-rows: auto 1fr;
+    align-content: stretch;
+}
+
+.service-grid > .stack:first-child .info-list {
+    align-content: space-between;
+}
+
+.service-grid > .stack:last-child {
+    grid-template-rows: auto 1fr;
+    align-content: stretch;
+}
+
+.service-grid .service-power {
+    align-self: end;
+}
+
+/* a switch without a description in one line, as high as a select or a button */
+.field-switch.compact {
+    min-width: 0;
+    min-height: 36px;
+    padding: 6px 12px;
+}
+
+/* the power of the service on the left, autostart over the dashboard button on the right, as wide as the wider of them */
+.service-power {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+}
+
+.service-power .power {
+    grid-row: 1 / span 2;
+    height: auto;
+    min-height: 36px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.service-power > .field-switch,
+.service-power > .btn {
+    grid-column: 2;
+}
+
+/* dim when the service is off, bright when it is on, a sweep while it changes */
+.power {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-width: 0;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--muted);
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.power:hover:not(:disabled) {
+    color: var(--foreground);
+    border-color: var(--input);
+}
+
+.power:disabled {
+    cursor: default;
+}
+
+.power-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    transition: box-shadow 0.2s;
+}
+
+.power-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.power-on,
+.power-on:hover:not(:disabled) {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 12%, transparent);
+    border-color: color-mix(in srgb, var(--success) 45%, transparent);
+}
+
+.power-on .power-icon {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent), 0 0 12px color-mix(in srgb, var(--success) 45%, transparent);
+}
+
+.power-starting,
+.power-stopping {
+    background-image: linear-gradient(90deg, transparent 0%, color-mix(in srgb, currentColor 16%, transparent) 50%, transparent 100%);
+    background-size: 50% 100%;
+    background-repeat: no-repeat;
+    animation: power-sweep 1.2s ease-in-out infinite;
+}
+
+.power-starting {
+    color: var(--success);
+    border-color: color-mix(in srgb, var(--success) 30%, transparent);
+}
+
+.power-starting .power-icon,
+.power-stopping .power-icon {
+    animation: power-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes power-sweep {
+    from {
+        background-position: -100% 0;
+    }
+    to {
+        background-position: 200% 0;
+    }
+}
+
+@keyframes power-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 40%, transparent);
+    }
+    50% {
+        box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 0%, transparent);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .power-starting,
+    .power-stopping,
+    .power-starting .power-icon,
+    .power-stopping .power-icon {
+        animation: none;
+    }
+}
+
 .span-2 {
     grid-column: span 2;
 }

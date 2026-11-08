@@ -129,7 +129,8 @@ exodus update_subscription <id>   # скачать подписку, запущ�
 exodus hard_update     # удалить скачанные провайдеры, обновить подписку и перезапустить
 exodus debug           # отчёт для issue, адреса серверов и пароли скрыты
 exodus web restart     # перезапустить веб-интерфейс
-exodus passwd          # сменить пароль веб-интерфейса, пустой отключает его
+exodus passwd          # сменить пароль веб-интерфейса
+exodus passwd -d       # удалить пароль, веб-интерфейс откроется без входа
 ```
 
 Логи контейнера в RouterOS: `/log print where topics~"container"`.

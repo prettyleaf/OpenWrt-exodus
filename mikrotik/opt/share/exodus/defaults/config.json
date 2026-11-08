@@ -6,7 +6,8 @@
     "scheduled_restart": false,
     "scheduled_restart_cron": "0 3 * * *",
     "hwid": "",
-    "user_agent_migrated": false
+    "user_agent_migrated": false,
+    "log_level_migrated": false
   },
   "subscriptions": [
     {
@@ -43,7 +44,7 @@
     "lan_list": "LAN"
   },
   "mixin": {
-    "log_level": null,
+    "log_level": "silent",
     "mixed_port": null,
     "authentication": true,
     "username": "exodus",

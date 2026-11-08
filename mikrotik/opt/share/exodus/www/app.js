@@ -32,6 +32,7 @@ function _(text) {
 const ICONS = {
     'play': '<polygon points="6 3 20 12 6 21 6 3"/>',
     'square': '<rect width="14" height="14" x="5" y="5" rx="2"/>',
+    'power': '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
     'rotate-cw': '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
     'refresh-cw': '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
     'external-link': '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
@@ -336,14 +337,6 @@ function live(renderFn, keyFn) {
     update();
     liveViews.push(update);
     return el;
-}
-
-function statusBadge() {
-    const status = state.status;
-    if (!status) {
-        return badge(_('Unknown'), 'outline');
-    }
-    return status.running ? badge(_('Running'), 'success', true) : badge(_('Stopped'), 'secondary', true);
 }
 
 async function refreshStatus() {
@@ -1170,17 +1163,72 @@ function providerCard() {
     ]));
 }
 
+// a switch without a description in one line, as high as a select or a button
+function compactSwitch(el) {
+    el.classList.add('compact');
+    return el;
+}
+
+// a start or a stop sent to the router: the button shows it until the state changes or for a while
+let powerPending = null;
+
+// the power of the service in one button: dim when it is off, bright when it is on, animated while it changes;
+// it is as high as the two controls stacked next to it, the given switch over the dashboard button
+function servicePower(side) {
+    const wrap = E('div', { class: 'service-power' });
+    const draw = () => {
+        const status = state.status;
+        const running = !!(status && status.running);
+        if (powerPending && (Date.now() > powerPending.until || (powerPending.op === 'start') === running)) {
+            powerPending = null;
+        }
+        let view = !status ? 'unknown' : running ? 'on' : 'off';
+        if (powerPending) {
+            view = powerPending.op === 'start' ? 'starting' : 'stopping';
+        }
+        const labels = { unknown: _('Unknown'), off: _('Turned off'), on: _('Turned on'), starting: _('Turning on…'), stopping: _('Turning off…') };
+        const power = E('button', {
+            type: 'button',
+            class: `power power-${view}`,
+            disabled: view === 'unknown' || powerPending ? true : null,
+            'aria-pressed': running ? 'true' : 'false',
+            title: running ? _('Turn off the service') : _('Turn on the service')
+        }, [E('span', { class: 'power-icon' }, icon('power')), E('span', {}, labels[view])]);
+        power.addEventListener('click', async () => {
+            const op = running ? 'stop' : 'start';
+            powerPending = { op: op, until: Date.now() + 20000 };
+            draw();
+            // a state that does not change in time brings the button back
+            setTimeout(draw, 20500);
+            try {
+                await serviceOp(op);
+            } catch (e) {
+                powerPending = null;
+                draw();
+            }
+        });
+        append(clear(wrap), [
+            power,
+            side,
+            btn(_('Dashboard'), { variant: 'outline', icon: 'external-link', disabled: !running, onClick: openDashboard })
+        ]);
+    };
+    draw();
+    return wrap;
+}
+
 function pageStatus() {
     const d = state.draft;
     const status = () => state.status || {};
 
-    // the state of the service on the left, what it runs on the right
+    // the state of the service on the left; the profile, the power, autostart and the dashboard on the right
+    // autostart is made once, the power redraws with the state and takes it along
+    const autostart = compactSwitch(switchField(_('Autostart'), null, ref('config.enabled')));
     const service = card({
-        title: _('Service'),
-        action: live(statusBadge, () => [status().running, !!state.status]),
         content: [
             E('div', { class: 'grid-2 service-grid' }, [
                 E('div', { class: 'stack' }, [
+                    E('div', { class: 'card-title' }, _('Service')),
                     live(() => {
                         const s = status();
                         const core = s.core_version ? `${s.core_version} · ${CORE_TITLES[s.core_type] || s.core_type || 'Mihomo'}` : '—';
@@ -1212,23 +1260,16 @@ function pageStatus() {
                             [_('Proxy'), proxy],
                             ['RouterOS', router]
                         ]);
-                    }, () => [status().app_version, status().core_version, status().core_type, status().running, status().hijack, status().routeros]),
-                    E('div', { class: 'row' }, live(() => (status().running
-                        ? [
-                            btn(_('Restart'), { icon: 'rotate-cw', onClick: () => serviceOp('restart') }),
-                            btn(_('Stop'), { variant: 'outline', icon: 'square', onClick: () => serviceOp('stop') }),
-                            btn(_('Dashboard'), { variant: 'outline', icon: 'external-link', onClick: openDashboard })
-                        ]
-                        : [btn(_('Start'), { icon: 'play', onClick: () => serviceOp('start') })]
-                    ), () => [status().running]))
+                    }, () => [status().app_version, status().core_version, status().core_type, status().running, status().hijack, status().routeros])
                 ]),
                 E('div', { class: 'stack' }, [
-                    switchField(_('Autostart'), _('Start the service when the container starts, with the router.'), ref('config.enabled')),
                     field(_('Profile'), select(ref('config.profile'), profileChoices(), { optional: true, placeholder: _('Not selected') }), null, null, [
                         _('A subscription or an uploaded file, they are managed on the Profiles page.'),
                         _('On every start the profile is merged with the settings of Exodus and the mixin file, a subscription is downloaded again unless its update is manual.'),
-                        _('Save & Apply restarts the service with the chosen profile.')
-                    ])
+                        _('Save & Apply restarts the service with the chosen profile.'),
+                        E('p', {}, [E('strong', {}, _('Autostart')), E('br'), _('Start the service when the container starts, with the router.')])
+                    ]),
+                    live(() => servicePower(autostart), () => [status().running, !!state.status])
                 ])
             ])
         ]
@@ -1591,11 +1632,11 @@ function hwidCard() {
     const detected = (value) => (value ? E('span', { class: 'mono' }, value) : E('span', { class: 'muted' }, _('not detected')));
     return card({
         title: 'HWID',
-        info: [_('Panels with a device limit tell the router from other devices by these headers.')],
+        info: [_('Panels with a device limit tell the router from other devices by these headers.'), _('Made from the serial number of the router, it stays the same after a reinstall.')],
         content: [
-            field(_('Device ID'), input(ref('config.hwid'), { empty: '', placeholder: hwid.generated || _('Automatic') }),
-                _('Made from the serial number of the router, it stays the same after a reinstall.')),
+            // the hwid is shown, not edited: a changed one would count as another device in the panel
             infoList([
+                [E('span', { class: 'mono' }, 'x-hwid'), detected(headers['x-hwid'] || state.config.config.hwid || hwid.generated)],
                 [E('span', { class: 'mono' }, 'x-device-os'), detected(headers['x-device-os'])],
                 [E('span', { class: 'mono' }, 'x-ver-os'), detected(headers['x-ver-os'])],
                 [E('span', { class: 'mono' }, 'x-device-model'), detected(headers['x-device-model'])]
