@@ -75,7 +75,9 @@ jobs:
           path: exodus_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz
 
   # the version of the release as text, once per release: the release channel of the updates pages of keenetic, mikrotik and asus compares it with the installed version
+  # after the packages: the release channel offers the release only when the packages of openwrt are in it
   version:
+    needs: release
     if: github.event_name == 'push' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
     steps:
