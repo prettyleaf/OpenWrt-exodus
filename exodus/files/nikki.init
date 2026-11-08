@@ -191,6 +191,12 @@ start_service() {
 			ucode -S "$MIXIN_UC" | yq -M -p json -o yaml | yq ${yq_anchors:+"$yq_anchors"} -M -i eval-all '... comments="" | . as $item ireduce ({}; . * $item ) | .proxies = .nikki-proxies + .proxies | del(.nikki-proxies) | .proxy-groups = .nikki-proxy-groups + .proxy-groups | del(.nikki-proxy-groups) | .rules = .nikki-rules + .rules | del(.nikki-rules) | explode(.)' "$RUN_PROFILE_PATH" -
 		elif [ "$mixin_file_content" = 1 ]; then
 			ucode -S "$MIXIN_UC" | yq -M -p json -o yaml | yq ${yq_anchors:+"$yq_anchors"} -M -i eval-all '... comments="" | . as $item ireduce ({}; . * $item ) | .proxies = .nikki-proxies + .proxies | del(.nikki-proxies) | .proxy-groups = .nikki-proxy-groups + .proxy-groups | del(.nikki-proxy-groups) | .rules = .nikki-rules + .rules | del(.nikki-rules) | explode(.)' "$RUN_PROFILE_PATH" "$MIXIN_FILE_PATH" -
+			# the log level of the mixin file wins over the one of the mixin options, the options win over the profile
+			local mixin_log_level
+			mixin_log_level=$(yq -M '.log-level // ""' "$MIXIN_FILE_PATH" 2> /dev/null)
+			if [ -n "$mixin_log_level" ]; then
+				LEVEL="$mixin_log_level" yq -M -i '.log-level = strenv(LEVEL)' "$RUN_PROFILE_PATH"
+			fi
 		fi
 		if [ "$proxy_enabled" = 1 ]; then
 			if yq -M -e 'has("tun")' "$RUN_PROFILE_PATH" > /dev/null 2>&1; then

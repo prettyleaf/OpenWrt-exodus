@@ -73,3 +73,16 @@ jobs:
         with:
           name: exodus_${{ matrix.arch }}-${{ matrix.branch }}
           path: exodus_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz
+
+  # the version of the release as text, once per release: the release channel of the updates pages of keenetic, mikrotik and asus compares it with the installed version
+  version:
+    if: github.event_name == 'push' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: version
+        run: echo "${GITHUB_REF_NAME#v}" > version.txt
+
+      - name: release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: version.txt
