@@ -330,7 +330,7 @@ prepare_profile() {
 
 # merge the settings into the profile for startup
 mixin_profile() {
-	local mixin_gen expr anchors gateway
+	local mixin_gen expr anchors gateway level
 	log "Mixin" "Mixin config."
 	mixin_gen="$RUN_TMP/mixin.gen.yaml"
 	jq -f "$MIXIN_JQ" "$CONFIG_PATH" | "$YQ" -M -p json -o yaml > "$mixin_gen" || return 1
@@ -343,6 +343,13 @@ mixin_profile() {
 	anchors=
 	"$YQ" --help 2>&1 | grep -q -e '--yaml-fix-merge-anchor-to-spec' && anchors="--yaml-fix-merge-anchor-to-spec"
 	"$YQ" ${anchors:+"$anchors"} -M -i eval-all '... comments="" | . as $item ireduce ({}; . * $item ) | .proxies = .nikki-proxies + .proxies | del(.nikki-proxies) | .proxy-groups = .nikki-proxy-groups + .proxy-groups | del(.nikki-proxy-groups) | .rules = .nikki-rules + .rules | del(.nikki-rules) | explode(.) | .mixed-port = (.mixed-port // 7890)' "$@" || return 1
+	# the log level of the mixin file wins over the one of the settings, the settings win over the profile
+	if [ -f "$MIXIN_FILE_PATH" ]; then
+		level=$("$YQ" -M '.log-level // ""' "$MIXIN_FILE_PATH" 2> /dev/null)
+		if [ -n "$level" ]; then
+			LEVEL="$level" "$YQ" -M -i '.log-level = strenv(LEVEL)' "$RUN_PROFILE_PATH" || return 1
+		fi
+	fi
 	rm -f "$mixin_gen"
 
 	[ "$c_proxy_enabled" = 1 ] || return 0
