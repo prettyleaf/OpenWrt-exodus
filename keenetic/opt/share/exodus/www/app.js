@@ -1555,16 +1555,15 @@ const DASHBOARDS = [
 ];
 
 // the name of the panel the core runs, the profile may give its own
-function dashboardTitle() {
-    const url = (state.status && state.status.api && state.status.api.ui_url) || '';
+function dashboardTitle(link) {
+    const url = link || (state.status && state.status.api && state.status.api.ui_url) || '';
     const known = DASHBOARDS.find(([value]) => value === url);
     if (known) {
         return known[1];
     }
-    if (/miboard/i.test(url)) {
-        return 'MIBoard';
-    }
-    return _('Dashboard');
+    const names = [[/miboard/i, 'MIBoard'], [/zashboard/i, 'Zashboard'], [/metacubexd/i, 'MetaCubeXD'], [/yacd/i, 'YACD']];
+    const found = names.find(([pattern]) => pattern.test(url));
+    return found ? found[1] : _('Dashboard');
 }
 
 // rule types of mihomo that make sense on a router: [type, description, example value]
@@ -2045,6 +2044,21 @@ function pageUpdates() {
             [`${_('Core')} · ${CORE_TITLES[info.core_type] || info.core_type}`, info.core, info.core_latest,
                 status(info.core_latest == null ? null : newer(info.core, info.core_latest), info.core)]
         ];
+        // the panel is updated apart, by the running core: its own button in the row
+        const dash = info.dashboard;
+        if (dash && dash.url) {
+            const running = !!(state.status && state.status.running);
+            const dashStatus = E('div', { class: 'row', style: { gap: '6px' } }, [
+                dash.installed ? status(dash.update, true) : badge(_('Not installed'), 'warning'),
+                dash.update !== false ? btn(_('Update'), { variant: 'outline', size: 'sm', icon: 'download', disabled: !running,
+                    title: running ? _('Update the dashboard') : _('The dashboard is available when the service is running.'),
+                    onClick: async () => {
+                        await updateDashboard();
+                        renderVersions(await run(fetchUpdate()));
+                    } }) : null
+            ]);
+            rows.push([`${_('Dashboard')} · ${dashboardTitle(dash.url)}`, dash.version || (dash.installed ? '—' : null), dash.latest, dashStatus]);
+        }
         const table = E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
             E('thead', {}, E('tr', {}, [E('th', {}, _('Component')), E('th', {}, _('Installed')), E('th', {}, _('Latest')), E('th', {}, _('Status'))])),
             E('tbody', {}, rows.map(([name, current, next, badgeEl]) => E('tr', {}, [
@@ -2091,7 +2105,8 @@ function pageUpdates() {
                 _('Exodus and the core are downloaded from GitHub into Entware. Settings, profiles and subscriptions are kept.'),
                 _('Exodus has the version of the releases of the project, the same on every router. On the Release channel an update is offered when a release with a higher version is published, on Dev when the code of its branch changes (a change of the readme does not count). The core is compared by its version.'),
                 _('The gh-proxy chosen in the installer is kept, run the installer again to change it.'),
-                _('GitHub is asked at most every 6 hours, Check again asks now.')
+                _('GitHub is asked at most every 6 hours, Check again asks now.'),
+                _('The dashboard is downloaded by the running core, its Update button is in its row. MIBoard and Zashboard have versions, MetaCubeXD and YACD are taken from a branch and have none.')
             ],
             action: btn(_('Check again'), { variant: 'outline', size: 'sm', icon: 'refresh-cw', onClick: async () => {
                 renderVersions(await run(fetchUpdate(true)));

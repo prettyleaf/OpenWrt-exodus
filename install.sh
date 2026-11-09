@@ -270,7 +270,14 @@ trap 'rm -rf "$temp_dir"' EXIT
 # dependencies from entware, curl and jq are needed by the installer itself
 step "Installing packages"
 opkg update > /dev/null 2>&1 || warn "opkg update failed"
-opkg install curl jq ca-bundle ipset iptables ip-full lighttpd lighttpd-mod-cgi || fail "package install failed"
+# libcurl goes with curl: opkg upgrades curl alone, and a new curl with an old libcurl fails with "undefined symbol"
+opkg install libcurl curl jq ca-bundle ipset iptables ip-full lighttpd lighttpd-mod-cgi || fail "package install failed"
+if curl --version 2>&1 | grep -q -i -e 'symbol lookup error' -e 'undefined symbol' -e 'error while loading shared libraries'; then
+	warn "curl does not run: $(curl --version 2>&1 | head -n 1)"
+	info "reinstalling libcurl and curl"
+	opkg install --force-reinstall libcurl curl > /dev/null 2>&1
+	! curl --version 2>&1 | grep -q -i -e 'symbol lookup error' -e 'undefined symbol' -e 'error while loading shared libraries' || fail "curl does not run, run: opkg update && opkg install --force-reinstall libcurl curl"
+fi
 
 # access to github: through the given or the saved gh-proxy, then directly
 version_url="https://github.com/$repository/raw/$ref/keenetic/opt/share/exodus/VERSION"

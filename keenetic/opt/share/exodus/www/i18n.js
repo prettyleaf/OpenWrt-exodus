@@ -45,6 +45,7 @@ window.I18N_RU = {
     "The changelog is empty.": "Список изменений пуст.",
     "The changelog is not found (%s)": "Список изменений не найден (%s)",
     "The dashboard can not be shown here": "Панель нельзя показать здесь",
+    "The dashboard is downloaded by the running core, its Update button is in its row. MIBoard and Zashboard have versions, MetaCubeXD and YACD are taken from a branch and have none.": "Панель скачивает запущенное ядро, её кнопка «Обновить» — в её строке. У MIBoard и Zashboard есть версии, MetaCubeXD и YACD берутся из ветки и версий не имеют.",
     "The gh-proxy chosen in the installer is kept, run the installer again to change it.": "gh-proxy, выбранный в установщике, сохраняется; чтобы изменить его, запустите установщик снова.",
     "The web UI is opened over HTTPS, the core serves the dashboard over HTTP. Open it in a new tab.": "Веб-интерфейс открыт по HTTPS, а ядро отдаёт панель по HTTP. Откройте её в новой вкладке.",
     "Update the dashboard": "Обновить панель",

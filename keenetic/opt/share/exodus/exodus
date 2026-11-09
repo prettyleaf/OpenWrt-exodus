@@ -77,11 +77,12 @@ dashboard_prepare() {
 	dir="$RUN_DIR/ui${name:+/$name}"
 	mark="$RUN_DIR/ui${name:+-$name}.url"
 	# a folder without the mark was downloaded before the marks, it is taken for the chosen panel
-	if [ -f "$mark" ] && [ "$(cat "$mark" 2> /dev/null)" != "$url" ] && [ -d "$dir" ]; then
+	if [ -f "$mark" ] && [ "$(head -n 1 "$mark" 2> /dev/null)" != "$url" ] && [ -d "$dir" ]; then
 		log "Dashboard" "Another panel is chosen, the core downloads it."
 		rm -rf "$dir"
 	fi
-	printf '%s\n' "$url" > "$mark"
+	# the second line is the version of the downloaded panel, it stays while the link is the same
+	[ "$(head -n 1 "$mark" 2> /dev/null)" = "$url" ] || printf '%s\n' "$url" > "$mark"
 }
 
 core_env() {
