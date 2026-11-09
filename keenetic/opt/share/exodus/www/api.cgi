@@ -134,6 +134,24 @@ action_status() {
 		'{running: $running, started: $started, app_version: $app, core_version: $core, core_type: $core_type, hijack: $hijack, api: $api}' | ok
 }
 
+# the install is told apart by its time and commit, the changelog is shown once for it
+changelog_key() {
+	jq -r 'if (.installed // "") == "" then empty else "\(.installed)|\(.commit // "")" end' "$BUILD_PATH" 2> /dev/null
+}
+
+changelog_unseen() {
+	local key
+	key=$(changelog_key)
+	[ -n "$key" ] && [ "$key" != "$(cat "$CHANGELOG_SEEN_PATH" 2> /dev/null)" ]
+}
+
+action_changelog_seen() {
+	local key
+	key=$(changelog_key)
+	[ -z "$key" ] || printf '%s\n' "$key" > "$CHANGELOG_SEEN_PATH"
+	echo '{"success": true}' | ok
+}
+
 action_load() {
 	local states file name
 	states=$(for file in "$SUBSCRIPTIONS_DIR"/*.json; do
@@ -146,7 +164,8 @@ action_load() {
 		--argjson states "$states" \
 		--argjson profiles "$(file_list "$PROFILES_DIR")" \
 		--argjson password "$(auth_off && echo false || echo true)" \
-		'{config: $config[0], subscription_states: $states, profiles: $profiles, password: $password}' | ok
+		--argjson changelog "$(changelog_unseen && echo true || echo false)" \
+		'{config: $config[0], subscription_states: $states, profiles: $profiles, password: $password, changelog: $changelog}' | ok
 }
 
 # the whole config is replaced by the one of the web ui, it keeps the keys it does not know
@@ -515,7 +534,10 @@ action_about() {
 		--arg core "$(core_version)" \
 		--arg core_type "$(cfg_get .update.core)" \
 		--arg arch "$(entware_arch)" \
+		--arg channel "$(cfg_get .update.channel)" \
 		'{app: $app, ref: ($build.ref // $branch), commit: ($build.commit // ""), installed: ($build.installed // $installed),
+		  previous: ($build.previous.version // ""), previous_commit: ($build.previous.commit // ""),
+		  channel: (if $channel == "dev" then "dev" else "release" end),
 		  repository: $repository, core: $core, core_type: (if $core_type == "" then "meta" else $core_type end),
 		  model: ($router.model // $router.device // ""), firmware: ($router.title // $router.release // ""), arch: $arch}' | ok
 }
@@ -651,6 +673,7 @@ case "$action" in
 	update) action_update ;;
 	update_channel) action_update_channel ;;
 	update_dashboard) action_update_dashboard ;;
+	changelog_seen) action_changelog_seen ;;
 	password) action_password ;;
 	*) fail "400 Bad Request" "unknown action" ;;
 esac

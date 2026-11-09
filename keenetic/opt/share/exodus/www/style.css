@@ -519,6 +519,10 @@ main.container {
     justify-content: flex-end;
 }
 
+.row.center {
+    justify-content: center;
+}
+
 .separator {
     height: 1px;
     background: var(--border);
@@ -1814,8 +1818,60 @@ main.container {
 
 .build-links {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
+}
+
+@media (max-width: 480px) {
+    .build-links {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* ---------- changelog ---------- */
+
+.changelog {
+    display: grid;
+    gap: 12px;
+}
+
+.changelog-entry {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.changelog-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.changelog-head .badge {
+    height: 24px;
+    padding: 0 9px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+}
+
+.changelog-head .badge svg {
+    width: 13px;
+    height: 13px;
+}
+
+.changelog-list {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding-left: 18px;
+}
+
+.changelog-list li::marker {
+    color: var(--muted-foreground);
 }
 
 .dialog-description {
@@ -2063,4 +2119,90 @@ body.dirty .toaster {
     display: flex;
     align-items: center;
     min-height: 36px;
+}
+
+/* ---------- dashboard ---------- */
+
+/* the panel of the core fills the window under the header, the page does not scroll */
+body[data-page="dashboard"] {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+}
+
+body[data-page="dashboard"] main.container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    max-width: none;
+    padding: 0;
+}
+
+.dashboard {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.dashboard > .contents {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.dashboard-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    height: 40px;
+    padding: 0 16px 0 24px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.dashboard-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.dashboard-name svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
+.dashboard-frame {
+    display: block;
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    background: var(--background);
+}
+
+.dashboard-empty {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+    max-width: 560px;
+    margin: 48px auto;
+    padding: 0 16px;
+}
+
+@media (max-width: 767px) {
+    .dashboard-bar {
+        padding: 0 8px 0 16px;
+    }
 }

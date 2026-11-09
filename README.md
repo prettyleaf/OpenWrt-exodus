@@ -83,7 +83,7 @@ Going back to XKeen: stop the service and turn off **Autostart** on **Status** o
 3. **Status**: turn on **Autostart**, choose the profile, choose the mode and the devices / Wi-Fi points / segments in the Devices section, then **Save & Apply**.
 4. **Settings** holds only what makes sense to change on Keenetic: proxy modes, ports and exclusions, DSCP, a few Mihomo options, your own rules, the service. Everything else (DNS servers, hosts, sniffer, rule providers) goes to the profile or to the mixin file on the **Editor** page, it is merged into the profile on every start.
 
-The **Dashboard** button opens Zashboard, the core downloads it on the first start.
+The **Dashboard** tab shows [MIBoard](https://github.com/blagodaren/miboard), the core downloads it on the first start. Zashboard, MetaCubeXD or YACD can be chosen in Settings, the core downloads the chosen panel on the next start.
 
 ## How It Works
 
