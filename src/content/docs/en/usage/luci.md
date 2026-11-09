@@ -36,7 +36,7 @@ The app log and the core log, clearing at stop and scheduled clearing by size. *
 
 ## Update
 
-Installed and latest versions of the packages and the core, free flash space. Update runs the [installer](/en/install/openwrt/#install--update) with the core and the gh-proxy chosen last time; settings, profiles and subscriptions are kept. The low flash space mode removes the current core before installing the new one.
+Installed and latest versions of the packages, the core and the dashboard, free flash space. The dashboard is updated with Update Dashboard in its row while the service runs. Update runs the [installer](/en/install/openwrt/#install--update) with the core and the gh-proxy chosen last time; settings, profiles and subscriptions are kept. The low flash space mode removes the current core before installing the new one.
 
 ## Advanced
 

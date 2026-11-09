@@ -47,6 +47,17 @@ With Test Profile on, the core checks the profile before the start: the reason o
 
 `exodus web restart` restarts the web UI, `exodus passwd` changes the password, `exodus passwd -d` removes it and the UI opens without a login (Keenetic and MikroTik). The port of the web UI is on Settings → Service (9099 by default).
 
+## curl: symbol lookup error
+
+`curl: symbol lookup error: curl: undefined symbol: …` means that Entware updated `curl` and kept the old `libcurl`. Until it is fixed Exodus downloads nothing: subscriptions, updates, the dashboard. To fix it on Keenetic and Asus:
+
+```sh
+opkg update
+opkg install --force-reinstall libcurl curl
+```
+
+Since 1.30.2 the installer of Keenetic updates `libcurl` together with `curl`, and the installers of Keenetic and Asus reinstall them when `curl` does not run.
+
 ## A subscription is not updated
 
 The error is in the Exodus log. The interval `0` means updates only by the Update button. If the panel of the provider limits the number of devices, keep Send HWID on.

@@ -47,6 +47,17 @@ UDP проксируется через TPROXY. На Keenetic нужен ком�
 
 `exodus web restart` перезапускает веб-интерфейс, `exodus passwd` меняет пароль, `exodus passwd -d` удаляет его — интерфейс откроется без входа (Keenetic и MikroTik). Порт веб-интерфейса — в «Настройки» → «Сервис» (по умолчанию 9099).
 
+## curl: symbol lookup error
+
+`curl: symbol lookup error: curl: undefined symbol: …` значит, что Entware обновил `curl`, но оставил старый `libcurl`. Пока это так, Exodus ничего не скачивает: подписки, обновления, панель. Исправить на Keenetic и Asus:
+
+```sh
+opkg update
+opkg install --force-reinstall libcurl curl
+```
+
+С версии 1.30.2 установщик Keenetic обновляет `libcurl` вместе с `curl`, а установщики Keenetic и Asus сами переустанавливают их, если `curl` не запускается.
+
 ## Подписка не обновляется
 
 Ошибка — в логе Exodus. Интервал `0` значит обновление только кнопкой «Обновить». Если панель провайдера ограничивает число устройств, оставьте включённым «Отправлять HWID».
