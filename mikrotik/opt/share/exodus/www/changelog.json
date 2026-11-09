@@ -5,6 +5,16 @@
   },
   "releases": [
     {
+      "version": "1.30.2",
+      "date": "2026-11-09",
+      "en": [
+        "The Updates page shows the installed and the latest version of the dashboard, with its own Update button. MIBoard and Zashboard have versions, MetaCubeXD and YACD are taken from a branch and have none."
+      ],
+      "ru": [
+        "На странице «Обновления» видны установленная и последняя версии панели, у неё своя кнопка «Обновить». У MIBoard и Zashboard есть версии, MetaCubeXD и YACD берутся из ветки и версий не имеют."
+      ]
+    },
+    {
       "version": "1.30.1",
       "date": "2026-11-09",
       "en": [

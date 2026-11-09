@@ -415,8 +415,86 @@ latest_release() {
 # the channel of the updates of exodus: release (by default) offers a release of the project with a higher version,
 # dev offers every change of the code of the branch, exodus is up to date when its code equals the code of the branch
 # github is asked at most every 6 hours, force asks now; failed checks are not kept
+# the tag of a release download link: https://github.com/<owner>/<repo>/releases/download/<tag>/<file>
+url_tag() {
+	case "$1" in
+		https://github.com/*/*/releases/download/*/*) printf '%s' "$1" | cut -d / -f 8 ;;
+	esac
+}
+
+# the tag github redirects /releases/latest of the repository of a link to; gh-proxy does not answer it
+latest_tag() {
+	local tag
+	[ -z "$(cfg_get .update.gh_proxy)" ] || return 0
+	tag=$(curl -s -I -o /dev/null --connect-timeout 15 -m 30 -w '%{redirect_url}' "https://github.com/$(printf '%s' "$1" | cut -d / -f 4-5)/releases/latest" 2> /dev/null)
+	case "$tag" in
+		*/releases/tag/*) tag="${tag##*/}" ;;
+		*) return 0 ;;
+	esac
+	echo "$tag" | grep -q -E '^[A-Za-z0-9._-]+$' && echo "$tag"
+}
+
+# the panel the core runs: the link of the profile, its folder and the mark of the downloaded one (the link, and its tag when known)
+dashboard_paths() {
+	d_url=$(jq -r '.ui_url // empty' "$API_JSON_PATH" 2> /dev/null)
+	[ -n "$d_url" ] || d_url=$(cfg_get .mixin.ui_url)
+	d_name=$(jq -r '.ui_name // empty' "$API_JSON_PATH" 2> /dev/null)
+	case "$d_name" in
+		*/*|*..*) d_name= ;;
+	esac
+	d_dir="$RUN_DIR/ui${d_name:+/$d_name}"
+	d_mark="$RUN_DIR/ui${d_name:+-$d_name}.url"
+}
+
+# the installed and the latest version of the panel: a release link has its tag, a link to the latest release is asked
+# from github every 6 hours like the rest; a branch (gh-pages) has no versions
+dashboard_check() {
+	local cache now latest mark_url version installed
+	dashboard_paths
+	[ -n "$d_url" ] || { echo null; return; }
+	cache="$RUN_TMP/dashboard_check.json"
+	now=$(date +%s)
+	latest=$(url_tag "$d_url")
+	if [ -z "$latest" ]; then
+		case "$d_url" in
+			https://github.com/*/*/releases/latest/download/*)
+				if [ "$(arg force)" != "true" ]; then
+					latest=$(jq -r --arg url "$d_url" --argjson now "$now" \
+						'select(.url == $url and ($now - .time) < 21600 and ($now - .time) >= 0) | .latest' "$cache" 2> /dev/null)
+				fi
+				if [ -z "$latest" ]; then
+					latest=$(latest_tag "$d_url")
+					[ -z "$latest" ] || jq -n -c --arg url "$d_url" --arg latest "$latest" --argjson time "$now" '{url: $url, latest: $latest, time: $time}' > "$cache"
+				fi
+				;;
+		esac
+	fi
+	installed=false
+	version=
+	if [ -f "$d_dir/index.html" ]; then
+		installed=true
+		mark_url=$(head -n 1 "$d_mark" 2> /dev/null)
+		# a folder without the mark was downloaded before the marks, it is taken for the panel of the profile
+		if [ -z "$mark_url" ] || [ "$mark_url" = "$d_url" ]; then
+			version=$(sed -n 2p "$d_mark" 2> /dev/null)
+			[ -n "$version" ] || version=$(url_tag "$d_url")
+			# a panel downloaded by the core has no tag in the mark: the latest version written in its code tells it is the latest
+			if [ -z "$version" ] && [ -n "$latest" ] && grep -q -r -F "${latest#v}" "$d_dir/assets" 2> /dev/null; then
+				version="$latest"
+				printf '%s\n%s\n' "$d_url" "$latest" > "$d_mark"
+			fi
+		fi
+	fi
+	jq -n -c --arg url "$d_url" --argjson installed "$installed" --arg version "$version" --arg latest "$latest" \
+		'def text: if . == "" then null else . end;
+		{url: $url, installed: $installed, version: ($version | text), latest: ($latest | text),
+		  update: (if $installed | not then true elif $version == "" or $latest == "" then null else $version != $latest end)}'
+}
+
 action_check_update() {
 	local core_type release build channel ref cache now latest app core_latest free core_size proxy_host
+	# a new curl with an old libcurl does not run, then nothing is downloaded: the page tells how to fix it
+	! curl --version 2>&1 | grep -q -i -e 'symbol lookup error' -e 'undefined symbol' -e 'error while loading shared libraries' || fail "500 Internal Server Error" "curl does not run ($(curl --version 2>&1 | head -n 1)). Recreate the container with the latest image"
 	core_type=$(cfg_get .update.core)
 	case "$core_type" in
 		alpha) release="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha" ;;
@@ -467,6 +545,7 @@ action_check_update() {
 		--arg free "$free" \
 		--arg core_size "$core_size" \
 		--arg gh_proxy "$proxy_host" \
+		--argjson dashboard "$(dashboard_check)" \
 		'def text: if . == null or . == "" then null else . end;
 		def ver: tostring | ltrimstr("v") | split(".") | map(tonumber? // 0);
 		{app: $app, app_commit: ($build.commit | text), app_latest: ($latest.app_latest | text), app_latest_commit: ($latest.app_latest_commit | text),
@@ -480,7 +559,7 @@ action_check_update() {
 		  core_type: $core_type, core: $core, core_latest: ($latest.core_latest | text), arch: $arch,
 		  free_space: (if $free == "" then null else ($free | tonumber * 1024) end),
 		  core_size: (if $core_size == "" then null else ($core_size | tonumber) end),
-		  gh_proxy: (if $gh_proxy == "" then null else $gh_proxy end)}' | ok
+		  gh_proxy: (if $gh_proxy == "" then null else $gh_proxy end), dashboard: $dashboard}' | ok
 }
 
 # build info of the web ui: version, branch and commit of the install, the core and the router
@@ -536,7 +615,7 @@ action_update() {
 }
 
 action_update_dashboard() {
-	local listen tls secret url
+	local listen tls secret url version
 	listen=$(profile_value '.["external-controller"]')
 	tls=$(profile_value '.["external-controller-tls"]')
 	secret=$(profile_value '.secret')
@@ -547,7 +626,15 @@ action_update_dashboard() {
 	else
 		fail "400 Bad Request" "API has not been configured"
 	fi
-	printf 'header = "Authorization: Bearer %s"\n' "$secret" | curl -s -k -m 120 -X POST -K - "$url" > /dev/null 2>&1
+	printf 'header = "Authorization: Bearer %s"\n' "$secret" | curl -s -f -k -m 120 -X POST -K - "$url" > /dev/null 2>&1 \
+		|| fail "502 Bad Gateway" "the core did not download the dashboard, check the core log"
+	# the downloaded panel is the latest one of its link
+	dashboard_paths
+	version=$(url_tag "$d_url")
+	case "$d_url" in
+		https://github.com/*/*/releases/latest/download/*) [ -n "$version" ] || version=$(latest_tag "$d_url") ;;
+	esac
+	printf '%s\n%s\n' "$d_url" "$version" > "$d_mark"
 	echo '{"success": true}' | ok
 }
 

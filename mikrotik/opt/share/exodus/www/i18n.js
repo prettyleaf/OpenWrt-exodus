@@ -351,5 +351,6 @@ window.I18N_RU = {
     "What's new": "Что нового",
     "Exodus is updated from %s to %s.": "Exodus обновлён с %s до %s.",
     "Exodus is updated.": "Exodus обновлён.",
-    "Commits": "Коммиты"
+    "Commits": "Коммиты",
+    "The dashboard is downloaded by the running core, its Update button is in its row. MIBoard and Zashboard have versions, MetaCubeXD and YACD are taken from a branch and have none.": "Панель скачивает запущенное ядро, её кнопка «Обновить» — в её строке. У MIBoard и Zashboard есть версии, MetaCubeXD и YACD берутся из ветки и версий не имеют."
 };
