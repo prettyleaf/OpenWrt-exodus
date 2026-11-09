@@ -27,6 +27,6 @@ Exodus has one version for all routers, the version of the [release](https://git
 - DSCP marks to choose the route per application (Keenetic, Asus, MikroTik).
 - Choice of the core: Mihomo Meta, Mihomo Alpha or Prizrak-Core.
 - Updates from the UI and installation through your own [gh-proxy](/en/install/options/#if-github-is-blocked) when the provider blocks GitHub.
-- The Zashboard dashboard (or MetaCubeXD, YACD) to choose proxies and watch connections.
+- The MIBoard dashboard right in the web UI and LuCI (or Zashboard, MetaCubeXD, YACD; Zashboard by default on Asus) to choose proxies and watch connections.
 
 The specifics of each firmware are on its installation page.

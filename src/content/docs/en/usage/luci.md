@@ -8,7 +8,7 @@ On OpenWrt Exodus is set up in LuCI: **Services → Exodus**. Two pages are enou
 ## App Config
 
 - The announce of the provider of the subscription is shown on top, in the middle.
-- **Service**: the versions of the app and the core, the profile and the state of the proxy on the left, the profile, the power button, Autostart and Open Dashboard on the right.
+- **Service**: the versions of the app and the core, the profile and the state of the proxy on the left, the profile, the power button, Autostart and Open Dashboard on the right, it leads to the [Dashboard](#dashboard) page.
   - **Profile** — a subscription or an uploaded file, saved with Save & Apply.
   - **The power button** shows the state: Turned off, Turning on…, Turned on. A press starts or stops the service at once and keeps it so in the config (the `enabled` flag), so a service turned off does not start after a reboot either. It replaced the Enable checkbox and the Restart Service button.
   - **Autostart** — start on boot, the same as `/etc/init.d/nikki enable` / `disable` and System → Startup. Applied at once.
@@ -17,6 +17,10 @@ On OpenWrt Exodus is set up in LuCI: **Services → Exodus**. Two pages are enou
 - **Test Profile** — check the profile with the core before the start (on). If the check fails, the service does not start, the reason is in the core log.
 - **Core Only** — run the core with the profile as it is: without the mixin and without the interception rules.
 - **Devices**: the mode Exclude: proxy all devices except the selected ones (the default) or Include: proxy only the selected devices, and the devices themselves — by MAC or IP. The IP of a known device is saved as its MAC, so both IPv4 and IPv6 traffic of the device is matched; the IP of an unknown device matches only that address. The selection is stored in Advanced → LAN Proxy → Access Control.
+
+## Dashboard
+
+The dashboard of the core ([MIBoard](https://github.com/blagodaren/miboard) by default) right in LuCI: proxy selection in groups, connections, logs. Update Dashboard and Open in a new tab are over it. The dashboard is available while the service is running, the core downloads it on the first start. When LuCI is opened over HTTPS and the core serves the dashboard over HTTP, the browser does not show it on the page — open it in a new tab.
 
 ## Profile
 
@@ -49,7 +53,7 @@ For experienced users. Wrong values can break the proxy or the internet access o
 | ↳ Misc | reserved IPv4 and IPv6 networks (go directly), TUN timeouts, [HWID](/en/usage/subscriptions/#hwid) and the headers sent to subscriptions |
 | **Mixin Option** | what Exodus sets over the profile, see [Overrides](/en/usage/overrides/) |
 | ↳ General Config | log level, mode, outbound interface, IPv6, TCP keep-alive |
-| ↳ External Control Config | the dashboard (Zashboard by default) and its update, the API address and secret |
+| ↳ External Control Config | the dashboard (MIBoard by default, the core downloads another one on the next start) and its update, the API address and secret |
 | ↳ Inbound Config | HTTP, SOCKS, mixed (7890), Redirect (7891) and TPROXY (7892) ports, authentication |
 | ↳ TUN, DNS, Sniffer | TUN options; DNS (Fake-IP `198.18.0.1/16` and the `[::]:1053` listener by default), hosts, DNS servers and policies; the sniffer |
 | ↳ Rule, GeoX | your own rules and rule providers over the profile; GeoIP/GeoSite databases and their auto update |

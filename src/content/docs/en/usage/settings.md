@@ -54,7 +54,7 @@ Options merged over the profile. Mode, DNS mode and IPv6 always come from the pr
 | Memory limit | half of RAM | `GOMEMLIMIT`, e.g. `128MiB`; `off` removes the limit. Without a limit the router may kill the core when memory runs out |
 | Proxy port | from profile, otherwise 7890 | HTTP and SOCKS5 on one port, for devices and applications set up by hand |
 | Authentication | on, user `exodus` | username and password on the proxy port |
-| Panel | Zashboard | Zashboard, MetaCubeXD or YACD. Update downloads it again |
+| Panel | MIBoard, Zashboard on Asus | MIBoard, Zashboard, MetaCubeXD or YACD. On Keenetic and MikroTik the core downloads the chosen panel on the next start, on Asus with Update. Update downloads it again. Since 1.30.1 configs with the former default Zashboard move to MIBoard once |
 | API port | 9090 | port of the API of the core, the dashboard works through it |
 | API secret | — | the dashboard and other applications connect to the core with it |
 
