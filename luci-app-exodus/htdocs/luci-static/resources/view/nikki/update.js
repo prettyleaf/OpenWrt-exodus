@@ -57,6 +57,36 @@ return view.extend({
             rows.push(row(`${_('Core')} (mihomo-meta)`, installed['mihomo-meta'], latest['mihomo-meta']));
         }
 
+        // the panel is updated apart, by the running core: its own button in the row, the update of the packages does not wait for it
+        const dashboard = info.dashboard;
+        if (dashboard && dashboard.url) {
+            const names = [[/miboard/i, 'MIBoard'], [/zashboard/i, 'Zashboard'], [/metacubexd/i, 'MetaCubeXD'], [/yacd/i, 'YACD'], [/razord/i, 'Razord']];
+            const name = (names.find((n) => n[0].test(dashboard.url)) ?? [null, _('Dashboard')])[1];
+            let status;
+            if (!dashboard.installed) {
+                status = E('strong', {}, _('Not installed'));
+            } else if (dashboard.update === true) {
+                status = E('strong', { style: 'color: orange' }, _('Update available'));
+            } else if (dashboard.update === false) {
+                status = E('span', { style: 'color: green' }, _('Up to date'));
+            } else {
+                status = E('span', {}, '-');
+            }
+            const cell = E('span', {}, [status]);
+            if (dashboard.update !== false) {
+                cell.appendChild(document.createTextNode(' '));
+                cell.appendChild(E('button', {
+                    class: 'btn cbi-button cbi-button-positive',
+                    click: ui.createHandlerFn(this, function () {
+                        return nikki.updateDashboard().then(function () {
+                            location.reload();
+                        });
+                    })
+                }, _('Update Dashboard')));
+            }
+            rows.push([`${_('Dashboard')} (${name})`, dashboard.version ?? '-', dashboard.latest ?? '-', cell]);
+        }
+
         const table = E('table', { class: 'table' }, [
             E('tr', { class: 'tr table-titles' }, [
                 E('th', { class: 'th' }, _('Package')),
