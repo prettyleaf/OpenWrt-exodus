@@ -1,6 +1,6 @@
 include $(TOPDIR)/rules.mk
 
-PKG_VERSION:=1.30.0
+PKG_VERSION:=1.30.1
 
 LUCI_TITLE:=LuCI Support for Exodus
 LUCI_DEPENDS:=+luci-base +exodus

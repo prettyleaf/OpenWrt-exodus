@@ -264,6 +264,27 @@ start_service() {
 			return
 		fi
 	fi
+	# the core downloads the panel only when its folder is missing: when another panel is chosen, the folder of the old one is removed
+	# and the core downloads the chosen one; the address of the downloaded panel is kept next to its folder
+	local ui_dir ui_name ui_url ui_mark
+	ui_dir=$(yq -M '.external-ui // ""' "$RUN_PROFILE_PATH" 2> /dev/null)
+	ui_name=$(yq -M '.external-ui-name // ""' "$RUN_PROFILE_PATH" 2> /dev/null)
+	ui_url=$(yq -M '.external-ui-url // ""' "$RUN_PROFILE_PATH" 2> /dev/null)
+	case "$ui_dir/$ui_name" in
+		/*|*..*|*/*/*) ;;
+		*)
+			if [ -n "$ui_dir" ] && [ -n "$ui_url" ]; then
+				ui_mark="$RUN_DIR/$ui_dir${ui_name:+-$ui_name}.url"
+				ui_dir="$RUN_DIR/$ui_dir${ui_name:+/$ui_name}"
+				# a folder without the mark was downloaded before the marks, it is taken for the chosen panel
+				if [ -f "$ui_mark" ] && [ "$(cat "$ui_mark" 2> /dev/null)" != "$ui_url" ] && [ -d "$ui_dir" ]; then
+					log "Dashboard" "Another panel is chosen, the core downloads it."
+					rm -rf "$ui_dir"
+				fi
+				printf '%s\n' "$ui_url" > "$ui_mark"
+			fi
+			;;
+	esac
 	# start core
 	log "Core" "Start."
 	procd_open_instance nikki

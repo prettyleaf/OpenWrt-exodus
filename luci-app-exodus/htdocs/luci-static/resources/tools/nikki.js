@@ -218,7 +218,8 @@ return baseclass.extend({
         return callNikkiAPI('POST', '/upgrade/ui');
     },
 
-    openDashboard: async function () {
+    // the panel is served by the core on its api port, null when the profile has no api
+    dashboardUrl: async function () {
         const profile = await callNikkiProfile({
             'external-ui-name': null,
             'external-ui-url': null,
@@ -231,7 +232,7 @@ return baseclass.extend({
         const apiTLSListen = profile['external-controller-tls'];
         const apiSecret = profile['secret'] ?? '';
         if (!apiListen && !apiTLSListen) {
-            return Promise.reject('API has not been configured');
+            return null;
         }
 
         let protocol;
@@ -244,20 +245,25 @@ return baseclass.extend({
             port = apiListen.substring(apiListen.lastIndexOf(':') + 1);
         }
 
+        const host = window.location.hostname;
         const params = {
-            host: window.location.hostname,
-            hostname: window.location.hostname,
+            host: host,
+            hostname: host,
             port: port,
             secret: apiSecret
         };
         const query = new URLSearchParams(params).toString();
-        // zashboard and metacubexd keep the backends they know and take a new secret of the link only on their setup page, yacd reads the query
+        // zashboard, metacubexd and miboard keep the backends they know and take a new secret of the link only on their setup page, yacd reads the query
         const setup = /yacd/i.test(profile['external-ui-url'] ?? '') ? '' : `#/setup?${query}`;
-        let url;
-        if (uiName) {
-            url = `${protocol}://${window.location.hostname}:${port}/ui/${uiName}/?${query}${setup}`;
-        } else {
-            url = `${protocol}://${window.location.hostname}:${port}/ui/?${query}${setup}`;
+        const address = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+        const path = uiName ? `/ui/${uiName}/` : '/ui/';
+        return `${protocol}://${address}:${port}${path}?${query}${setup}`;
+    },
+
+    openDashboard: async function () {
+        const url = await this.dashboardUrl();
+        if (!url) {
+            return Promise.reject('API has not been configured');
         }
 
         setTimeout(function () { window.open(url, '_blank') }, 0);

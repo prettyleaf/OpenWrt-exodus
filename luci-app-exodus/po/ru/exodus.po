@@ -1417,3 +1417,19 @@ msgstr "через gh-proxy на %s"
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/profile.js:119
 msgid "{version} is replaced with the installed app version, {platform} with the OS of the router. When the provider does not give the subscription to Exodus/{version} {platform}, Mihomo/Exodus v{version} is tried."
 msgstr "{version} заменяется на установленную версию приложения, {platform} — на ОС роутера. Если провайдер не отдаёт подписку на Exodus/{version} {platform}, пробуется Mihomo/Exodus v{version}."
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/dashboard.js
+msgid "Open in a new tab"
+msgstr "Открыть в новой вкладке"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/dashboard.js
+msgid "The dashboard is available when the service is running."
+msgstr "Панель доступна, когда сервис запущен."
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/dashboard.js
+msgid "API has not been configured"
+msgstr "API ядра не настроен в профиле"
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/dashboard.js
+msgid "LuCI is opened over HTTPS, the core serves the dashboard over HTTP. Open it in a new tab."
+msgstr "LuCI открыт по HTTPS, а ядро отдаёт панель по HTTP. Откройте её в новой вкладке."

@@ -21,6 +21,14 @@
             "path": "nikki/app"
         }
     },
+    "admin/services/nikki/dashboard": {
+        "title": "Dashboard",
+        "order": 15,
+        "action": {
+            "type": "view",
+            "path": "nikki/dashboard"
+        }
+    },
     "admin/services/nikki/profile": {
         "title": "Profile",
         "order": 20,

@@ -74,7 +74,7 @@ wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/unins
 2. On `Services → Exodus → App Config` choose the subscription, enable the app and choose which devices go through the proxy.
 3. Everything else is on the `Advanced` page. Do not change it unless you know what you are doing.
 
-When the service is running, `Open Dashboard` next to `Restart Service` on the main page opens the dashboard. The core downloads it on the first start ([Zashboard](https://github.com/Zephyruso/zashboard) by default, see `Advanced → External Control Config`).
+When the service is running, the `Dashboard` page of Exodus shows the dashboard, `Open Dashboard` on the main page leads to it. The core downloads it on the first start ([MIBoard](https://github.com/blagodaren/miboard) by default, another one can be chosen in `Advanced → External Control Config`, the core downloads it on the next start).
 
 ## How does it work
 

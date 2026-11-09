@@ -90,7 +90,8 @@ function serviceView(versions, state) {
     const autostart = E('label', { class: 'exodus-autostart', for: 'exodus_autostart' }, [E('span', [_('Autostart')]), autostartInput]);
 
     const dashboard = E('button', { type: 'button', class: 'btn cbi-button cbi-button-action' }, [_('Open Dashboard')]);
-    dashboard.addEventListener('click', () => nikki.openDashboard());
+    // the dashboard has its own page of exodus
+    dashboard.addEventListener('click', () => { window.location.href = L.url('admin/services/nikki/dashboard'); });
 
     const refresh = function () {
         return L.resolveDefault(nikki.serviceState(), null).then(function (next) {

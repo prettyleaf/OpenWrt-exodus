@@ -1410,3 +1410,19 @@ msgstr ""
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/profile.js:119
 msgid "{version} is replaced with the installed app version, {platform} with the OS of the router. When the provider does not give the subscription to Exodus/{version} {platform}, Mihomo/Exodus v{version} is tried."
 msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/dashboard.js
+msgid "Open in a new tab"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/dashboard.js
+msgid "The dashboard is available when the service is running."
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/dashboard.js
+msgid "API has not been configured"
+msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/dashboard.js
+msgid "LuCI is opened over HTTPS, the core serves the dashboard over HTTP. Open it in a new tab."
+msgstr ""

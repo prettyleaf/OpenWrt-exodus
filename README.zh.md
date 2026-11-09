@@ -74,7 +74,7 @@ wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/unins
 2. 在 `服务 → Exodus → 应用配置` 中选择订阅、启用应用，并选择哪些设备走代理。
 3. 其他设置都在 `高级` 页面中，如果不清楚其作用请不要修改。
 
-服务运行时，主页面上 `重启服务` 旁边的 `打开面板` 按钮可以打开面板。内核会在首次启动时下载面板（默认为 [Zashboard](https://github.com/Zephyruso/zashboard)，见 `高级 → 外部控制配置`）。
+服务运行时，Exodus 的 `面板` 页面会显示面板，主页面上的 `打开面板` 按钮会跳转到该页面。内核会在首次启动时下载面板（默认为 [MIBoard](https://github.com/blagodaren/miboard)，可在 `高级 → 外部控制配置` 中选择其他面板，内核会在下次启动时下载）。
 
 ## 如何工作
 
