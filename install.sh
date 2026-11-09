@@ -514,6 +514,14 @@ if [ -n "$missing_packages" ]; then
 else
 	done_message 'Entware dependencies are already installed; package downloads skipped.'
 fi
+# a new curl with an old libcurl fails with "undefined symbol" (opkg upgrades curl alone): they are reinstalled together
+if curl --version 2>&1 | grep -q -i -e 'symbol lookup error' -e 'undefined symbol' -e 'error while loading shared libraries'; then
+	warn "curl does not run: $(curl --version 2>&1 | head -n 1)"
+	info 'Reinstalling libcurl and curl...'
+	opkg_download update > /dev/null 2>&1
+	opkg_download install --force-reinstall libcurl curl > /dev/null 2>&1
+	! curl --version 2>&1 | grep -q -i -e 'symbol lookup error' -e 'undefined symbol' -e 'error while loading shared libraries' || fail "curl does not run, run: opkg update && opkg install --force-reinstall libcurl curl"
+fi
 have base64 || fail "base64 is unavailable after installing coreutils-base64"
 [ "$(printf 'Exodus' | base64 2> /dev/null | tr -d '\n')" = RXhvZHVz ] || fail "base64 encoding failed; check coreutils-base64"
 [ "$(printf RXhvZHVz | base64 -d 2> /dev/null)" = Exodus ] || fail "base64 decoding failed; check coreutils-base64"
