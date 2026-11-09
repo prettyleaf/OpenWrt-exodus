@@ -1,0 +1,76 @@
+{
+  "dev": {
+    "en": [],
+    "ru": []
+  },
+  "releases": [
+    {
+      "version": "1.30.1",
+      "date": "2026-11-09",
+      "en": [
+        "MIBoard is the panel by default and opens in its own Dashboard tab of the web UI. Configs with the former default Zashboard get MIBoard once, another panel can be chosen in Settings.",
+        "When another panel is chosen, the core downloads it on the next start: Update is no longer needed.",
+        "What's new: this window appears once after an update, and opens from Build info."
+      ],
+      "ru": [
+        "MIBoard — панель по умолчанию, она открывается на своей вкладке «Панель» веб-интерфейса. Конфигам со старой панелью по умолчанию Zashboard один раз ставится MIBoard, другую панель можно выбрать в настройках.",
+        "Если выбрана другая панель, ядро скачивает её при следующем запуске: нажимать «Обновить» больше не нужно.",
+        "Что нового: это окно появляется один раз после обновления и открывается из окна «О сборке»."
+      ]
+    },
+    {
+      "version": "1.30.0",
+      "date": "2026-11-08",
+      "en": [
+        "Release and Dev update channels: Release offers new releases, Dev every change of the code of the branch.",
+        "A compact Updates page.",
+        "The service card with a power button on the Status page.",
+        "The core log level is silent by default, the log level of the mixin file wins.",
+        "exodus passwd -d removes the password of the web UI.",
+        "The HWID is read-only."
+      ],
+      "ru": [
+        "Каналы обновлений Release и Dev: Release предлагает новые релизы, Dev — каждое изменение кода ветки.",
+        "Компактная страница «Обновления».",
+        "Карточка сервиса с кнопкой питания на странице «Статус».",
+        "Уровень логов ядра по умолчанию — silent, уровень из mixin-файла важнее.",
+        "exodus passwd -d убирает пароль веб-интерфейса.",
+        "HWID только для чтения."
+      ]
+    },
+    {
+      "version": "1.29.0",
+      "date": "2026-10-25",
+      "en": [
+        "The core can be changed on the Updates page.",
+        "Subscriptions are downloaded with the Exodus user agent."
+      ],
+      "ru": [
+        "Ядро можно сменить на странице «Обновления».",
+        "Подписки скачиваются с user agent Exodus."
+      ]
+    },
+    {
+      "version": "1.28.2",
+      "date": "2026-10-23",
+      "en": [
+        "Improvements of the container.",
+        "The old user agent is deprecated."
+      ],
+      "ru": [
+        "Улучшения контейнера.",
+        "Старый user agent объявлен устаревшим."
+      ]
+    },
+    {
+      "version": "1.28.0",
+      "date": "2026-10-13",
+      "en": [
+        "The first release for MikroTik: Exodus in a container of RouterOS."
+      ],
+      "ru": [
+        "Первый релиз для MikroTik: Exodus в контейнере RouterOS."
+      ]
+    }
+  ]
+}

@@ -338,5 +338,18 @@ window.I18N_RU = {
     "Web only": "Только веб",
     "Web UI": "Веб-интерфейс",
     "When the container does not answer, netwatch of the router turns the rules off and the devices go directly.": "Когда контейнер не отвечает, netwatch роутера выключает правила, и устройства идут напрямую.",
-    "Wi-Fi points": "Точки Wi-Fi"
+    "Wi-Fi points": "Точки Wi-Fi",
+    "The API of the core is not configured in the profile.": "API ядра не настроен в профиле.",
+    "The dashboard can not be shown here": "Панель нельзя показать здесь",
+    "The web UI is opened over HTTPS, the core serves the dashboard over HTTP. Open it in a new tab.": "Веб-интерфейс открыт по HTTPS, а ядро отдаёт панель по HTTP. Откройте её в новой вкладке.",
+    "Open in a new tab": "Открыть в новой вкладке",
+    "Update the dashboard": "Обновить панель",
+    "Changelog": "Что нового",
+    "The changelog is not found (%s)": "Список изменений не найден (%s)",
+    "Not released yet": "Ещё не в релизе",
+    "The changelog is empty.": "Список изменений пуст.",
+    "What's new": "Что нового",
+    "Exodus is updated from %s to %s.": "Exodus обновлён с %s до %s.",
+    "Exodus is updated.": "Exodus обновлён.",
+    "Commits": "Коммиты"
 };

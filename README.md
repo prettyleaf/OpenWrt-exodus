@@ -4,7 +4,7 @@
 
 # Exodus for MikroTik
 
-Proxy with [Mihomo](https://github.com/MetaCubeX/mihomo) for MikroTik routers, in a container of RouterOS. This is the `mikrotik` branch of [Exodus](https://github.com/prettyleaf/openwrt-exodus): the same web UI, the same profiles, subscriptions and Zashboard as on Keenetic, the OpenWrt version lives in `main`.
+Proxy with [Mihomo](https://github.com/MetaCubeX/mihomo) for MikroTik routers, in a container of RouterOS. This is the `mikrotik` branch of [Exodus](https://github.com/prettyleaf/openwrt-exodus): the same web UI, the same profiles, subscriptions and MIBoard as on Keenetic, the OpenWrt version lives in `main`.
 
 ## How It Works
 
@@ -100,7 +100,7 @@ Download the image file through gh-proxy and install from it:
 4. **Status**: turn on **Autostart**, choose the profile, the mode and the devices: segments (interfaces with an address: bridges, VLANs), Wi-Fi points (wifi, wireless and CAPsMAN interfaces) and devices from the DHCP leases and ARP. Then **Save & Apply**.
 5. **Settings** holds proxy modes, ports and exclusions, DSCP, a few Mihomo options, your own rules, the service. Everything else goes to the profile or to the mixin file on the **Editor** page.
 
-The **Dashboard** button opens Zashboard, the core downloads it on the first start.
+The **Dashboard** tab shows [MIBoard](https://github.com/blagodaren/miboard), the core downloads it on the first start. Zashboard, MetaCubeXD or YACD can be chosen in Settings, the core downloads the chosen panel on the next start.
 
 ### Notes
 

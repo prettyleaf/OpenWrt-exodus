@@ -429,8 +429,12 @@ mkdir -p "$share_dir.new" || fail "can not create $share_dir"
 cp -R "$src/mikrotik/opt/share/exodus/." "$share_dir.new/" || fail "install failed, not enough free space?"
 # the installer from the repository root, used by the update page
 cp -f "$src/install.sh" "$share_dir.new/install.sh"
+# the version before the update, the changelog of the web ui tells what changed since it
+previous_version=$(head -n 1 "$share_dir/VERSION" 2> /dev/null | tr -d '\r')
+previous_commit=$(jq -r '.commit // empty' "$share_dir/BUILD" 2> /dev/null)
 jq -n --arg ref "$ref" --arg commit "$commit" --arg code "$code" --arg installed "$(date '+%Y-%m-%d %H:%M:%S')" \
-	'{ref: $ref, commit: $commit, code: $code, installed: $installed}' > "$share_dir.new/BUILD"
+	--arg previous_version "$previous_version" --arg previous_commit "$previous_commit" \
+	'{ref: $ref, commit: $commit, code: $code, installed: $installed, previous: {version: $previous_version, commit: $previous_commit}}' > "$share_dir.new/BUILD"
 rm -rf "$share_dir.old"
 [ -d "$share_dir" ] && mv "$share_dir" "$share_dir.old"
 mv "$share_dir.new" "$share_dir" || fail "install failed"

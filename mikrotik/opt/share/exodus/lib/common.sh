@@ -35,6 +35,8 @@ YQ="$LIBEXEC_DIR/yq"
 HOME_DIR="$EXODUS_OPT/etc/exodus"
 CONFIG_PATH="$HOME_DIR/config.json"
 AUTH_PATH="$HOME_DIR/web.auth"
+# the install the changelog of the web ui was shown for, it appears once after an update
+CHANGELOG_SEEN_PATH="$HOME_DIR/changelog.seen"
 PROFILES_DIR="$HOME_DIR/profiles"
 SUBSCRIPTIONS_DIR="$HOME_DIR/subscriptions"
 MIXIN_FILE_PATH="$HOME_DIR/mixin.yaml"
@@ -43,6 +45,12 @@ RUN_PROFILE_PATH="$RUN_DIR/config.yaml"
 PROVIDERS_DIR="$RUN_DIR/providers"
 RULE_PROVIDERS_DIR="$PROVIDERS_DIR/rule"
 PROXY_PROVIDERS_DIR="$PROVIDERS_DIR/proxy"
+
+# the panel by default, its releases are pre-releases: /releases/latest/ does not serve them, the tag is pinned
+# a new tag here moves the configs on the pinned miboard to it on the next start
+MIBOARD_URL="https://github.com/blagodaren/miboard/releases/download/v0.1.1-alpha/dist.zip"
+MIBOARD_PREFIX="https://github.com/blagodaren/miboard/releases/download/"
+ZASHBOARD_URL="https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip"
 
 # logs and runtime state, they live as long as the container
 LOG_DIR="$EXODUS_TMP/log"

@@ -4,7 +4,7 @@
 
 # Exodus для MikroTik
 
-Прокси на [Mihomo](https://github.com/MetaCubeX/mihomo) для роутеров MikroTik, в контейнере RouterOS. Это ветка `mikrotik` проекта [Exodus](https://github.com/prettyleaf/openwrt-exodus): тот же веб-интерфейс, те же профили, подписки и Zashboard, что на Keenetic, версия для OpenWrt живёт в ветке `main`.
+Прокси на [Mihomo](https://github.com/MetaCubeX/mihomo) для роутеров MikroTik, в контейнере RouterOS. Это ветка `mikrotik` проекта [Exodus](https://github.com/prettyleaf/openwrt-exodus): тот же веб-интерфейс, те же профили, подписки и MIBoard, что на Keenetic, версия для OpenWrt живёт в ветке `main`.
 
 ## Как это работает
 
@@ -100,7 +100,7 @@
 4. **«Состояние»**: включите **«Автозапуск»**, выберите профиль, режим и устройства: сегменты (интерфейсы с адресом — бриджи, VLAN), точки Wi-Fi (интерфейсы wifi, wireless и CAPsMAN) и устройства из DHCP-аренд и ARP. Затем **«Сохранить и применить»**.
 5. В **«Настройках»** — режимы прокси, порты и исключения, DSCP, несколько опций Mihomo, свои правила и сервис. Всё остальное задаётся в профиле или в mixin-файле на странице **«Редактор»**.
 
-Кнопка **«Панель»** открывает Zashboard, ядро скачивает её при первом запуске.
+Вкладка **«Панель»** показывает [MIBoard](https://github.com/blagodaren/miboard), ядро скачивает его при первом запуске. В настройках можно выбрать Zashboard, MetaCubeXD или YACD, ядро скачает выбранную панель при следующем запуске.
 
 ### Замечания
 

@@ -72,6 +72,7 @@ const ICONS = {
     'github': '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>',
     'message-circle': '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
     'arrow-up-circle': '<circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/>',
+    'sparkles': '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>',
     'bug': '<path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/>'
 };
 
@@ -254,6 +255,7 @@ const state = {
     statusTimer: null,
     loginShown: false,
     password: true,
+    changelog: false,
     editorFile: null
 };
 
@@ -316,6 +318,8 @@ async function loadAll() {
     state.invalid.clear();
     // the password of the web ui may be turned off, then there is nothing to log out of
     state.password = data.password !== false;
+    // the changelog of this install was not shown yet
+    state.changelog = data.changelog === true;
     document.getElementById('logout').hidden = !state.password;
     updateDirty();
 }
@@ -454,8 +458,9 @@ function openDialog(opts) {
     overlay.hidden = false;
     dialogClose = opts.onClose || null;
     const focus = box.querySelector('.stack input, .stack select') || box.querySelector('.dialog-footer .btn:last-child');
+    // a long dialog stays at its top, the footer button is focused without scrolling to it
     if (focus) {
-        focus.focus();
+        focus.focus({ preventScroll: true });
     }
 }
 
@@ -870,12 +875,13 @@ async function serviceOp(op) {
     [1500, 4000, 8000].forEach((delay) => setTimeout(refreshStatus, delay));
 }
 
-function openDashboard() {
-    const info = (state.status && state.status.api) || {};
+// the panel is served by the core on its api port, null while the core is not running
+function dashboardUrl() {
+    const status = state.status || {};
+    const info = status.api || {};
     const listen = info.tls_listen || info.listen;
-    if (!listen) {
-        toast(_('The dashboard is available when the service is running.'), 'warning');
-        return;
+    if (!status.running || !listen) {
+        return null;
     }
     const protocol = info.tls_listen ? 'https' : 'http';
     const port = listen.substring(listen.lastIndexOf(':') + 1);
@@ -884,8 +890,51 @@ function openDashboard() {
     const path = info.ui_name ? `/ui/${info.ui_name}/` : '/ui/';
     // zashboard and metacubexd keep the backends they know and take a new secret of the link only on their setup page, yacd reads the query
     const setup = /yacd/i.test(info.ui_url || '') ? '' : `#/setup?${query}`;
-    const url = `${protocol}://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${port}${path}?${query}${setup}`;
+    return `${protocol}://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${port}${path}?${query}${setup}`;
+}
+
+function openDashboard() {
+    const url = dashboardUrl();
+    if (!url) {
+        toast(_('The dashboard is available when the service is running.'), 'warning');
+        return;
+    }
     window.open(url, '_blank', 'noopener');
+}
+
+function updateDashboard() {
+    return run(api('update_dashboard'), _('The dashboard is updated.'));
+}
+
+// the panel in its own tab: the page of the core in a frame over the whole width
+// the frame is made again only when the address changes, the status every few seconds keeps it
+function pageDashboard() {
+    const view = live(() => {
+        const url = dashboardUrl();
+        if (!url) {
+            const status = state.status || {};
+            return E('div', { class: 'dashboard-empty' }, [
+                empty('dashboard', status.running ? _('The API of the core is not configured in the profile.') : _('The dashboard is available when the service is running.')),
+                status.running ? null : E('div', { class: 'row center' }, btn(_('Turn on the service'), { icon: 'power', onClick: () => serviceOp('start') }))
+            ]);
+        }
+        // a page over https can not show the http page of the core
+        if (location.protocol === 'https:' && url.startsWith('http:')) {
+            return E('div', { class: 'dashboard-empty' }, [
+                alertBox('warning', _('The dashboard can not be shown here'), _('The web UI is opened over HTTPS, the core serves the dashboard over HTTP. Open it in a new tab.')),
+                E('div', { class: 'row center' }, btn(_('Open in a new tab'), { icon: 'external-link', onClick: openDashboard }))
+            ]);
+        }
+        return E('iframe', { class: 'dashboard-frame', src: url, title: dashboardTitle(), allow: 'clipboard-read; clipboard-write; fullscreen', referrerpolicy: 'no-referrer' });
+    }, () => [dashboardUrl(), !!(state.status && state.status.running)]);
+    const bar = E('div', { class: 'dashboard-bar' }, [
+        E('div', { class: 'dashboard-name' }, [icon('dashboard'), live(() => dashboardTitle(), () => dashboardTitle())]),
+        E('div', { class: 'row' }, [
+            btn(null, { variant: 'ghost', size: 'sm', icon: 'download', title: _('Update the dashboard'), onClick: updateDashboard }),
+            btn(null, { variant: 'ghost', size: 'sm', icon: 'external-link', title: _('Open in a new tab'), onClick: openDashboard })
+        ])
+    ]);
+    return E('div', { class: 'dashboard' }, [bar, view]);
 }
 
 // the expire date of the provider: 0 and dates from 2099 on mean no expiry, a state of an older version has the date as text
@@ -1210,7 +1259,7 @@ function servicePower(side) {
         append(clear(wrap), [
             power,
             side,
-            btn(_('Dashboard'), { variant: 'outline', icon: 'external-link', disabled: !running, onClick: openDashboard })
+            btn(_('Dashboard'), { variant: 'outline', icon: 'dashboard', disabled: !running, onClick: () => { location.hash = '#/dashboard'; } })
         ]);
     };
     draw();
@@ -1511,11 +1560,26 @@ function pageProfiles() {
     ];
 }
 
+// miboard publishes pre-releases only, its tag is pinned like MIBOARD_URL of common.sh
 const DASHBOARDS = [
+    ['https://github.com/blagodaren/miboard/releases/download/v0.1.1-alpha/dist.zip', 'MIBoard'],
     ['https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip', 'Zashboard'],
     ['https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip', 'MetaCubeXD'],
     ['https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip', 'YACD']
 ];
+
+// the name of the panel the core runs, the profile may give its own
+function dashboardTitle() {
+    const url = (state.status && state.status.api && state.status.api.ui_url) || '';
+    const known = DASHBOARDS.find(([value]) => value === url);
+    if (known) {
+        return known[1];
+    }
+    if (/miboard/i.test(url)) {
+        return 'MIBoard';
+    }
+    return _('Dashboard');
+}
 
 // rule types of mihomo that make sense on a router: [type, description, example value]
 const RULE_TYPES = [
@@ -1787,7 +1851,7 @@ function pageSettings() {
             title: _('Dashboard'),
             action: [
                 btn(_('Open'), { variant: 'outline', size: 'sm', icon: 'external-link', onClick: openDashboard }),
-                btn(_('Update'), { variant: 'outline', size: 'sm', icon: 'download', onClick: () => run(api('update_dashboard'), _('The dashboard is updated.')) })
+                btn(_('Update'), { variant: 'outline', size: 'sm', icon: 'download', onClick: updateDashboard })
             ],
             content: E('div', { class: 'grid-3' }, [
                 field(_('Panel'), select(ref('mixin.ui_url'), DASHBOARDS, { optional: true })),
@@ -2305,10 +2369,120 @@ async function openAbout() {
                 } }))
             ])) : null,
             E('div', { class: 'build-links' }, [
+                btn(_('Changelog'), { variant: 'outline', icon: 'sparkles', onClick: () => openChangelog(false) }),
                 E('a', { class: 'btn btn-outline', href: `${repo}/issues`, target: '_blank', rel: 'noopener' }, [icon('bug'), _('Issues')]),
                 E('a', { class: 'btn btn-outline', href: `${repo}/tree/${info.ref || 'mikrotik'}`, target: '_blank', rel: 'noopener' }, [icon('github'), 'GitHub'])
             ])
         ]
+    });
+}
+
+// ---------- changelog ----------
+
+// the changelog comes with the code of the installed branch: the releases, and the changes of the branch not released yet
+
+function versionCompare(a, b) {
+    const parts = (v) => String(v || '').replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+    const x = parts(a);
+    const y = parts(b);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+        const diff = (x[i] || 0) - (y[i] || 0);
+        if (diff !== 0) {
+            return diff;
+        }
+    }
+    return 0;
+}
+
+async function loadChangelog() {
+    const response = await fetch('changelog.json', { cache: 'no-cache' });
+    if (!response.ok) {
+        throw new Error(_('The changelog is not found (%s)', `${response.status} ${response.statusText}`));
+    }
+    return response.json();
+}
+
+// after an update (auto) the releases since the previous version are shown and the window is not shown again,
+// from build info all of them; the Dev channel shows the changes of the branch not released yet over them
+async function openChangelog(auto) {
+    let log;
+    let info;
+    try {
+        [log, info] = await Promise.all([loadChangelog(), api('about')]);
+    } catch (e) {
+        if (!auto && e.message !== _('Login required')) {
+            toast(e.message, 'error');
+        }
+        return;
+    }
+    const seen = () => {
+        if (auto) {
+            api('changelog_seen').catch(() => {});
+        }
+    };
+    const items = (entry) => {
+        const list = entry && (entry[lang] || entry.en);
+        return Array.isArray(list) ? list.filter((item) => typeof item === 'string' && item) : [];
+    };
+    const dev = info.channel === 'dev' ? items(log.dev) : [];
+    let releases = (Array.isArray(log.releases) ? log.releases : [])
+        .filter((r) => r && r.version && items(r).length > 0 && versionCompare(r.version, info.app) <= 0);
+    if (auto) {
+        // an update from a version before the changelog does not tell its version: the installed release is shown
+        releases = info.previous ? releases.filter((r) => versionCompare(r.version, info.previous) > 0) : releases.slice(0, 1);
+        if (releases.length === 0 && dev.length === 0) {
+            seen();
+            return;
+        }
+    }
+    // other dialogs are not closed by the window that opens by itself
+    if (auto && !document.getElementById('dialog').hidden) {
+        return;
+    }
+
+    const repo = `https://github.com/${info.repository}`;
+    const ref = info.ref || 'keenetic';
+    const list = (entries) => E('ul', { class: 'changelog-list' }, entries.map((item) => E('li', {}, item)));
+    const sections = [];
+    if (dev.length > 0) {
+        sections.push(E('section', { class: 'changelog-entry' }, [
+            E('div', { class: 'changelog-head' }, [
+                E('span', { class: 'badge badge-outline' }, [icon('git-branch'), ref.toUpperCase()]),
+                E('span', { class: 'muted' }, _('Not released yet'))
+            ]),
+            list(dev)
+        ]));
+    }
+    releases.forEach((r) => {
+        const current = versionCompare(r.version, info.app) === 0;
+        sections.push(E('section', { class: 'changelog-entry' }, [
+            E('div', { class: 'changelog-head' }, [
+                E('span', { class: `badge ${current ? 'badge-default' : 'badge-outline'}` }, r.version),
+                r.date ? E('span', { class: 'muted' }, r.date) : null,
+                current ? E('span', { class: 'muted' }, `· ${_('Installed')}`) : null
+            ]),
+            list(items(r))
+        ]));
+    });
+    if (sections.length === 0) {
+        sections.push(empty('inbox', _('The changelog is empty.')));
+    }
+
+    // dev builds have no versions of their own: the commits since the previous install tell the rest
+    const commits = info.previous_commit && info.commit && info.previous_commit !== info.commit
+        ? `${repo}/compare/${info.previous_commit}...${info.commit}`
+        : `${repo}/commits/${ref}`;
+    const updated = auto && info.previous && versionCompare(info.previous, info.app) !== 0;
+    openDialog({
+        title: [E('span', { class: 'logo-tile' }, icon('sparkles')), _('What\'s new')],
+        description: updated ? _('Exodus is updated from %s to %s.', info.previous, info.app) : (auto ? _('Exodus is updated.') : null),
+        wide: true,
+        content: E('div', { class: 'changelog' }, sections),
+        footer: [
+            info.channel === 'dev' ? E('a', { class: 'btn btn-outline', href: commits, target: '_blank', rel: 'noopener' }, [icon('github'), _('Commits')]) : null,
+            btn(auto ? _('Got it') : _('Close'), { onClick: () => closeDialog() })
+        ],
+        onClose: seen
     });
 }
 
@@ -2317,6 +2491,11 @@ async function openAbout() {
 const pages = [
     ['status', _('Status'), pageStatus, async () => {
         await Promise.all([reloadStates(), refreshStatus()]);
+    }],
+    ['dashboard', _('Dashboard'), pageDashboard, async () => {
+        if (!state.status) {
+            await refreshStatus();
+        }
     }],
     ['profiles', _('Profiles'), pageProfiles, async () => {
         const [files] = await Promise.all([api('files'), reloadStates()]);
@@ -2369,6 +2548,8 @@ async function render() {
     content.appendChild(loader());
     renderMenu();
     const page = currentPage();
+    // the dashboard takes the whole width and height under the header
+    document.body.setAttribute('data-page', page[0]);
     try {
         if (!state.config) {
             await loadAll();
@@ -2429,6 +2610,7 @@ function showLogin() {
         return;
     }
     state.loginShown = true;
+    document.body.removeAttribute('data-page');
     closeDialog();
     renderAboutButton();
     document.getElementById('logout').hidden = true;
@@ -2470,6 +2652,11 @@ async function start() {
         state.statusTimer = setInterval(refreshStatus, 5000);
         refreshStatus();
         checkUpdates();
+    }
+    // once after an update
+    if (state.config && state.changelog) {
+        state.changelog = false;
+        openChangelog(true);
     }
 }
 
