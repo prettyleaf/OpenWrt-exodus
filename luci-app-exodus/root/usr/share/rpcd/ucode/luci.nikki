@@ -295,8 +295,10 @@ const methods = {
 				}
 			}
 			const core_size = stat('/usr/libexec/mihomo')?.size;
-			// the panel the core runs: a release link has its tag, the tag of a link to the latest release is asked from github (gh-proxy does not answer it);
-			// a panel downloaded from such a link is taken for the latest one when the latest version is written in its code; a branch (gh-pages) has no versions
+			// the panel the core runs: a release link has its tag, the tag of a link to the latest release is asked from github,
+			// gh-proxy follows the redirect itself and answers the page of the release, its og:url names the tag;
+			// miboard tells its installed version in version.json, another panel from such a link is taken for the latest one
+			// when the latest version is written in its code; a branch (gh-pages) has no versions
 			let dashboard = null;
 			const ui_url = uci.get('nikki', 'mixin', 'ui_url') ?? '';
 			const ui_path = uci.get('nikki', 'mixin', 'ui_path') ?? 'ui';
@@ -305,9 +307,12 @@ const methods = {
 				const ui_dir = (substr(ui_path, 0, 1) == '/' ? ui_path : `/etc/nikki/run/${ui_path}`) + (ui_name != '' ? `/${ui_name}` : '');
 				const pinned = match(ui_url, /^https:\/\/github\.com\/[^\/]+\/[^\/]+\/releases\/download\/([A-Za-z0-9._-]+)\//);
 				let ui_latest = pinned ? pinned[1] : null;
-				const repo = match(ui_url, /^https:\/\/github\.com\/([^\/]+\/[^\/]+)\/releases\/latest\/download\//);
-				if (repo && gh_proxy == null) {
-					process = popen(`curl -s -I -o /dev/null -m 15 -w '%{redirect_url}' 'https://github.com/${repo[1]}/releases/latest'`);
+				const repo = match(ui_url, /^https:\/\/github\.com\/([A-Za-z0-9._-]+\/[A-Za-z0-9._-]+)\/releases\/latest\/download\//);
+				if (repo) {
+					const latest_url = gh_url(`https://github.com/${repo[1]}/releases/latest`);
+					process = popen(gh_proxy == null
+						? `curl -s -I -o /dev/null -m 15 -w '%{redirect_url}' 'https://github.com/${repo[1]}/releases/latest'`
+						: `curl -s -L -m 15 '${latest_url}' | grep -o -m 1 'og:url" content="/[^"]*/releases/tag/[^"/]*' | head -n 1`);
 					if (process) {
 						const url = trim(process.read('all'));
 						process.close();
@@ -318,7 +323,14 @@ const methods = {
 				const ui_installed = access(`${ui_dir}/index.html`) ? true : false;
 				let ui_version = null;
 				if (ui_installed) {
-					if (pinned) {
+					let built = null;
+					try {
+						built = json(readfile(`${ui_dir}/version.json`) ?? '')?.version;
+					} catch (e) {
+					}
+					if (type(built) == 'string' && match(built, /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/)) {
+						ui_version = `v${built}`;
+					} else if (pinned) {
 						ui_version = pinned[1];
 					} else if (ui_latest != null && system(`grep -q -r -F '${ltrim(ui_latest, 'v')}' '${ui_dir}/assets' 2>/dev/null`) == 0) {
 						ui_version = ui_latest;
@@ -329,7 +341,7 @@ const methods = {
 					installed: ui_installed,
 					version: ui_version,
 					latest: ui_latest,
-					update: !ui_installed ? true : (ui_version == null || ui_latest == null ? null : ui_version != ui_latest)
+					update: !ui_installed ? true : (ui_version == null || ui_latest == null ? null : ltrim(ui_version, 'v') != ltrim(ui_latest, 'v'))
 				};
 			}
 			// the token is a part of the gh-proxy address, only the host is returned
