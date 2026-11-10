@@ -30,6 +30,7 @@ description: Подписки, заголовки провайдера и HWID �
 | `support-url` | кнопка «Поддержка» |
 | `subscription-userinfo` | трафик и срок действия |
 | `profile-update-interval` | интервал обновления, если он не задан вручную |
+| `global-mode` | `false` скрывает переключатель режима rule / global / direct в MIBoard на вкладке «Панель» (Keenetic, MikroTik) и на странице «Панель управления» LuCI: режим задаёт профиль. Заголовок отдаёт, например, Remnawave |
 
 ## HWID
 

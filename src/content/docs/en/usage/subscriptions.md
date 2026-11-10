@@ -30,6 +30,7 @@ A profile is a Mihomo config: a subscription (downloaded by its URL) or an uploa
 | `support-url` | the Support button |
 | `subscription-userinfo` | traffic and expiry |
 | `profile-update-interval` | the update interval, unless it is set by hand |
+| `global-mode` | `false` hides the rule / global / direct mode switch of MIBoard in the Dashboard tab (Keenetic, MikroTik) and on the Dashboard page of LuCI: the mode comes from the profile. Remnawave, for example, sends it |
 
 ## HWID
 
