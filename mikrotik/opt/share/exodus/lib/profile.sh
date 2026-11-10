@@ -31,6 +31,7 @@ header_value() {
 
 # what the provider tells about the profile in the headers ($1 the subscription, $2 the info address) as json:
 # title, announce, support link, logo and the update interval in hours; base64: values are decoded, links are http(s) or tg
+# global-mode: false of the provider (remnawave) hides the rule / global / direct switch of the dashboard
 provider_meta() {
 	local first second
 	first="$1"
@@ -45,7 +46,9 @@ provider_meta() {
 		--arg logo "$(header_value "$first" profile-logo)" \
 		--arg logo2 "$(header_value "$second" profile-logo)" \
 		--arg interval "$(header_value "$first" profile-update-interval)" \
-		--arg interval2 "$(header_value "$second" profile-update-interval)" '
+		--arg interval2 "$(header_value "$second" profile-update-interval)" \
+		--arg global "$(header_value "$first" global-mode)" \
+		--arg global2 "$(header_value "$second" global-mode)" '
 		def pick($a; $b): if $a != "" then $a else $b end;
 		def decode: if startswith("base64:") then ((.[7:] | @base64d)? // "") else . end;
 		def text($newlines): explode | map(select(. >= 32 or ($newlines and . == 10))) | implode;
@@ -57,7 +60,8 @@ provider_meta() {
 			announce: (pick($announce; $announce2) | decode | text(true) | .[0:2000]),
 			support_url: (pick($support; $support2) | decode | text(false) | safe_url(["https://", "http://", "tg://"])),
 			logo: (pick($logo; $logo2) | decode | text(false) | safe_url(["https://", "http://", "data:image/"])),
-			interval: (if ($hours | digits) and ($hours | tonumber) > 0 then ($hours | tonumber) else null end)
+			interval: (if ($hours | digits) and ($hours | tonumber) > 0 then ($hours | tonumber) else null end),
+			global_mode: (pick($global; $global2) | explode | map(select(. > 32)) | implode | ascii_downcase | if . == "false" then false elif . == "true" then true else null end)
 		}
 		| with_entries(select(.value != "" and .value != null))'
 }

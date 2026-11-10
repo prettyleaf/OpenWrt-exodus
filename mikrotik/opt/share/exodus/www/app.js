@@ -875,7 +875,17 @@ async function serviceOp(op) {
     [1500, 4000, 8000].forEach((delay) => setTimeout(refreshStatus, delay));
 }
 
+// the state of the subscription the saved profile runs, null for a profile file
+function runningSubscriptionState() {
+    const profile = state.config.config.profile || '';
+    if (!profile.startsWith('subscription:')) {
+        return null;
+    }
+    return state.subscriptionStates[profile.substring('subscription:'.length)] || {};
+}
+
 // the panel is served by the core on its api port, null while the core is not running
+// global-mode: false of the provider hides the mode switch of miboard (hideMode), the other panels ignore it
 function dashboardUrl() {
     const status = state.status || {};
     const info = status.api || {};
@@ -886,7 +896,11 @@ function dashboardUrl() {
     const protocol = info.tls_listen ? 'https' : 'http';
     const port = listen.substring(listen.lastIndexOf(':') + 1);
     const host = window.location.hostname;
-    const query = new URLSearchParams({ host: host, hostname: host, port: port, secret: info.secret || '' }).toString();
+    const params = { host: host, hostname: host, port: port, secret: info.secret || '' };
+    if ((runningSubscriptionState() || {}).global_mode === false) {
+        params.hideMode = '1';
+    }
+    const query = new URLSearchParams(params).toString();
     const path = info.ui_name ? `/ui/${info.ui_name}/` : '/ui/';
     // zashboard and metacubexd keep the backends they know and take a new secret of the link only on their setup page, yacd reads the query
     const setup = /yacd/i.test(info.ui_url || '') ? '' : `#/setup?${query}`;
@@ -1560,9 +1574,9 @@ function pageProfiles() {
     ];
 }
 
-// miboard publishes pre-releases only, its tag is pinned like MIBOARD_URL of common.sh
+// miboard follows its latest release like MIBOARD_URL of common.sh
 const DASHBOARDS = [
-    ['https://github.com/blagodaren/miboard/releases/download/v0.1.1-alpha/dist.zip', 'MIBoard'],
+    ['https://github.com/blagodaren/miboard/releases/latest/download/dist.zip', 'MIBoard'],
     ['https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip', 'Zashboard'],
     ['https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip', 'MetaCubeXD'],
     ['https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip', 'YACD']
