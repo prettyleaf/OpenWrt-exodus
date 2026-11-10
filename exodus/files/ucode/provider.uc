@@ -5,6 +5,7 @@
 import { readfile } from 'fs';
 
 // what the provider tells about the profile in the headers, as json: title, announce, support link, logo and the update interval in hours
+// global-mode: false of the provider (remnawave) hides the rule / global / direct switch of the dashboard
 // ARGV: the headers of the subscription, the headers of the info url, the hash of the source the file was downloaded from
 // the subscription headers win, the info url may carry them instead; base64: values are decoded, links are http(s) or tg
 
@@ -60,6 +61,7 @@ function safe_url(value, schemes) {
 }
 
 const hours = pick('profile-update-interval');
+const global_mode = lc(join('', filter(split(pick('global-mode'), ''), (c) => ord(c) > 32)));
 
 const meta = {
 	title: cut(text(decode(pick('profile-title')), false), 128),
@@ -67,11 +69,13 @@ const meta = {
 	support_url: safe_url(text(decode(pick('support-url')), false), ['https://', 'http://', 'tg://']),
 	logo: safe_url(text(decode(pick('profile-logo')), false), ['https://', 'http://', 'data:image/']),
 	interval: match(hours, /^[0-9]+$/) && int(hours) > 0 ? int(hours) : null,
+	global_mode: global_mode == 'false' ? false : (global_mode == 'true' ? true : null),
 	source: ARGV[2] ?? ''
 };
 
 for (let key in keys(meta)) {
-	if (meta[key] == null || meta[key] == '') {
+	// global_mode false is kept: only missing and empty values are dropped
+	if (meta[key] == null || meta[key] === '') {
 		delete meta[key];
 	}
 }

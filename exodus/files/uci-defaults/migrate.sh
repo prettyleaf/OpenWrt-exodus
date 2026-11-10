@@ -261,10 +261,10 @@ if [ "$(uci -q get nikki.config.log_level_migrated)" != 1 ]; then
 fi
 
 # since v1.30.1: MIBoard is the panel by default, the old default zashboard is replaced once, another panel can be chosen on the Advanced page
-# miboard publishes pre-releases only, its tag is pinned: the configs on an older tag of miboard follow the one of this version
+# miboard follows its latest release: the configs with miboard pinned to a tag move to it
 # the downloaded panel is marked as the old one, the core downloads the new one on start
 
-miboard_url="https://github.com/blagodaren/miboard/releases/download/v0.1.1-alpha/dist.zip"
+miboard_url="https://github.com/blagodaren/miboard/releases/latest/download/dist.zip"
 ui_old=$(uci -q get nikki.mixin.ui_url)
 ui_new="$ui_old"
 [ "$(uci -q get nikki.config.dashboard_migrated)" != 1 ] && [ "$ui_old" = "https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip" ] && ui_new="$miboard_url"

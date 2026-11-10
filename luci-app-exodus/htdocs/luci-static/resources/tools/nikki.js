@@ -219,6 +219,7 @@ return baseclass.extend({
     },
 
     // the panel is served by the core on its api port, null when the profile has no api
+    // global-mode: false of the provider of the subscription in use hides the mode switch of miboard (hideMode), the other panels ignore it
     dashboardUrl: async function () {
         const profile = await callNikkiProfile({
             'external-ui-name': null,
@@ -252,6 +253,14 @@ return baseclass.extend({
             port: port,
             secret: apiSecret
         };
+        await uci.load('nikki');
+        const profileName = uci.get('nikki', 'config', 'profile') ?? '';
+        if (profileName.startsWith('subscription:')) {
+            const meta = await this.subscriptionMeta();
+            if ((meta[profileName.substring('subscription:'.length)] ?? {}).global_mode === false) {
+                params.hideMode = '1';
+            }
+        }
         const query = new URLSearchParams(params).toString();
         // zashboard, metacubexd and miboard keep the backends they know and take a new secret of the link only on their setup page, yacd reads the query
         const setup = /yacd/i.test(profile['external-ui-url'] ?? '') ? '' : `#/setup?${query}`;

@@ -316,8 +316,8 @@ return view.extend({
 
         o = s.taboption('external_control', form.Value, 'ui_url', _('UI Url'));
         o.placeholder = _('Unmodified');
-        // miboard publishes pre-releases only, its tag is pinned like in uci-defaults/migrate.sh
-        o.value('https://github.com/blagodaren/miboard/releases/download/v0.1.1-alpha/dist.zip', 'MIBoard');
+        // miboard follows its latest release like in uci-defaults/migrate.sh
+        o.value('https://github.com/blagodaren/miboard/releases/latest/download/dist.zip', 'MIBoard');
         o.value('https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip', 'Zashboard (CDN Fonts)');
         o.value('https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip', 'Zashboard');
         o.value('https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip', 'MetaCubeXD');
