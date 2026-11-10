@@ -65,7 +65,7 @@ Versions of Exodus and the core: installed and latest, the architecture, free sp
 
 The channel is saved at once, without Save & Apply, and the check runs again. Both channels install the code of the branch of the router.
 
-The **Dashboard** row shows the installed and the latest version of the dashboard. The latest version of MIBoard and Zashboard is asked from GitHub; MetaCubeXD and YACD are taken from a branch and have no versions. The dashboard is downloaded by the running core, so it has its own Update button in its row, the update of Exodus does not wait for it.
+The **Dashboard** row shows the installed and the latest version of the dashboard. The latest version of MIBoard and Zashboard is asked from GitHub (through gh-proxy when it is set), MIBoard tells its installed version itself; MetaCubeXD and YACD are taken from a branch and have no versions. The dashboard is downloaded by the running core, so it has its own Update button in its row, the update of Exodus does not wait for it.
 
 Update downloads Exodus and the core from GitHub into Entware, settings, profiles and subscriptions are kept, the proxy restarts. The core and the gh-proxy chosen in the installer are kept — run the [installer](/en/install/options/) again to change them. **Low flash space mode** removes the current core before installing the new one when the update fails for lack of space; the proxy does not work until the new core is installed.
 
