@@ -43,9 +43,9 @@ PROVIDERS_DIR="$RUN_DIR/providers"
 RULE_PROVIDERS_DIR="$PROVIDERS_DIR/rule"
 PROXY_PROVIDERS_DIR="$PROVIDERS_DIR/proxy"
 
-# the panel by default, its releases are pre-releases: /releases/latest/ does not serve them, the tag is pinned
-# a new tag here moves the configs on the pinned miboard to it on the next start
-MIBOARD_URL="https://github.com/blagodaren/miboard/releases/download/v0.1.1-alpha/dist.zip"
+# the panel by default follows the latest release of miboard
+# configs with a miboard pinned to a tag (the old default) are moved to it on the next start
+MIBOARD_URL="https://github.com/blagodaren/miboard/releases/latest/download/dist.zip"
 MIBOARD_PREFIX="https://github.com/blagodaren/miboard/releases/download/"
 ZASHBOARD_URL="https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip"
 

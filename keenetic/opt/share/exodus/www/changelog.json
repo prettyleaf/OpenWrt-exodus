@@ -5,6 +5,18 @@
   },
   "releases": [
     {
+      "version": "1.30.3",
+      "date": "2026-11-10",
+      "en": [
+        "MIBoard follows its latest release: configs with MIBoard pinned to a tag move to it on the next start. Update it with the Update button of the dashboard on the Updates page.",
+        "When the provider sends the global-mode: false header (Remnawave), MIBoard in the Dashboard tab has no rule / global / direct switch: the mode comes from the profile."
+      ],
+      "ru": [
+        "MIBoard берётся из последнего релиза: конфиги с MIBoard, закреплённой на теге, переходят на него при следующем запуске. Обновляется она кнопкой «Обновить» в строке панели на странице «Обновления».",
+        "Если провайдер отдаёт заголовок global-mode: false (Remnawave), у MIBoard на вкладке «Панель» нет переключателя rule / global / direct: режим задаёт профиль."
+      ]
+    },
+    {
       "version": "1.30.2",
       "date": "2026-11-09",
       "en": [
