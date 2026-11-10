@@ -5,6 +5,16 @@
   },
   "releases": [
     {
+      "version": "1.30.4",
+      "date": "2026-11-10",
+      "en": [
+        "The Dashboard row of the Updates page knows the versions of MIBoard through gh-proxy too: the latest one is read from the page of the release, the installed one from version.json of MIBoard. Before both were unknown with gh-proxy and a link to the latest release."
+      ],
+      "ru": [
+        "Строка «Панель» на странице «Обновления» узнаёт версии MIBoard и через gh-proxy: последнюю — со страницы релиза, установленную — из version.json самой MIBoard. Раньше с gh-proxy и ссылкой на последний релиз обе были неизвестны."
+      ]
+    },
+    {
       "version": "1.30.3",
       "date": "2026-11-10",
       "en": [

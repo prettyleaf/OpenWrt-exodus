@@ -458,16 +458,29 @@ url_tag() {
 	esac
 }
 
-# the tag github redirects /releases/latest of the repository of a link to; gh-proxy does not answer it
+# the tag github redirects /releases/latest of the repository of a link to
+# gh-proxy follows the redirect itself and answers the page of the release: its og:url names the tag, the rest of the page is not read
 latest_tag() {
-	local tag
-	[ -z "$(cfg_get .update.gh_proxy)" ] || return 0
-	tag=$(curl -s -I -o /dev/null --connect-timeout 15 -m 30 -w '%{redirect_url}' "https://github.com/$(printf '%s' "$1" | cut -d / -f 4-5)/releases/latest" 2> /dev/null)
-	case "$tag" in
-		*/releases/tag/*) tag="${tag##*/}" ;;
-		*) return 0 ;;
-	esac
+	local repo tag
+	repo=$(printf '%s' "$1" | cut -d / -f 4-5)
+	if [ -z "$(cfg_get .update.gh_proxy)" ]; then
+		tag=$(curl -s -I -o /dev/null --connect-timeout 15 -m 30 -w '%{redirect_url}' "https://github.com/$repo/releases/latest" 2> /dev/null)
+		case "$tag" in
+			*/releases/tag/*) tag="${tag##*/}" ;;
+			*) return 0 ;;
+		esac
+	else
+		tag=$(curl -s -L --connect-timeout 15 -m 30 "$(gh_url "https://github.com/$repo/releases/latest")" 2> /dev/null \
+			| sed -n 's|.*<meta property="og:url" content="/[^"]*/releases/tag/\([^"/]*\)".*|\1|p' | head -n 1)
+	fi
 	echo "$tag" | grep -q -E '^[A-Za-z0-9._-]+$' && echo "$tag"
+}
+
+# the version miboard writes into version.json of its build, as its tag (v0.1.5); other panels have none
+panel_version() {
+	local version
+	version=$(jq -r 'select(type == "object") | .version | select(type == "string")' "$1/version.json" 2> /dev/null)
+	echo "$version" | grep -q -E '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' && echo "v$version"
 }
 
 # the panel the core runs: the link of the profile, its folder and the mark of the downloaded one (the link, and its tag when known)
@@ -483,7 +496,7 @@ dashboard_paths() {
 }
 
 # the installed and the latest version of the panel: a release link has its tag, a link to the latest release is asked
-# from github every 6 hours like the rest; a branch (gh-pages) has no versions
+# from github (or gh-proxy) every 6 hours like the rest; miboard tells its installed version itself; a branch (gh-pages) has no versions
 dashboard_check() {
 	local cache now latest mark_url version installed
 	dashboard_paths
@@ -512,7 +525,8 @@ dashboard_check() {
 		mark_url=$(head -n 1 "$d_mark" 2> /dev/null)
 		# a folder without the mark was downloaded before the marks, it is taken for the panel of the profile
 		if [ -z "$mark_url" ] || [ "$mark_url" = "$d_url" ]; then
-			version=$(sed -n 2p "$d_mark" 2> /dev/null)
+			version=$(panel_version "$d_dir")
+			[ -n "$version" ] || version=$(sed -n 2p "$d_mark" 2> /dev/null)
 			[ -n "$version" ] || version=$(url_tag "$d_url")
 			# a panel downloaded by the core has no tag in the mark: the latest version written in its code tells it is the latest
 			if [ -z "$version" ] && [ -n "$latest" ] && grep -q -r -F "${latest#v}" "$d_dir/assets" 2> /dev/null; then
@@ -524,7 +538,7 @@ dashboard_check() {
 	jq -n -c --arg url "$d_url" --argjson installed "$installed" --arg version "$version" --arg latest "$latest" \
 		'def text: if . == "" then null else . end;
 		{url: $url, installed: $installed, version: ($version | text), latest: ($latest | text),
-		  update: (if $installed | not then true elif $version == "" or $latest == "" then null else $version != $latest end)}'
+		  update: (if $installed | not then true elif $version == "" or $latest == "" then null else ($version | ltrimstr("v")) != ($latest | ltrimstr("v")) end)}'
 }
 
 action_check_update() {
