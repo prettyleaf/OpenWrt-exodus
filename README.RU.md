@@ -129,3 +129,7 @@ exodus passwd          # показать, где сменить пароль а
 - [XKeen](https://github.com/jameszeroX/XKeen) — за прозрачный прокси на iptables и метки DSCP
 - [Asuswrt-Merlin](https://github.com/RMerl/asuswrt-merlin.ng) — за пользовательские скрипты, и [amtm](https://github.com/decoderman/amtm) — за Entware
 - [Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core) и его [участники](https://github.com/legiz-ru/Prizrak-Core/graphs/contributors)
+
+## Участники
+
+[![Contributors](https://contrib.rocks/image?repo=prettyleaf/OpenWrt-exodus)](https://github.com/prettyleaf/OpenWrt-exodus/graphs/contributors)

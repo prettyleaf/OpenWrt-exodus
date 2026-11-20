@@ -129,3 +129,7 @@ exodus passwd          # shows where to change the router administrator password
 - [XKeen](https://github.com/jameszeroX/XKeen) for the transparent proxy on iptables and the DSCP marks
 - [Asuswrt-Merlin](https://github.com/RMerl/asuswrt-merlin.ng) for the user scripts and [amtm](https://github.com/decoderman/amtm) for Entware
 - [Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core) and its [contributors](https://github.com/legiz-ru/Prizrak-Core/graphs/contributors)
+
+## Contributors
+
+[![Contributors](https://contrib.rocks/image?repo=prettyleaf/OpenWrt-exodus)](https://github.com/prettyleaf/OpenWrt-exodus/graphs/contributors)
