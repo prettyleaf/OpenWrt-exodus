@@ -154,3 +154,7 @@ Logs of the container in RouterOS: `/log print where topics~"container"`.
 - [OpenWrt-nikki](https://github.com/nikkinikki-org/OpenWrt-nikki) and its [contributors](https://github.com/nikkinikki-org/OpenWrt-nikki/graphs/contributors)
 - [XKeen](https://github.com/jameszeroX/XKeen) for the research of Keenetic
 - [Prizrak-Core](https://github.com/legiz-ru/Prizrak-Core) and its [contributors](https://github.com/legiz-ru/Prizrak-Core/graphs/contributors)
+
+## Contributors
+
+[![Contributors](https://contrib.rocks/image?repo=prettyleaf/OpenWrt-exodus)](https://github.com/prettyleaf/OpenWrt-exodus/graphs/contributors)
