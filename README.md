@@ -125,3 +125,7 @@ The package files will be found under `bin/packages/your_architecture/exodus`. T
 - [Prizrak-core](https://github.com/legiz-ru/Prizrak-Core/releases) and its [contributors](https://github.com/legiz-ru/Prizrak-Core/graphs/contributors)
 - [@ApoisL](https://github.com/apoiston)
 - [@xishang0128](https://github.com/xishang0128)
+
+## Contributors
+
+[![Contributors](https://contrib.rocks/image?repo=prettyleaf/OpenWrt-exodus)](https://github.com/prettyleaf/OpenWrt-exodus/graphs/contributors)

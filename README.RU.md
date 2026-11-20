@@ -125,3 +125,7 @@ make package/luci-app-exodus/compile
 - [Prizrak-core](https://github.com/legiz-ru/Prizrak-Core/releases) и его [участникам](https://github.com/legiz-ru/Prizrak-Core/graphs/contributors)
 - [@ApoisL](https://github.com/apoiston)
 - [@xishang0128](https://github.com/xishang0128)
+
+## Участники
+
+[![Contributors](https://contrib.rocks/image?repo=prettyleaf/OpenWrt-exodus)](https://github.com/prettyleaf/OpenWrt-exodus/graphs/contributors)
