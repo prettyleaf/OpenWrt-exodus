@@ -7,6 +7,8 @@
 # CORE=<core>     install this core without asking: prizrak (Prizrak-Core), meta (stable Mihomo Meta), alpha (Mihomo Alpha),
 #                 prizrak-kroha (Prizrak-Kroha, the lighter router build of Prizrak-Core) or prizrak-kroha-upx (the same, packed with UPX)
 # GH_PROXY=<url>  download from GitHub through gh-proxy (https://github.com/prettyleaf/gh-proxy), e.g. https://example.com/ghproxy/TOKEN, empty to download directly
+# SUBSCRIPTION=<url> add this subscription (or choose it if it is added already), download it and use it as the profile,
+#                 in a terminal the installer offers to enable Exodus with it; quote the link, it often has & in it
 # the core and GH_PROXY are saved in /etc/config/nikki, the next runs and the update page use them
 
 repository="prettyleaf/openwrt-exodus"
@@ -227,6 +229,76 @@ install_core() {
 	info "$(core_title "$core") $(core_binary_version /usr/libexec/mihomo) runs on this router"
 }
 
+# add the subscription of SUBSCRIPTION or find the same link among the added ones, sets subscription_section
+# a new install has a placeholder subscription, it becomes this one
+add_subscription() {
+	local section
+	subscription_section=""
+	for section in $(uci -q -X show nikki | sed -n 's/^nikki\.\([^.=]*\)=subscription$/\1/p'); do
+		if [ "$(uci -q get "nikki.$section.url")" = "$SUBSCRIPTION" ]; then
+			subscription_section="$section"
+			info "already added: $(uci -q get "nikki.$section.name")"
+			return
+		fi
+	done
+	if [ "$(uci -q get nikki.subscription.url)" = "http://example.com/default.yaml" ]; then
+		subscription_section="subscription"
+	else
+		subscription_section=$(uci -q add nikki subscription) || fail "failed to add the subscription"
+	fi
+	# the name of the provider replaces the host on the first download
+	uci -q set "nikki.$subscription_section.name=$subscription_host"
+	uci -q set "nikki.$subscription_section.url=$SUBSCRIPTION"
+	uci -q set "nikki.$subscription_section.user_agent=Exodus/{version} {platform}"
+	uci -q set "nikki.$subscription_section.send_hwid=1"
+	info "add the subscription from $subscription_host"
+}
+
+# add the subscription, download it once to check the link and choose it as the profile
+# a link that does not download is kept for a fix on the Profile page, a running proxy keeps its profile then
+setup_subscription() {
+	local previous_profile enabled log_lines line name expire
+	step "Adding the subscription"
+	previous_profile=$(uci -q get nikki.config.profile)
+	enabled=$(uci -q get nikki.config.enabled)
+	add_subscription
+	uci -q set nikki.config.profile="subscription:$subscription_section"
+	uci -q commit nikki
+	info "download the subscription"
+	# the service writes the reasons of a failure to its log, only the lines of this download are shown
+	log_lines=$(wc -l < /var/log/nikki/app.log 2> /dev/null || echo 0)
+	if /etc/init.d/nikki update_subscription "$subscription_section" && [ "$(uci -q get "nikki.$subscription_section.success")" = 1 ]; then
+		name=$(uci -q get "nikki.$subscription_section.name")
+		expire=$(uci -q get "nikki.$subscription_section.expire")
+		info "$name${expire:+, expires $expire}, it is the profile now"
+	else
+		warn "the subscription was not downloaded, check the link on the Profile page"
+		tail -n +$((log_lines + 1)) /var/log/nikki/app.log 2> /dev/null | sed -n 's/^\[[^]]*\] \[Profile\] //p' | while IFS= read -r line; do
+			note "$line"
+		done
+		if [ "$enabled" = 1 ] && [ -n "$previous_profile" ]; then
+			uci -q set nikki.config.profile="$previous_profile"
+			uci -q commit nikki
+			note "the running proxy keeps its profile"
+		fi
+		return
+	fi
+	[ "$enabled" = 1 ] && return
+	# a new install is disabled until a profile is chosen
+	if interactive; then
+		ask "Enable Exodus with this subscription?" "Y/n"
+		case "$answer" in
+			""|[Yy]*)
+				uci -q set nikki.config.enabled=1
+				uci -q commit nikki
+				info "Exodus is enabled, the devices that go through the proxy are chosen on Services → Exodus → App Config"
+				return
+				;;
+		esac
+	fi
+	note "enable Exodus on Services → Exodus → App Config"
+}
+
 # print a line as if it is typed, 12 characters at a time: each pause forks sleep, so the steps are few
 type_line() {
 	local rest="$1" chunk
@@ -350,6 +422,21 @@ rm -rf "$temp_dir"
 mkdir -p "$temp_dir"
 # a proxy stopped for the downloads is started again if the installer fails
 trap 'rm -rf "$temp_dir"; [ "$proxy_stopped" = 1 ] && [ -x "/etc/init.d/nikki" ] && /etc/init.d/nikki start' EXIT
+
+# the subscription link is checked before anything is changed, only its host is shown: the link carries the token of the subscription
+if [ -n "$SUBSCRIPTION" ]; then
+	case "$SUBSCRIPTION" in
+		http://*|https://*) ;;
+		*) fail "SUBSCRIPTION must start with https://" ;;
+	esac
+	case "$SUBSCRIPTION" in
+		*[[:space:]]*) fail "SUBSCRIPTION has a space or a line break in it, copy the link again" ;;
+	esac
+	subscription_host="${SUBSCRIPTION#*://}"
+	subscription_host="${subscription_host%%[/?#]*}"
+	subscription_host="${subscription_host##*@}"
+	note "subscription from $subscription_host"
+fi
 
 # access to github: through the given or the saved gh-proxy, then directly or through the api of github, then through public mirrors
 # public gh-proxy mirrors, tried when github does not answer directly
@@ -640,6 +727,8 @@ if [ "$save_gh_proxy" = 1 ]; then
 	fi
 fi
 uci -q commit nikki
+
+[ -n "$SUBSCRIPTION" ] && setup_subscription
 
 # restart to run the new core
 proxy_stopped=0

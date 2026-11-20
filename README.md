@@ -46,6 +46,12 @@ The installer first checks that the router can download from GitHub. When GitHub
 wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | VERSION=v1.30.7 CORE=alpha ash
 ```
 
+`SUBSCRIPTION` adds your subscription right away: the installer downloads it to check the link, makes it the profile and, in a terminal, offers to enable Exodus with it. Put the link in quotes.
+
+```shell
+wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | SUBSCRIPTION='https://example.com/sub/TOKEN' ash
+```
+
 Installed packages can also be updated from LuCI: `Services → Exodus → Update`. It runs the same installer with the core and the gh-proxy chosen last time, another core is chosen there too: `Change Core` installs its latest build. On routers with little free flash enable the low flash space mode there, it removes the current core before installing the new one.
 
 ### Versions
@@ -70,7 +76,7 @@ wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/unins
 
 ## How To Use
 
-1. Open `Services → Exodus → Profile` in LuCI and add your subscription.
+1. Open `Services → Exodus → Profile` in LuCI and add your subscription, unless the installer added it with `SUBSCRIPTION`.
 2. On `Services → Exodus → App Config` choose the subscription, enable the app and choose which devices go through the proxy.
 3. Everything else is on the `Advanced` page. Do not change it unless you know what you are doing.
 

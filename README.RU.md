@@ -46,6 +46,12 @@ wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/insta
 wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | VERSION=v1.30.7 CORE=alpha ash
 ```
 
+`SUBSCRIPTION` сразу добавляет вашу подписку: установщик скачивает её, чтобы проверить ссылку, делает её профилем и в терминале предлагает сразу включить с ней Exodus. Ссылку возьмите в кавычки.
+
+```shell
+wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | SUBSCRIPTION='https://example.com/sub/TOKEN' ash
+```
+
 Установленные пакеты можно обновить и из LuCI: `Службы → Exodus → Обновить`. Там запускается тот же установщик с ядром и gh-proxy, выбранными в прошлый раз; там же выбирается другое ядро: `Сменить ядро` ставит его последнюю сборку. На роутерах с малым свободным флешем включите там режим «мало места»: он удаляет текущее ядро перед установкой нового.
 
 ### Версии
@@ -70,7 +76,7 @@ wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/unins
 
 ## Как пользоваться
 
-1. Откройте в LuCI `Службы → Exodus → Профиль` и добавьте подписку.
+1. Откройте в LuCI `Службы → Exodus → Профиль` и добавьте подписку, если установщик не добавил её через `SUBSCRIPTION`.
 2. В `Службы → Exodus → Настройки приложения` выберите подписку, включите приложение и выберите, какие устройства идут через прокси.
 3. Всё остальное — на странице `Расширенные`. Не меняйте там ничего, если не уверены.
 
