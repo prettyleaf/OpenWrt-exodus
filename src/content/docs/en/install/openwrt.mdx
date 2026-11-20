@@ -28,13 +28,17 @@ The installer checks access to GitHub, asks which [core](/en/install/options/#co
 
 To update, run the same command or open **Services → Exodus → Update** in LuCI: it runs the same installer with the core and the gh-proxy chosen last time. With little free flash, enable the low flash space mode there: the current core is removed before the new one is installed.
 
-Installer options (version, core, gh-proxy) are on the [Installer options](/en/install/options/) page.
+Installer options (version, core, gh-proxy, subscription) are on the [Installer options](/en/install/options/) page. To have the installer add your subscription and offer to enable Exodus, pass the link in quotes:
+
+```shell
+wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/install.sh | SUBSCRIPTION='https://example.com/sub/TOKEN' ash
+```
 
 ## First start
 
 <Steps>
 
-1. **Services → Exodus → Profile**: add a subscription or upload a profile.
+1. **Services → Exodus → Profile**: add a subscription or upload a profile. A subscription given to the installer in `SUBSCRIPTION` is here already.
 2. **App Config**: choose the profile, enable the app, choose the mode and the devices, then Save & Apply.
 3. The **Dashboard** page shows the dashboard of the core (MIBoard), the core downloads it on the first start.
 
