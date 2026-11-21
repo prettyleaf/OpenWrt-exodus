@@ -870,6 +870,20 @@ async function save(apply) {
 // ---------- service ----------
 
 async function serviceOp(op) {
+    // the start reads the saved config: a profile chosen and not saved yet is saved first, a profile that cannot start is not started
+    if (op === 'start') {
+        if (state.draft.config.profile !== state.config.config.profile) {
+            await save('none');
+            if (state.draft.config.profile !== state.config.config.profile) {
+                throw new Error(_('Some fields are invalid, fix them before saving.'));
+            }
+        }
+        if (profileMissing(state.config)) {
+            const message = _('No profile to start: add a subscription or upload a file on the Profiles page, then choose it on the Status page.');
+            toast(message, 'error');
+            throw new Error(message);
+        }
+    }
     const messages = { start: _('The service is starting.'), stop: _('The service is stopping.'), restart: _('The service is restarting.') };
     await run(api('service', { op: op }), messages[op]);
     [1500, 4000, 8000].forEach((delay) => setTimeout(refreshStatus, delay));
@@ -981,6 +995,27 @@ function profileTitle(profile) {
         return sub ? sub.name : id;
     }
     return id;
+}
+
+// the profile of cfg cannot start: none is chosen, its file or subscription was removed, or it is the example subscription of the default config
+// cfg: state.config or state.draft
+function profileMissing(cfg) {
+    const profile = cfg.config.profile || '';
+    if (profile.startsWith('file:')) {
+        return !state.profiles.some((p) => p.name === profile.substring('file:'.length));
+    }
+    if (profile.startsWith('subscription:')) {
+        const sub = (cfg.subscriptions || []).find((s) => s.id === profile.substring('subscription:'.length));
+        return !sub || !sub.url || sub.url === 'http://example.com/default.yaml';
+    }
+    return true;
+}
+
+// a new subscription or file becomes the profile when the chosen one cannot start, so the power works without choosing it
+function chooseProfileIfMissing(profile) {
+    if (profileMissing(state.draft)) {
+        state.draft.config.profile = profile;
+    }
 }
 
 function profileChoices() {
@@ -1398,8 +1433,6 @@ function subscriptionDialog(subscription, onSave) {
 }
 
 function pageProfiles() {
-    const active = state.draft.config.profile;
-
     // subscriptions are a part of the config, they are saved with the save bar
     const subsContainer = E('div', { class: 'contents' });
     const renderSubscriptions = () => {
@@ -1420,7 +1453,7 @@ function pageProfiles() {
             }
             tbody.appendChild(E('tr', {}, [
                 E('td', {}, [
-                    E('div', { class: 'cell-title' }, [providerLogo(st.logo, 'sub-logo'), sub.name, active === `subscription:${sub.id}` ? badge(_('Active'), 'default') : null]),
+                    E('div', { class: 'cell-title' }, [providerLogo(st.logo, 'sub-logo'), sub.name, state.draft.config.profile === `subscription:${sub.id}` ? badge(_('Active'), 'default') : null]),
                     host ? E('div', { class: 'description mono' }, host) : null
                 ]),
                 E('td', { class: 'nowrap' }, st.used || st.total ? `${st.used || '—'} / ${st.total || '∞'}` : '—'),
@@ -1461,6 +1494,7 @@ function pageProfiles() {
                     } }),
                     btn(null, { variant: 'ghost', size: 'sm', icon: 'pencil', title: _('Edit'), onClick: () => subscriptionDialog(sub, (edited) => {
                         subscriptions[index] = edited;
+                        chooseProfileIfMissing(`subscription:${edited.id}`);
                         renderSubscriptions();
                         changed();
                     }) }),
@@ -1488,6 +1522,7 @@ function pageProfiles() {
             { id: newId(), name: '', url: '', info_url: '', user_agent: 'Exodus/{version} {platform}', send_hwid: true, update_interval: null },
             (created) => {
                 state.draft.subscriptions = (state.draft.subscriptions || []).concat([created]);
+                chooseProfileIfMissing(`subscription:${created.id}`);
                 renderSubscriptions();
                 changed();
             }) }),
@@ -1504,7 +1539,7 @@ function pageProfiles() {
         filesContainer.appendChild(E('div', { class: 'table-wrap' }, E('table', { class: 'table' }, [
             E('thead', {}, E('tr', {}, [E('th', {}, _('Name')), E('th', {}, _('Size')), E('th')])),
             E('tbody', {}, state.profiles.map((p) => E('tr', {}, [
-                E('td', {}, E('div', { class: 'cell-title' }, [E('span', { class: 'mono' }, p.name), active === `file:${p.name}` ? badge(_('Active'), 'default') : null])),
+                E('td', {}, E('div', { class: 'cell-title' }, [E('span', { class: 'mono' }, p.name), state.draft.config.profile === `file:${p.name}` ? badge(_('Active'), 'default') : null])),
                 E('td', { class: 'nowrap' }, formatSize(p.size)),
                 E('td', { class: 'actions' }, E('div', { class: 'row' }, [
                     btn(null, { variant: 'ghost', size: 'sm', icon: 'download', title: _('Download'), onClick: async () => {
@@ -1537,7 +1572,12 @@ function pageProfiles() {
         await run(api('profile_upload', { name: name, content: content }), _('%s is uploaded.', name));
         const data = await api('load');
         state.profiles = data.profiles || [];
+        if (state.profiles.some((p) => p.name === name)) {
+            chooseProfileIfMissing(`file:${name}`);
+        }
         renderFiles();
+        renderSubscriptions();
+        changed();
     });
 
     const filesCard = card({

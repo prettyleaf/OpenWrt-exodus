@@ -5,6 +5,18 @@
   },
   "releases": [
     {
+      "version": "1.31.1",
+      "date": "2026-11-21",
+      "en": [
+        "A new subscription or an uploaded file becomes the profile when the chosen one cannot start, for example the placeholder subscription of a new install.",
+        "The power button saves a profile chosen and not saved yet before the start, and does not start without a profile."
+      ],
+      "ru": [
+        "Новая подписка или загруженный файл становится профилем, если выбранный профиль не может запуститься, например подписка-заглушка новой установки.",
+        "Кнопка питания перед запуском сохраняет выбранный, но не сохранённый профиль и не запускает службу без профиля."
+      ]
+    },
+    {
       "version": "1.31.0",
       "date": "2026-11-19",
       "en": [
