@@ -1426,3 +1426,7 @@ msgstr ""
 #: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/dashboard.js
 msgid "LuCI is opened over HTTPS, the core serves the dashboard over HTTP. Open it in a new tab."
 msgstr ""
+
+#: applications/luci-app-exodus/htdocs/luci-static/resources/view/nikki/app.js
+msgid "No profile to start: add a subscription or upload a file on the Profile page, then choose it here."
+msgstr ""

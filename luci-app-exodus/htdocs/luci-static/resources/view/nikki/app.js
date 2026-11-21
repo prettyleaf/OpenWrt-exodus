@@ -68,8 +68,8 @@ function profileTitle(profile) {
 }
 
 // the state of the service on the left; the power, autostart and the dashboard go to the right, under the profile
-// state: { running, enabled } of nikki.serviceState()
-function serviceView(versions, state) {
+// state: { running, enabled } of nikki.serviceState(), beforeStart: runs before a start, a rejection keeps the service off
+function serviceView(versions, state, beforeStart) {
     const info = E('dl', { class: 'exodus-service-info' });
     const side = E('div', { class: 'exodus-service-power' });
 
@@ -142,6 +142,9 @@ function serviceView(versions, state) {
             // a state that does not change in time brings the button back
             setTimeout(draw, 30500);
             try {
+                if (on) {
+                    await beforeStart();
+                }
                 await nikki.power(on);
             } catch (e) {
                 powerPending = null;
@@ -196,8 +199,19 @@ return view.extend({
         const coreVersion = data[1].core ?? '';
         // the installer saves an alternative core, Prizrak-Core reports the same version as Mihomo Meta
         const coreTitle = { alpha: 'Mihomo Alpha', prizrak: 'Prizrak-Core', 'prizrak-kroha': 'Prizrak-Kroha', 'prizrak-kroha-upx': 'Prizrak-Kroha UPX' }[uci.get('nikki', 'update', 'core')] ?? 'Mihomo Meta';
-        const service = serviceView({ app: appVersion, core: coreVersion ? `${coreVersion} · ${coreTitle}` : '' }, data[2]);
         const profiles = data[3];
+        // the start reads the committed config: a profile chosen here and not saved yet is saved first
+        const beforeStart = async function () {
+            if (profileOption.formvalue('config') !== (uci.get('nikki', 'config', 'profile') ?? '')) {
+                await m.save(null, true);
+                await nikki.commit();
+                ui.changes.init();
+            }
+            if (nikki.profileMissing(profiles)) {
+                throw new Error(_('No profile to start: add a subscription or upload a file on the Profile page, then choose it here.'));
+            }
+        };
+        const service = serviceView({ app: appVersion, core: coreVersion ? `${coreVersion} · ${coreTitle}` : '' }, data[2], beforeStart);
         const hosts = data[4].hosts;
         const meta = data[5];
 
@@ -228,6 +242,7 @@ return view.extend({
 
         o = s.option(form.ListValue, 'profile', _('Profile'));
         o.optional = true;
+        const profileOption = o;
 
         for (const profile of profiles) {
             o.value('file:' + profile.name, _('File:') + profile.name);

@@ -76,8 +76,8 @@ wget -O - https://raw.githubusercontent.com/prettyleaf/openwrt-exodus/main/unins
 
 ## How To Use
 
-1. Open `Services → Exodus → Profile` in LuCI and add your subscription, unless the installer added it with `SUBSCRIPTION`.
-2. On `Services → Exodus → App Config` choose the subscription, enable the app and choose which devices go through the proxy.
+1. Open `Services → Exodus → Profile` in LuCI, add your subscription (or upload a profile file) and press `Save & Apply`, unless the installer added it with `SUBSCRIPTION`. The first subscription or file becomes the profile in use.
+2. On `Services → Exodus → App Config` check the profile, press the power button (`Turned off`) and choose which devices go through the proxy. A profile chosen in the list is saved together with the other changes of the page when the service is turned on.
 3. Everything else is on the `Advanced` page. Do not change it unless you know what you are doing.
 
 When the service is running, the `Dashboard` page of Exodus shows the dashboard, `Open Dashboard` on the main page leads to it. The core downloads it on the first start ([MIBoard](https://github.com/blagodaren/miboard) by default, another one can be chosen in `Advanced → External Control Config`, the core downloads it on the next start).
