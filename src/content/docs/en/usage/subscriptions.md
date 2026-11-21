@@ -5,6 +5,12 @@ description: Subscriptions, provider headers and HWID — the same on every plat
 
 A profile is a Mihomo config: a subscription (downloaded by its URL) or an uploaded file. On every start the profile is merged with the settings of Exodus and the mixin file, the result is the profile for startup. How to change the profile over the subscription — on the [Overrides](/en/usage/overrides/) page.
 
+## The profile in use
+
+- A new install has the placeholder subscription `default` (`http://example.com/default.yaml`) as the profile. A subscription added or edited on the Profile page, or an uploaded file, becomes the profile by itself when the chosen one cannot start: none is chosen, it was removed, or it is the placeholder. A profile that works is not replaced, another one is chosen by hand. Since 1.31.1.
+- The change is saved like the other settings: Save & Apply on the Profile page of LuCI, the save bar on Keenetic, MikroTik and Asus.
+- The power button saves a profile chosen in the list and not saved yet before the start. Without a profile to start it says `No profile to start` and does not start the service.
+
 ## Subscription fields
 
 | Field | What it sets |

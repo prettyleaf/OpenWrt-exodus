@@ -9,8 +9,8 @@ On OpenWrt Exodus is set up in LuCI: **Services → Exodus**. Two pages are enou
 
 - The announce of the provider of the subscription is shown on top, in the middle.
 - **Service**: the versions of the app and the core, the profile and the state of the proxy on the left, the profile, the power button, Autostart and Open Dashboard on the right, it leads to the [Dashboard](#dashboard) page.
-  - **Profile** — a subscription or an uploaded file, saved with Save & Apply.
-  - **The power button** shows the state: Turned off, Turning on…, Turned on. A press starts or stops the service at once and keeps it so in the config (the `enabled` flag), so a service turned off does not start after a reboot either. It replaced the Enable checkbox and the Restart Service button.
+  - **Profile** — a subscription or an uploaded file, saved with Save & Apply. A new subscription or file becomes the profile by itself when the chosen one cannot start, see [The profile in use](/en/usage/subscriptions/#the-profile-in-use).
+  - **The power button** shows the state: Turned off, Turning on…, Turned on. A press starts or stops the service at once and keeps it so in the config (the `enabled` flag), so a service turned off does not start after a reboot either. It replaced the Enable checkbox and the Restart Service button. A profile chosen and not saved yet is saved before the start, without a profile the service is not started.
   - **Autostart** — start on boot, the same as `/etc/init.d/nikki enable` / `disable` and System → Startup. Applied at once.
 - **Start Delay** — seconds to wait after the router boots.
 - **Scheduled Restart** — by cron, `0 3 * * *` (every day at 3:00) by default.

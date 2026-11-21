@@ -11,8 +11,8 @@ The web UI runs on Keenetic, Asus and MikroTik, on OpenWrt [LuCI](/en/usage/luci
 
 <Steps>
 
-1. **Profiles**: add a subscription or upload a profile.
-2. **Status**: enable the service, choose the profile, choose the mode and the devices in the Devices section.
+1. **Profiles**: add a subscription or upload a profile. The first one becomes the profile of a new install by itself.
+2. **Status**: enable the service, check the profile, choose the mode and the devices in the Devices section.
 3. Press **Save & Apply**.
 
 </Steps>
@@ -20,11 +20,11 @@ The web UI runs on Keenetic, Asus and MikroTik, on OpenWrt [LuCI](/en/usage/luci
 ## Status
 
 - **Service** on Keenetic and MikroTik: the versions of Exodus and the core, the profile and the state of the proxy on the left (on MikroTik also the connection to RouterOS), the profile, the **power button**, Autostart and Dashboard on the right.
-  - The power button shows the state of the service: Turned off, Turning on…, Turned on. A press starts or stops the service at once, without Save & Apply, and works without the autostart.
+  - The power button shows the state of the service: Turned off, Turning on…, Turned on. A press starts or stops the service at once, without Save & Apply, and works without the autostart. A profile chosen and not saved yet is saved before the start, without a profile the service is not started.
   - **Autostart** starts the service when the router boots.
   - There is no separate restart button: Save & Apply restarts, or turn the service off and on.
 - **Service** on Asus: the state, the Start, Stop, Restart and Dashboard buttons, Autostart.
-- **Profile**: a subscription or an uploaded file, the hint of the field explains the autostart too. Save & Apply restarts the service with the chosen profile.
+- **Profile**: a subscription or an uploaded file, the hint of the field explains the autostart too. Save & Apply restarts the service with the chosen profile. A new subscription or file becomes the profile by itself when the chosen one cannot start, see [The profile in use](/en/usage/subscriptions/#the-profile-in-use).
 - When the provider of the subscription sends an announce, a block with its logo, text and a Support button appears on top.
 - **Devices** — who goes through the proxy:
   - **All except selected** — all devices go through the proxy, the selected ones go directly (the default).
