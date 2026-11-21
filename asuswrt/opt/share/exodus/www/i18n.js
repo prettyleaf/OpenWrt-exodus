@@ -270,6 +270,7 @@ window.I18N_RU = {
     "Profile": "Профиль",
     "Profile files": "Файлы профилей",
     "Profile for startup (read only on restart)": "Профиль запуска (перезаписывается при перезапуске)",
+    "No profile to start: add a subscription or upload a file on the Profiles page, then choose it on the Status page.": "Нет профиля для запуска: добавьте подписку или загрузите файл на странице «Профили», затем выберите его на странице «Статус».",
     "Profiles": "Профили",
     "Proxies": "Прокси",
     "Proxy": "Прокси",

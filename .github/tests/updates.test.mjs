@@ -92,10 +92,14 @@ test('status teardown clears fast timers and ignores late session results',async
 test('service actions and config apply enter fast polling only after dispatch succeeds',async()=>{
     let release, fast=0;
     const globals={api:()=>new Promise((resolve,reject)=>{release={resolve,reject};}),run:p=>p,_:s=>s,
-        fastStatusPolling:()=>fast++,state:{invalid:new Set(),draft:{},config:{}},clone:v=>({...v}),updateDirty:()=>{}};
+        fastStatusPolling:()=>fast++,state:{invalid:new Set(),draft:{config:{profile:'file:a'}},config:{config:{profile:'file:a'}}},clone:v=>({...v}),updateDirty:()=>{},
+        missing:false,profileMissing:()=>globals.missing,toast:()=>{}};
     const service=load('serviceOp','openDashboard',globals);
     const action=service('start');assert.equal(fast,0);release.resolve({});await action;assert.equal(fast,1);
     const failed=service('stop');release.reject(Error('dispatch failed'));await assert.rejects(failed);assert.equal(fast,1);
+    // a start without a profile is not dispatched
+    globals.missing=true;release=null;
+    await assert.rejects(load('serviceOp','openDashboard',globals)('start'));assert.equal(release,null);globals.missing=false;
     const save=load('save','serviceOp',globals);
     const apply=save('restart');assert.equal(fast,1);release.resolve({});await apply;assert.equal(fast,2);
     assert.match(source.slice(source.indexOf("window.addEventListener('exodus-session-expired'")),/stopStatusPolling\(\)/);
