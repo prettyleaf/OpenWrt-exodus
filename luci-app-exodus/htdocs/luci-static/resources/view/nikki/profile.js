@@ -16,11 +16,13 @@ return view.extend({
     load: function () {
         return Promise.all([
             uci.load('nikki'),
-            nikki.subscriptionMeta()
+            nikki.subscriptionMeta(),
+            nikki.listProfiles()
         ]);
     },
     render: function (data) {
         const meta = data[1];
+        const files = data[2];
 
         let m, s, o, so;
 
@@ -32,7 +34,14 @@ return view.extend({
         o.browser = true;
         o.enable_download = true;
         o.root_directory = nikki.profilesDir;
+        // a chosen file becomes the profile when the current one cannot start, so Turn on works without the main page
         o.write = function (section_id, formvalue) {
+            const dir = nikki.profilesDir + '/';
+            if (formvalue.startsWith(dir) && nikki.profileMissing(files)) {
+                const name = formvalue.substring(dir.length);
+                files.push({ name: name });
+                uci.set('nikki', 'config', 'profile', 'file:' + name);
+            }
             return true;
         };
 
@@ -113,6 +122,13 @@ return view.extend({
         o = s.option(form.Value, 'url', _('Subscription Url'));
         o.modalonly = true;
         o.rmempty = false;
+        // the first working subscription becomes the profile, the default one points to the example
+        o.write = function (section_id, formvalue) {
+            form.Value.prototype.write.apply(this, arguments);
+            if (nikki.profileMissing(files)) {
+                uci.set('nikki', 'config', 'profile', 'subscription:' + section_id);
+            }
+        };
 
         // the user agent of exodus, {platform} is the os of the router
         // the previous one stays for providers whose response rules do not know exodus yet

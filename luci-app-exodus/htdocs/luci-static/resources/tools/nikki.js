@@ -102,6 +102,14 @@ const callNikkiPower = rpc.declare({
     expect: { '': {} }
 });
 
+// commits the changes of this session, the start of the service reads only the committed config
+const callUciCommit = rpc.declare({
+    object: 'uci',
+    method: 'commit',
+    params: ['config'],
+    reject: true
+});
+
 const homeDir = '/etc/nikki';
 const profilesDir = `${homeDir}/profiles`;
 const subscriptionsDir = `${homeDir}/subscriptions`;
@@ -285,6 +293,24 @@ return baseclass.extend({
 
     getIdentifiers: function () {
         return callNikkiGetIdentifiers();
+    },
+
+    commit: function () {
+        return callUciCommit('nikki');
+    },
+
+    // the profile cannot start: none is chosen, its file or subscription was removed, or it is the example subscription of the default config
+    // files: the list of listProfiles()
+    profileMissing: function (files) {
+        const profile = uci.get('nikki', 'config', 'profile') ?? '';
+        if (profile.startsWith('file:')) {
+            return !files.some((file) => file.name === profile.substring('file:'.length));
+        }
+        if (profile.startsWith('subscription:')) {
+            const url = uci.get('nikki', profile.substring('subscription:'.length), 'url');
+            return !url || url === 'http://example.com/default.yaml';
+        }
+        return true;
     },
 
     listProfiles: function () {
