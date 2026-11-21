@@ -52,6 +52,8 @@ Most likely memory runs out. Set the Memory limit on Settings → Mihomo, for ex
 
 With Test Profile on, the core checks the profile before the start: the reason of the failure is in the core log (Log).
 
+The app log says `Use subscription: default.` and the download fails: the profile is still the placeholder subscription of a new install. Choose your subscription in **Profile** on App Config and press Save & Apply. Since 1.31.1 a new subscription becomes the profile by itself.
+
 ## The web UI does not open or the password is forgotten
 
 `exodus web restart` restarts the web UI, `exodus passwd` changes the password, `exodus passwd -d` removes it and the UI opens without a login (Keenetic and MikroTik). The port of the web UI is on Settings → Service (9099 by default).
