@@ -308,6 +308,8 @@ watch() {
 				fw_sets_local
 				fw_sets_mac
 			fi
+			# rule providers of the core update on their own interval, the first minute catches the ones downloaded on start
+			[ $((tick % 40)) = 4 ] && fw_sets_wl
 			lock_release firewall
 		fi
 		minute=$(date +%Y%m%d%H%M)
