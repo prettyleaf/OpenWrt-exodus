@@ -377,6 +377,11 @@ start_service() {
 			reload_cron=1
 		fi
 	fi
+	## fake-ip only: rule providers of the core update on their own interval
+	if [ "$(uci -q get nikki.proxy.fake_ip_only)" = 1 ]; then
+		echo "*/10 * * * * $FAKE_IP_ONLY_SH #nikki fake-ip only" >> "/etc/crontabs/root"
+		reload_cron=1
+	fi
 	## reload cron if needed
 	if [ "$reload_cron" = 1 ]; then
 		notify_cron
@@ -518,6 +523,8 @@ service_started() {
 		# check hijack
 		if nft list tables | grep -q nikki; then
 			log "Proxy" "Hijack successful."
+			# fake-ip only: the networks of the proxy rules, in the background, a big rule set takes a while
+			( $FAKE_IP_ONLY_SH < /dev/null > /dev/null 2>&1 & )
 		else
 			log "Proxy" "Hijack failed."
 			log "App" "Exit."

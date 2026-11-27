@@ -34,6 +34,7 @@ PROVIDER_UC="$UCODE_DIR/provider.uc"
 SH_DIR="$HOME_DIR/scripts"
 INCLUDE_SH="$SH_DIR/include.sh"
 FIREWALL_INCLUDE_SH="$SH_DIR/firewall_include.sh"
+FAKE_IP_ONLY_SH="$SH_DIR/fake_ip_only.sh"
 
 # nftables
 NFT_DIR="$HOME_DIR/nftables"
