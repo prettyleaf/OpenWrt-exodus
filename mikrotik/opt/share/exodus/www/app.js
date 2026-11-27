@@ -1811,6 +1811,8 @@ function routerosCard() {
     });
 }
 
+const FAKE_IP_ONLY_HELP = "Only the domains that get a fake-ip address and the networks of the proxy rules of the profile (IP-CIDR, SRC-IP-CIDR, rule sets with IP addresses) go to the core, the rest goes directly past it: Russian sites and torrents do not load the core and the router. Needs <code>enhanced-mode: fake-ip</code> in the profile, <code>fake-ip-filter-mode: whitelist</code> chooses the domains. GEOIP and IP-ASN rules are not taken into account. The networks are kept in the address lists exodus-wl and exodus-wls of RouterOS, a big list takes minutes to fill.";
+
 function pageSettings() {
     const d = () => state.draft;
     const proxyOn = () => d().proxy.enabled === true;
@@ -1830,7 +1832,8 @@ function pageSettings() {
                 dependOn(E('div', { class: 'grid-2' }, [
                     switchField(_('DNS through the core'), _('DNS queries of the proxied devices go to the core, whatever DNS the router uses. Required for Fake-IP and domain rules.'), ref('proxy.dns_hijack')),
                     switchField(_('Traffic of the router'), _('Proxy the connections of RouterOS itself. DNS of the router is not intercepted.'), ref('proxy.router_proxy'))
-                ]), proxyOn)
+                ]), proxyOn),
+                switchField(_('Fake-IP only'), _(FAKE_IP_ONLY_HELP), ref('proxy.fake_ip_only'), proxyOn)
             ]
         }),
         card({

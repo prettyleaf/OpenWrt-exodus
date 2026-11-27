@@ -383,6 +383,9 @@ watch() {
 			fi
 			lock_release firewall
 		fi
+		# fake-ip only: the address lists of routeros in the background, a first sync of a big list takes minutes;
+		# rule providers of the core update on their own interval, the first minute catches the ones downloaded on start
+		[ $((tick % 40)) = 4 ] && daemonize "$EXODUS" wl_sync
 		minute=$(date +%Y%m%d%H%M)
 		[ "$minute" = "$last" ] && continue
 		last="$minute"
@@ -398,6 +401,15 @@ watch() {
 		fi
 	done
 	rm -f "$WATCH_PID_PATH"
+}
+
+wl_sync() {
+	[ -f "$STARTED_FLAG_PATH" ] || return 0
+	fw_env || return 0
+	lock_acquire wl 1 || return 0
+	ros_load
+	fw_wl_sync
+	lock_release wl
 }
 
 sync_aps() {
@@ -720,6 +732,7 @@ case "$cmd" in
 	supervise) supervise ;;
 	watch) watch ;;
 	sync) sync_aps ;;
+	wl_sync) wl_sync ;;
 	apply) apply ;;
 	routeros) routeros ;;
 	forward)
