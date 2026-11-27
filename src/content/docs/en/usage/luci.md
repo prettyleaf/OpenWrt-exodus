@@ -46,7 +46,7 @@ For experienced users. Wrong values can break the proxy or the internet access o
 
 | Section | What is inside |
 | --- | --- |
-| **Proxy Config** | the interception switch; TCP and UDP modes (Redirect, TPROXY, TUN; TCP Redirect and UDP TPROXY by default); DNS hijack and proxy for IPv4 and IPv6 |
+| **Proxy Config** | the interception switch; TCP and UDP modes (Redirect, TPROXY, TUN; TCP Redirect and UDP TPROXY by default); DNS hijack and proxy for IPv4 and IPv6; Fake-IP Only, see [Settings](/en/usage/settings/) |
 | ↳ Router Proxy | proxying the traffic of the router itself and its access control |
 | ↳ LAN Proxy | inbound interfaces (`lan` by default) and access control — the device selection rules, matched from top to bottom |
 | ↳ Bypass | TCP and UDP ports to proxy, bypass by DSCP and fwmark, bypass of China mainland IP |
