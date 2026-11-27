@@ -44,6 +44,7 @@ define Package/exodus/install
 
 	$(INSTALL_BIN) $(CURDIR)/files/scripts/include.sh $(1)/etc/nikki/scripts/include.sh
 	$(INSTALL_BIN) $(CURDIR)/files/scripts/firewall_include.sh $(1)/etc/nikki/scripts/firewall_include.sh
+	$(INSTALL_BIN) $(CURDIR)/files/scripts/fake_ip_only.sh $(1)/etc/nikki/scripts/fake_ip_only.sh
 	$(INSTALL_BIN) $(CURDIR)/files/scripts/debug.sh $(1)/etc/nikki/scripts/debug.sh
 	# the installer from the repository root, used by the update page
 	$(INSTALL_BIN) $(CURDIR)/../install.sh $(1)/etc/nikki/scripts/install.sh

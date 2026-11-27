@@ -63,6 +63,10 @@ return view.extend({
         o = s.taboption('proxy', form.Flag, 'fake_ip_ping_hijack', _('Fake-IP Ping Hijack'));
         o.rmempty = false;
 
+        o = s.taboption('proxy', form.Flag, 'fake_ip_only', _('Fake-IP Only'));
+        o.description = _('Only the domains that get a fake-ip address and the networks of the proxy rules of the profile (IP-CIDR, SRC-IP-CIDR, rule sets with IP addresses) go to the core, the rest goes directly past it: Russian sites and torrents do not load the core and the router. Needs enhanced-mode: fake-ip in the profile, fake-ip-filter-mode: whitelist chooses the domains. GEOIP and IP-ASN rules are not taken into account.');
+        o.rmempty = false;
+
         s.tab('router', _('Router Proxy'));
 
         o = s.taboption('router', form.Flag, 'router_proxy', _('Enable'));
