@@ -1,7 +1,11 @@
 {
   "dev": {
-    "en": [],
-    "ru": []
+    "en": [
+        "Fake-IP only in Settings → Proxy: only the domains that get a fake-ip address and the networks of the proxy rules of the profile (IP-CIDR, SRC-IP-CIDR, rule sets with IP addresses) go to the core, the rest goes directly past it, so Russian sites and torrents do not load the core and the router. With fake-ip-filter-mode: whitelist the profile chooses the domains."
+    ],
+    "ru": [
+        "«Только Fake-IP» в «Настройки → Прокси»: в ядро идут только домены, получившие адрес fake-ip, и сети прокси-правил профиля (IP-CIDR, SRC-IP-CIDR, наборы правил с IP-адресами), остальное идёт напрямую мимо него, так что российские сайты и торренты не нагружают ядро и роутер. С fake-ip-filter-mode: whitelist домены выбирает профиль."
+    ]
   },
   "releases": [
     {

@@ -303,6 +303,8 @@ window.I18N_RU = {
     "There are unsaved changes, they will be lost.": "Есть несохранённые изменения, они будут потеряны.",
     "through gh-proxy at %s": "через gh-proxy на %s",
     "Traffic": "Трафик",
+    "Fake-IP only": "Только Fake-IP",
+    "Only the domains that get a fake-ip address and the networks of the proxy rules of the profile (IP-CIDR, SRC-IP-CIDR, rule sets with IP addresses) go to the core, the rest goes directly past it: Russian sites and torrents do not load the core and the router. Needs <code>enhanced-mode: fake-ip</code> in the profile, <code>fake-ip-filter-mode: whitelist</code> chooses the domains. GEOIP and IP-ASN rules are not taken into account.": "В ядро идут только домены, получившие адрес fake-ip, и сети прокси-правил профиля (IP-CIDR, SRC-IP-CIDR, наборы правил с IP-адресами), остальное идёт напрямую мимо него: российские сайты и торренты не нагружают ядро и роутер. Нужен <code>enhanced-mode: fake-ip</code> в профиле, домены выбирает <code>fake-ip-filter-mode: whitelist</code>. Правила GEOIP и IP-ASN не учитываются.",
     "Traffic of the router": "Трафик роутера",
     "Traffic with these marks goes directly (62 in XKeen).": "Трафик с этими метками идёт напрямую (62 в XKeen).",
     "Traffic with these marks goes through the proxy even from excluded devices and on any port (63 in XKeen).": "Трафик с этими метками идёт через прокси даже с исключённых устройств и на любых портах (63 в XKeen).",

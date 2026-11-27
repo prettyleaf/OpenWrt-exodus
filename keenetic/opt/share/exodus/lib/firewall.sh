@@ -14,6 +14,8 @@
 #                    tcp of established proxied connections goes through EXODUS_DIVERT first
 # filter INPUT    -> EXODUS_INPUT: accept redirected traffic, guest segments drop it otherwise
 # nat/mangle OUTPUT -> router proxy, off by default
+# fake-ip only: after the dscp marks only fake-ip addresses and the networks of the proxy rules (exodus_wl*)
+#                    and the sources of SRC-IP-CIDR rules (exodus_wls*) go on, the rest never reaches the core
 #
 # dscp like xkeen: 61 forces a separate listener with a chosen proxy, 62 bypasses, 63 proxies the device anyway
 # no regex in jq here: jq of entware is built without oniguruma
@@ -26,6 +28,10 @@ SET_RSV6="exodus_rsv6"
 SET_LOCAL4="exodus_local4"
 SET_LOCAL6="exodus_local6"
 SET_DENY="exodus_deny"
+SET_WL4="exodus_wl4"
+SET_WL6="exodus_wl6"
+SET_WLS4="exodus_wls4"
+SET_WLS6="exodus_wls6"
 
 FW_CHAINS_NAT="EXODUS_PRE EXODUS_LAN EXODUS_DNS EXODUS_DNS_DO EXODUS_REDIR EXODUS_REDIR_PORTS EXODUS_REDIR_AC EXODUS_REDIR_DO EXODUS_OUT EXODUS_OUT_PORTS"
 FW_CHAINS_MANGLE="EXODUS_MANGLE EXODUS_DIVERT EXODUS_TP EXODUS_TP_PORTS EXODUS_TP_AC EXODUS_TP_DO EXODUS_MOUT EXODUS_MOUT_PORTS EXODUS_MOUT_DO"
@@ -151,6 +157,14 @@ fw_prepare() {
 		fake4=$(echo "${p_fake_ip_range:-198.18.0.1/16}" | fw_filter_ip4)
 		fake6=$(echo "$p_fake_ip6_range" | fw_filter_ip6)
 	fi
+	local fake_only; fake_only=0
+	if [ "$c_proxy_fake_ip_only" = 1 ]; then
+		if [ "$p_dns_mode" = "fake-ip" ]; then
+			fake_only=1
+		else
+			log "Proxy" "Fake-IP only needs enhanced-mode: fake-ip in the profile, all traffic goes to the core."
+		fi
+	fi
 	local mode; mode="exclude"
 	[ "$c_proxy_access_mode" = "include" ] && mode="include"
 	local tcp_mode udp_mode
@@ -201,7 +215,17 @@ fw_prepare() {
 		fw_var fw_force_tproxy_port "$(fw_words "$FW_NUMBER" "$force_tproxy")"
 		fw_var fw_fake4 "$fake4"
 		fw_var fw_fake6 "$fake6"
+		fw_var fw_fake_only "$fake_only"
 	} > "$FIREWALL_ENV_PATH"
+	# the rules refer to the sets, a hook may apply them before the start fills the sets
+	if [ "$fake_only" = 1 ]; then
+		ipset create "$SET_WL4" hash:net family inet maxelem 1048576 -exist 2> /dev/null
+		ipset create "$SET_WLS4" hash:net family inet -exist 2> /dev/null
+		if [ "$v6" = 1 ]; then
+			ipset create "$SET_WL6" hash:net family inet6 maxelem 1048576 -exist 2> /dev/null
+			ipset create "$SET_WLS6" hash:net family inet6 -exist 2> /dev/null
+		fi
+	fi
 }
 
 fw_env() {
@@ -300,6 +324,164 @@ fw_sets_rci() {
 				| .mac // empty' 2> /dev/null | fw_filter_mac | sort -u | fw_set_load "$SET_DENY" hash:mac
 		fi
 	fi
+}
+
+# fake-ip only: what the core must still get besides the fake-ip addresses, from the running profile
+# rules to a proxy or a group give their IP-CIDR, IP-CIDR6 and SRC-IP-CIDR and their rule sets, so do the rule sets of dns.fake-ip-filter
+# prints "dst <network>", "src <network>" and "set <name>" lines, one rule per input line
+fw_wl_rules() {
+	awk -F ',' '
+		function trim(s) { gsub(/^[ \t"'\'']+|[ \t"'\'']+$/, "", s); return s }
+		function direct(t) { t = toupper(trim(t)); return t == "" || t == "DIRECT" || t == "REJECT" || t == "REJECT-DROP" || t == "PASS" || t == "COMPATIBLE" }
+		function one(type, value) {
+			type = toupper(trim(type))
+			value = trim(value)
+			if (value == "") return
+			if (type == "IP-CIDR" || type == "IP-CIDR6") print "dst " value
+			else if (type == "SRC-IP-CIDR") print "src " value
+			else if (type == "RULE-SET") print "set " value
+		}
+		{
+			type = toupper(trim($1))
+			if (type == "AND" || type == "OR") {
+				# OR,((IP-CIDR,1.2.3.0/24),(RULE-SET,name)),PROXY
+				last = 0
+				for (i = length($0); i > 0; i--) if (substr($0, i, 1) == ")") { last = i; break }
+				if (!last) next
+				split(substr($0, last + 1), tail, ",")
+				if (direct(tail[2])) next
+				n = split(substr($0, 1, last), parts, /[()]/)
+				for (i = 1; i <= n; i++) if (index(parts[i], ",")) { split(parts[i], kv, ","); one(kv[1], kv[2]) }
+			} else if (NF >= 3 && !direct($3)) {
+				one($1, $2)
+			}
+		}'
+}
+
+# entries of a rule set: one network per line (ipcidr) or classical rules
+fw_wl_payload() {
+	awk -v behavior="$1" '
+		{
+			line = $0
+			sub(/#.*/, "", line)
+			gsub(/^[ \t]*(- )?[ \t"'\'']*|[ \t"'\''\r]+$/, "", line)
+			if (line == "") next
+			if (behavior == "ipcidr") { print "dst " line; next }
+			split(line, kv, ",")
+			type = toupper(kv[1])
+			gsub(/[ \t]/, "", kv[2])
+			if (type == "IP-CIDR" || type == "IP-CIDR6") print "dst " kv[2]
+			else if (type == "SRC-IP-CIDR") print "src " kv[2]
+		}'
+}
+
+# the file of a rule provider as the core saves it, http providers without a path are kept by the md5 of the url
+fw_wl_file() {
+	local type path url
+	type="$1"
+	path="$2"
+	url="$3"
+	if [ -z "$path" ] && [ "$type" = "http" ] && [ -n "$url" ]; then
+		path="rules/$(printf '%s' "$url" | md5sum | cut -d ' ' -f 1)"
+	fi
+	case "$path" in
+		"") return 1 ;;
+		/*) echo "$path" ;;
+		*) echo "$RUN_DIR/${path#./}" ;;
+	esac
+}
+
+fw_wl_entries() {
+	local mode lines name info type behavior format path url file cache
+	[ -f "$PROFILE_JSON_PATH" ] || return 0
+	mode=$(jq -r '.dns["fake-ip-filter-mode"] // "blacklist"' "$PROFILE_JSON_PATH" 2> /dev/null)
+	lines=$({
+		jq -r '(.rules // [])[] | strings' "$PROFILE_JSON_PATH" 2> /dev/null | fw_wl_rules
+		# whitelist: RULE-SET:a,b gets fake-ip; rule: RULE-SET,name,fake-ip
+		jq -r --arg mode "$mode" '
+			(.dns["fake-ip-filter"] // [])[] | strings
+			| if $mode == "whitelist" and startswith("RULE-SET:") then ltrimstr("RULE-SET:") | split(",")[] | "set \(.)"
+			elif $mode == "rule" then split(",") | map(ltrimstr(" ") | rtrimstr(" ")) as $f
+				| select(($f | length) >= 3 and ($f[0] | ascii_upcase) == "RULE-SET" and ($f[-1] | ascii_downcase) == "fake-ip") | "set \($f[1])"
+			else empty end' "$PROFILE_JSON_PATH" 2> /dev/null
+	})
+	echo "$lines" | grep -v '^set '
+	mkdir -p "$RUN_TMP/wl"
+	echo "$lines" | sed -n 's/^set //p' | sort -u | while read -r name; do
+		info=$(jq -r --arg name "$name" '.["rule-providers"][$name] // empty | [.type // "", .behavior // "classical", .format // "", .path // "", .url // ""] | join("|")' "$PROFILE_JSON_PATH" 2> /dev/null)
+		[ -n "$info" ] || continue
+		# not a tab: empty fields between tabs would merge, a | of the url stays in the last field
+		IFS='|' read -r type behavior format path url <<-EOT
+			$info
+		EOT
+		case "$behavior" in ipcidr|classical) ;; *) continue ;; esac
+		if [ "$type" = "inline" ]; then
+			jq -r --arg name "$name" '(.["rule-providers"][$name].payload // [])[] | strings' "$PROFILE_JSON_PATH" 2> /dev/null | fw_wl_payload "$behavior"
+			continue
+		fi
+		file=$(fw_wl_file "$type" "$path" "$url") || continue
+		[ -f "$file" ] || continue
+		[ -n "$format" ] || case "$file" in *.mrs) format="mrs" ;; *.txt|*.list) format="text" ;; esac
+		case "$format" in
+			mrs)
+				# the core turns a binary rule set into text, kept until the file changes: a second core is heavy for the router
+				cache="$RUN_TMP/wl/$(md5sum < "$file" | cut -d ' ' -f 1)"
+				if [ ! -f "$cache" ]; then
+					"$PROG" convert-ruleset "$behavior" mrs "$file" "$cache.tmp" > /dev/null 2>&1 && mv -f "$cache.tmp" "$cache"
+					rm -f "$cache.tmp"
+				fi
+				[ -f "$cache" ] && touch "$cache" && fw_wl_payload "$behavior" < "$cache"
+				;;
+			text) fw_wl_payload "$behavior" < "$file" ;;
+			*) { "$YQ" -M '.payload[]' "$file" 2> /dev/null || cat "$file"; } | fw_wl_payload "$behavior" ;;
+		esac
+	done
+	# converted rule sets nobody used for a day
+	find "$RUN_TMP/wl" -type f -mtime +0 -exec rm -f {} \; 2> /dev/null
+}
+
+# networks the sets of the kernel take: a broken line stops ipset restore, hash:net has no /0 and gets its two halves
+fw_wl_valid() {
+	awk -v family="$1" '
+		{
+			net = $1
+			prefix = ""
+			if (index(net, "/")) { prefix = substr(net, index(net, "/") + 1); net = substr(net, 1, index(net, "/") - 1) }
+			if (prefix == "0") { print (family == 4 ? "0.0.0.0/1\n128.0.0.0/1" : "::/1\n8000::/1"); next }
+			if (prefix != "" && (prefix !~ /^[0-9]+$/ || prefix + 0 < 1 || prefix + 0 > (family == 4 ? 32 : 128))) next
+			if (family == 4) {
+				if (split(net, o, ".") != 4) next
+				for (i = 1; i <= 4; i++) if (o[i] !~ /^[0-9]+$/ || o[i] + 0 > 255) next
+			}
+			print $1
+		}'
+}
+
+# fill the sets of fake-ip only, the fake-ip range is a destination of the core too
+fw_sets_wl() {
+	local entries count
+	[ "$fw_fake_only" = 1 ] || return 0
+	entries=$(fw_wl_entries)
+	{ echo "$fw_fake4"; echo "$entries" | sed -n 's/^dst //p'; } | fw_filter_ip4 | fw_wl_valid 4 | sort -u > "$RUN_TMP/wl4"
+	echo "$entries" | sed -n 's/^src //p' | fw_filter_ip4 | fw_wl_valid 4 | fw_set_load "$SET_WLS4" hash:net family inet
+	fw_set_load "$SET_WL4" hash:net family inet maxelem 1048576 < "$RUN_TMP/wl4"
+	count=$(wc -l < "$RUN_TMP/wl4")
+	if [ "$fw_v6" = 1 ]; then
+		{ echo "$fw_fake6"; echo "$entries" | sed -n 's/^dst //p'; } | fw_filter_ip6 | fw_wl_valid 6 | sort -u > "$RUN_TMP/wl6"
+		echo "$entries" | sed -n 's/^src //p' | fw_filter_ip6 | fw_wl_valid 6 | fw_set_load "$SET_WLS6" hash:net family inet6
+		fw_set_load "$SET_WL6" hash:net family inet6 maxelem 1048576 < "$RUN_TMP/wl6"
+		count=$((count + $(wc -l < "$RUN_TMP/wl6")))
+	fi
+	rm -f "$RUN_TMP/wl4" "$RUN_TMP/wl6"
+	[ "$count" != "$fw_wl_count" ] && log "Proxy" "Fake-IP only: $count networks go to the core besides the domains of fake-ip."
+	fw_wl_count="$count"
+}
+
+# fake-ip only, $1 chain, $2 family, $3 the chain the selected traffic goes on to, empty in OUTPUT: the router is not a source of the rules
+fw_only() {
+	[ "$fw_fake_only" = 1 ] || return 0
+	[ -n "$3" ] && echo "-A $1 -m set --match-set exodus_wls$2 src -j $3"
+	echo "-A $1 -m set ! --match-set exodus_wl$2 dst -j RETURN"
 }
 
 # rules matching the selected devices, $1 chain, $2 family (4/6), $3 target
@@ -425,9 +607,11 @@ fw_build() {
 					echo "-A EXODUS_REDIR -m dscp --dscp $dscp -j EXODUS_REDIR_DO"
 				done
 				if [ -n "$fw_tcp_ports" ]; then
+					fw_only EXODUS_REDIR "$family" EXODUS_REDIR_PORTS
 					echo "-A EXODUS_REDIR -j EXODUS_REDIR_PORTS"
 					fw_ports EXODUS_REDIR_PORTS tcp "$fw_tcp_ports" EXODUS_REDIR_AC "$fake"
 				else
+					fw_only EXODUS_REDIR "$family" EXODUS_REDIR_AC
 					echo "-A EXODUS_REDIR -j EXODUS_REDIR_AC"
 				fi
 				fw_access_control EXODUS_REDIR_AC "$family" EXODUS_REDIR_DO
@@ -440,6 +624,7 @@ fw_build() {
 			echo "-A EXODUS_OUT -p tcp --dport 53 -j RETURN"
 			fw_reserved EXODUS_OUT "$family" "$not_fake"
 			fw_bypass EXODUS_OUT "$not_fake"
+			fw_only EXODUS_OUT "$family"
 			fw_ports EXODUS_OUT tcp "$fw_tcp_ports" EXODUS_REDIR_DO "$fake"
 			[ "$fw_lan" = 1 ] || echo "-A EXODUS_REDIR_DO -p tcp -j REDIRECT --to-ports $fw_redir_port"
 		fi
@@ -459,6 +644,7 @@ fw_build() {
 				echo "-A EXODUS_MOUT -p tcp --dport 53 -j RETURN"
 				fw_reserved EXODUS_MOUT "$family" "$not_fake"
 				fw_bypass EXODUS_MOUT "$not_fake"
+				fw_only EXODUS_MOUT "$family"
 				for proto in $fw_tp_protos; do
 					if [ "$proto" = "tcp" ]; then
 						fw_ports EXODUS_MOUT tcp "$fw_tcp_ports" EXODUS_MOUT_DO "$fake"
@@ -497,6 +683,7 @@ fw_build() {
 					echo "-A EXODUS_TP -m dscp --dscp $dscp -j EXODUS_TP_DO"
 				done
 				if [ -n "$fw_tcp_ports$fw_udp_ports" ]; then
+					fw_only EXODUS_TP "$family" EXODUS_TP_PORTS
 					echo "-A EXODUS_TP -j EXODUS_TP_PORTS"
 					for proto in $fw_tp_protos; do
 						if [ "$proto" = "tcp" ]; then
@@ -506,6 +693,7 @@ fw_build() {
 						fi
 					done
 				else
+					fw_only EXODUS_TP "$family" EXODUS_TP_AC
 					echo "-A EXODUS_TP -j EXODUS_TP_AC"
 				fi
 				fw_access_control EXODUS_TP_AC "$family" EXODUS_TP_DO
@@ -614,6 +802,7 @@ fw_start() {
 	fw_sets_static
 	fw_sets_local
 	fw_sets_rci init
+	fw_sets_wl
 	fw_route_apply
 	fw_apply
 }
@@ -642,7 +831,7 @@ fw_clean() {
 		ip -"$family" route flush table "$table_id" > /dev/null 2>&1
 	done
 	if command -v ipset > /dev/null 2>&1; then
-		for set in $SET_MAC $SET_SRC4 $SET_SRC6 $SET_RSV4 $SET_RSV6 $SET_LOCAL4 $SET_LOCAL6 $SET_DENY; do
+		for set in $SET_MAC $SET_SRC4 $SET_SRC6 $SET_RSV4 $SET_RSV6 $SET_LOCAL4 $SET_LOCAL6 $SET_DENY $SET_WL4 $SET_WL6 $SET_WLS4 $SET_WLS6; do
 			ipset destroy "$set" > /dev/null 2>&1
 			ipset destroy "${set}_new" > /dev/null 2>&1
 		done
