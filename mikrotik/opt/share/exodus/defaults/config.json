@@ -27,6 +27,7 @@
     "udp_mode": "tproxy",
     "dns_hijack": true,
     "router_proxy": false,
+    "fake_ip_only": false,
     "access_mode": "exclude",
     "access_items": [],
     "proxy_tcp_dport": "0-65535",

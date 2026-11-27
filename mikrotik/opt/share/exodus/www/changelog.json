@@ -1,7 +1,11 @@
 {
   "dev": {
-    "en": [],
-    "ru": []
+    "en": [
+        "Fake-IP only in Settings → Proxy: RouterOS sends to the container only the domains that get a fake-ip address and the networks of the proxy rules of the profile (IP-CIDR, SRC-IP-CIDR, rule sets with IP addresses), the rest goes directly, so Russian sites and torrents do not load the core. The networks are kept in the address lists exodus-wl and exodus-wls."
+    ],
+    "ru": [
+        "«Только Fake-IP» в «Настройки → Прокси»: RouterOS отправляет в контейнер только домены, получившие адрес fake-ip, и сети прокси-правил профиля (IP-CIDR, SRC-IP-CIDR, наборы правил с IP-адресами), остальное идёт напрямую, так что российские сайты и торренты не нагружают ядро. Сети хранятся в списках адресов exodus-wl и exodus-wls."
+    ]
   },
   "releases": [
     {
